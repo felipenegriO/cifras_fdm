@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Filhos de Maria</title>
+    <link href="bootstrap.min.css" rel="stylesheet">
+    <style>
+        * {
+            background: black !important;
+            color: white;
+            line-height: normal;
+        }
+
+        body {
+            padding: 20px;
+        }
+
+        .cifra {
+            white-space: pre-wrap;
+            transition: column-count 0.3s ease;
+        }
+
+        b {
+            color: #f70;
+        }
+
+        refrao {
+            color: #00ff00;
+            font-weight: bold;
+        }
+
+        prerefrao {
+            color: #00ffff;
+            font-weight: bold;
+        }
+
+        ponte {
+            color: red;
+            font-weight: bold;
+        }
+        .cifra{
+            column-gap: 1px;
+            max-width: fit-content;
+        }
+
+        .cifra>div {
+            page-break-inside: avoid;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="row">
+        <div class="col-2">
+            <a href="index.html" class="btn"><i class="fa-solid fa-2x fa-arrow-left"></i></a>
+        </div>
+        <div class="col-10">
+            <h3 id="song-title"></h3>
+        </div>
+        <div class="btn-group" style="position: fixed; right: 10px;" role="group" aria-label="Basic example">
+            <button type="button" class="btn btn-primary" id="increase-text">A+</button>
+            <button type="button" class="btn btn-primary" id="decrease-text">A-</button>
+        </div>
+    </div>
+    <div class="row">
+        <div class="container" style="margin-left: 0px; margin-right: 0; max-width: 100%;">
+            <div id="song-cifra" class="cifra"></div>
+        </div>
+    </div>
+
+    <script src="06215d6691.js"></script>
+    <script src="jquery-3.5.1.min.js"></script>
+    <script src="musicas.js"></script>
+
+    <script>
+        $(document).ready(function () {
+            const urlParams = new URLSearchParams(window.location.search);
+            const increaseBtn = document.getElementById('increase-text');
+            const decreaseBtn = document.getElementById('decrease-text');
+            const cifraDiv = document.getElementById('song-cifra');
+            const songId = urlParams.get('id');
+            const song = songs[songId - 1];
+
+            if (song) {
+                $('#song-title').text(song.nome);
+                $('#artist-name').text(song.artista);
+                $('#song-cifra').html(song.cifra);
+            } else {
+                $('body').html('<div class="container"><h1>Música não encontrada</h1></div>');
+            }
+
+            function adjustColumns() {
+                $('#song-cifra').css("max-width","fit-content");
+                const containerHeight = window.innerHeight;
+                const containerWidth = window.innerWidth;
+                const textHeight = cifraDiv.scrollHeight;
+                const textWidth = cifraDiv.scrollWidth;
+                var numColumns = textHeight / containerHeight;
+
+              
+                var remainder = textHeight % containerHeight;
+                if (remainder !== 0) {
+                    numColumns ++;
+                }
+
+                while((textWidth * numColumns) > containerWidth ){
+                    numColumns = numColumns-1;
+                }
+
+                if(numColumns > 0 && numColumns < 1)
+                    numColumns ++;
+
+                cifraDiv.style.columnCount = Math.round(numColumns);
+                $('#song-cifra').css("max-width","none");
+
+            }
+
+            adjustColumns(); 
+
+            window.addEventListener('resize', adjustColumns);
+
+            increaseBtn.addEventListener('click', () => {
+                const currentSize = parseFloat(window.getComputedStyle(cifraDiv, null).getPropertyValue('font-size'));
+                cifraDiv.style.fontSize = (currentSize + 1) + 'px';
+                adjustColumns(); 
+                setTimeout(() => {
+                    adjustColumns(); 
+                }, 170);
+
+            });
+
+            decreaseBtn.addEventListener('click', () => {
+                const currentSize = parseFloat(window.getComputedStyle(cifraDiv, null).getPropertyValue('font-size'));
+                cifraDiv.style.fontSize = (currentSize - 1) + 'px';
+                adjustColumns(); 
+                setTimeout(() => {
+                    adjustColumns(); 
+                }, 170);
+
+            });
+        });
+    </script>
+</body>
+
+</html>
