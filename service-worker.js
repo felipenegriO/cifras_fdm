@@ -1,14 +1,13 @@
 const CACHE_NAME = 'v1';
 const urlsToCache = [
-    '/',
-    '/manifest.json',
-    '/index.html',
-    '/bootstrap.min.css',
-    '/06215d6691.js',
-    '/musicas.js',
-    '/jquery-3.5.1.min.js',
-    '/icon-192x192.png',
-    '/imagemlogofdm.png'
+    'manifest.json',
+    'index.html',
+    'bootstrap.min.css',
+    '06215d6691.js',
+    'musicas.js',
+    'jquery-3.5.1.min.js',
+    'icon-192x192.png',
+    'imagemlogofdm.png'
 ];
 
 self.addEventListener('install', event => {
