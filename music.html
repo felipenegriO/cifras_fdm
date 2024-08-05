@@ -81,7 +81,7 @@
             const decreaseBtn = document.getElementById('decrease-text');
             const cifraDiv = document.getElementById('song-cifra');
             const songId = urlParams.get('id');
-            const song = songs[songId - 1];
+            const song =songs.find(song => song.id == songId);
 
             if (song) {
                 $('#song-title').text(song.nome);
@@ -127,7 +127,7 @@
                 adjustColumns(); 
                 setTimeout(() => {
                     adjustColumns(); 
-                }, 170);
+                }, 50);
 
             });
 
@@ -137,7 +137,7 @@
                 adjustColumns(); 
                 setTimeout(() => {
                     adjustColumns(); 
-                }, 170);
+                }, 50);
 
             });
         });
