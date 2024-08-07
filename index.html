@@ -6,36 +6,44 @@
     <title>Filhos de Maria</title>
     <link rel="manifest" href="manifest.json">
     <link href="bootstrap.min.css" rel="stylesheet">
+    <link href="style.css" rel="stylesheet">
     <style>
-        body {
-            padding: 20px;
-        }
-        *{
-            background: black !important;
-            color: white;
-        }
-        .list-group-item{
-            border: white 1px solid;
-        }
-        a {
-            color: white !important;
-            font-size: x-large;
-        }
         .form-control,
-        button {
-            font-size: 1.8rem !important;
-        }
-        .btn-group {
-            display: flex;
-            flex-wrap: wrap;
-        }
-        .btn-group .btn {
-            flex: 1;
-            margin: 2px;
-        }
+button {
+    font-size: 1.8rem !important;
+}
+.btn-group {
+    display: flex;
+    flex-wrap: wrap;
+}
+.btn-group .btn {
+    flex: 1;
+    margin: 2px;
+}
+
+     #menuButton {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    padding: 10px 20px;
+    font-size: 16px;
+    background-color: #007bff;
+    color: #fff;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    z-index: 1000;
+    
+}
     </style>
 </head>
 <body>
+    <button id="menuButton"><i class="fa-solid fa-list"></i></button>
+    <div id="sideMenu">
+        <button id="closeButton">×</button>
+        <h2>PlayLists  <button class="btn" data-toggle="modal" data-target="#addPlayList"><i class="fa-solid fa-plus"></i></button></h2>
+        <ul id="lista-playlists"></ul>
+    </div>
     <div class="container">
         <h1 class="text-center">
         <img src="imagemlogofdm.png" style="width: 14vw;" />
@@ -52,8 +60,33 @@
         </ul>
     </div>
     
+    <div class="modal fade" id="addPlayList" tabindex="-1" role="dialog" aria-labelledby="addPlayList" aria-hidden="true">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="myModalLabel">Add PlayList</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <span>Nome da PlaysList</span>
+                    <input name="playlistnome" class="form-control" id="playlistnome"/>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Fechar</button>
+                    <button type="button" class="btn btn-primary" id="salvarPlayList">Salvar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="jquery-3.5.1.min.js"></script>
+    <script src="bootstrap.min.js"></script>
     <script src="musicas.js"></script>
+    <script src="script.js"></script>
+    <script src="06215d6691.js"></script>
+    <script src="playlists.js"></script>
     <script>
         if ('serviceWorker' in navigator) {
                 window.addEventListener('load', () => {
@@ -73,8 +106,6 @@
             return str.normalize('NFD').replace(/[\u0300-\u036f]/g, "").toLowerCase();
         }
         $(document).ready(function() {
-            
-
             songs = songs.sort((a, b) => a.nome.localeCompare(b.nome));
             function renderList(filter = '') {
                 $('#music-list').empty();
