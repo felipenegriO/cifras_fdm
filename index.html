@@ -45,6 +45,8 @@ button {
         <ul id="lista-playlists"></ul>
     </div>
     <div class="container">
+        <button type="button" class="btn btn-primary"  id="clearCacheBtn">Limpar Cache</button>
+
         <h1 class="text-center">
         <img src="imagemlogofdm.png" style="width: 14vw;" />
         Músicas</h1>
@@ -106,6 +108,23 @@ button {
             return str.normalize('NFD').replace(/[\u0300-\u036f]/g, "").toLowerCase();
         }
         $(document).ready(function() {
+            document.getElementById('clearCacheBtn').addEventListener('click', () => {
+    if ('caches' in window) {
+        caches.keys().then(cacheNames => {
+            return Promise.all(
+                cacheNames.map(cacheName => {
+                    return caches.delete(cacheName);
+                })
+            );
+        }).then(() => {
+            location.reload();
+        }).catch(error => {
+            console.error('Falha ao limpar o cache:', error);
+        });
+    } else {
+        alert('Cache Storage API não é suportada neste navegador.');
+    }
+});
             songs = songs.sort((a, b) => a.nome.localeCompare(b.nome));
             function renderList(filter = '') {
                 $('#music-list').empty();
