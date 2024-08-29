@@ -108,6 +108,7 @@ button {
             return str.normalize('NFD').replace(/[\u0300-\u036f]/g, "").toLowerCase();
         }
         $(document).ready(function() {
+            checkAndCleanCache();
             document.getElementById('clearCacheBtn').addEventListener('click', () => {
     if ('caches' in window) {
         caches.keys().then(cacheNames => {
