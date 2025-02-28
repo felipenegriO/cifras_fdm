@@ -128,6 +128,28 @@
 
             }
 
+            function adjustFontSize() {
+                const containerHeight = window.innerHeight - 40;  // Ajuste para o padding
+                const containerWidth = window.innerWidth - 40;  // Ajuste para o padding
+                const cifraHeight = cifraDiv.scrollHeight;
+                const cifraWidth = cifraDiv.scrollWidth;
+
+                // Calcular o tamanho da fonte baseado na altura e largura da tela
+                let fontSize = Math.min(containerHeight / cifraHeight, containerWidth / cifraWidth) * 25; // Ajuste o multiplicador conforme necessário
+
+                // Impedir que o tamanho da fonte fique menor que um mínimo
+                fontSize = Math.max(fontSize, 12);
+
+                // Ajuste da fonte
+                cifraDiv.style.fontSize = fontSize + 'px';
+
+                // Garantir que o conteúdo não ultrapasse a altura da tela
+                if (cifraDiv.scrollHeight > containerHeight || cifraDiv.scrollWidth > containerWidth) {
+                    cifraDiv.style.fontSize = (fontSize - 5) + 'px';  // Reduzir um pouco o tamanho se necessário
+                }
+            }
+
+            // adjustFontSize();
             adjustColumns(); 
 
             window.addEventListener('resize', adjustColumns);
