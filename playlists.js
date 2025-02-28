@@ -1,3 +1,44 @@
+function AddRebanhao(){
+    
+    LimparPlaylist("Rebanhão")
+    AddNovaPlaysList("Rebanhão");
+    AddNovaMusicaPlaysList("Rebanhão", 26);
+    AddNovaMusicaPlaysList("Rebanhão", 103);
+    AddNovaMusicaPlaysList("Rebanhão", 74);
+    AddNovaMusicaPlaysList("Rebanhão", 123);
+    AddNovaMusicaPlaysList("Rebanhão", 14);
+    AddNovaMusicaPlaysList("Rebanhão", 77);
+    AddNovaMusicaPlaysList("Rebanhão", 10);
+    AddNovaMusicaPlaysList("Rebanhão", 5);
+    AddNovaMusicaPlaysList("Rebanhão", 7);
+    AddNovaMusicaPlaysList("Rebanhão", 13);
+    AddNovaMusicaPlaysList("Rebanhão", 41);
+    AddNovaMusicaPlaysList("Rebanhão", 114);
+    AddNovaMusicaPlaysList("Rebanhão", 115);
+    AddNovaMusicaPlaysList("Rebanhão", 58);
+    AddNovaMusicaPlaysList("Rebanhão", 112);
+    AddNovaMusicaPlaysList("Rebanhão", 112);
+    AddNovaMusicaPlaysList("Rebanhão", 23);
+
+    LimparPlaylist("Missa rebanhão")
+    AddNovaPlaysList("Missa rebanhão");
+    AddNovaMusicaPlaysList("Missa rebanhão", 117);
+    AddNovaMusicaPlaysList("Missa rebanhão", 118);
+    AddNovaMusicaPlaysList("Missa rebanhão", 119);
+    AddNovaMusicaPlaysList("Missa rebanhão", 124);
+    AddNovaMusicaPlaysList("Missa rebanhão", 82);
+    AddNovaMusicaPlaysList("Missa rebanhão", 83);
+    AddNovaMusicaPlaysList("Missa rebanhão", 84);
+    AddNovaMusicaPlaysList("Missa rebanhão", 122);
+    AddNovaMusicaPlaysList("Missa rebanhão", 86);
+    AddNovaMusicaPlaysList("Missa rebanhão", 85);
+    AddNovaMusicaPlaysList("Missa rebanhão", 86);
+    AddNovaMusicaPlaysList("Missa rebanhão", 120);
+    AddNovaMusicaPlaysList("Missa rebanhão", 121);
+    AddNovaMusicaPlaysList("Missa rebanhão", 90);
+}
+
+
 
 function ObterPlaysLists(){
     return  JSON.parse(sessionStorage.getItem('playsLists')) || [];
@@ -16,6 +57,14 @@ function AddNovaMusicaPlaysList(playlist,idMusica){
     musicas.push(idMusica);
     sessionStorage.setItem(playlist, JSON.stringify(musicas));
 }
+function RemoverMusicaPlaysList(playlist, idMusica) {
+    var musicas = JSON.parse(sessionStorage.getItem(playlist)) || [];
+    musicas = musicas.filter(musica => musica !== idMusica); // Remove a música da lista
+    sessionStorage.setItem(playlist, JSON.stringify(musicas));
+}
+function LimparPlaylist(playlist) {
+    sessionStorage.removeItem(playlist); // Remove a playlist do sessionStorage
+}
 
 
 function addListItem(content,idLista) {
@@ -28,6 +77,7 @@ function addListItem(content,idLista) {
 
   var ul = document.createElement('ul');
   ul.className ="sub-list";
+  ul.style=" overflow: scroll; height: 80vh;";
   ObterMusicasPlaysList(content).forEach(element => {
     var musica = document.createElement('li');
     var musicaA = document.createElement('a');
@@ -53,6 +103,11 @@ function toggleSubList(event) {
 }
 
 $(document).ready(function() {
+    debugger;
+    sessionStorage.removeItem('playsLists');
+    sessionStorage.setItem('playsLists', JSON.stringify([])); 
+    AddRebanhao();
+
     var playLists = ObterPlaysLists();
 
     playLists.forEach(function(item) {
@@ -67,4 +122,5 @@ $(document).ready(function() {
     document.querySelectorAll('.liPlaylist').forEach(function(item) {
         item.addEventListener('click', toggleSubList);
     });
+
 });

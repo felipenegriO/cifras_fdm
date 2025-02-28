@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,47 +10,52 @@
     <link href="style.css" rel="stylesheet">
     <style>
         .form-control,
-button {
-    font-size: 1.8rem !important;
-}
-.btn-group {
-    display: flex;
-    flex-wrap: wrap;
-}
-.btn-group .btn {
-    flex: 1;
-    margin: 2px;
-}
+        button {
+            font-size: 1.8rem !important;
+        }
 
-     #menuButton {
-    position: absolute;
-    top: 20px;
-    right: 20px;
-    padding: 10px 20px;
-    font-size: 16px;
-    background-color: #007bff;
-    color: #fff;
-    border: none;
-    border-radius: 5px;
-    cursor: pointer;
-    z-index: 1000;
-    
-}
+        .btn-group {
+            display: flex;
+            flex-wrap: wrap;
+        }
+
+        .btn-group .btn {
+            flex: 1;
+            margin: 2px;
+        }
+
+        #menuButton {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: #007bff;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            z-index: 1000;
+
+        }
     </style>
 </head>
+
 <body>
     <button id="menuButton"><i class="fa-solid fa-list"></i></button>
     <div id="sideMenu">
         <button id="closeButton">×</button>
-        <h2>PlayLists  <button class="btn" data-toggle="modal" data-target="#addPlayList"><i class="fa-solid fa-plus"></i></button></h2>
-        <ul id="lista-playlists"></ul>
+        <h2>PlayLists <button class="btn" data-toggle="modal" data-target="#addPlayList"><i
+                    class="fa-solid fa-plus"></i></button></h2>
+        <ul id="lista-playlists" style="display: block; overflow: scroll; height: 80vh;"></ul>
     </div>
     <div class="container">
-        <button type="button" class="btn btn-primary"  id="clearCacheBtn">Limpar Cache</button>
+        <button type="button" class="btn btn-primary" id="clearCacheBtn">Limpar Cache</button>
 
         <h1 class="text-center">
-        <img src="imagemlogofdm.webp" style="width: 14vw;" />
-        Músicas</h1>
+            <img src="imagemlogofdm.webp" style="width: 14vw;" />
+            Músicas
+        </h1>
         <div class="btn-group mb-3" style="width: 100%;" role="group">
             <button type="button" class="btn btn-primary" onclick="aplicarFiltro('Louvor Animado')">Louvores</button>
             <button type="button" class="btn btn-primary" onclick="aplicarFiltro('Marianas')">Marianas</button>
@@ -62,8 +68,9 @@ button {
         <ul id="music-list" class="list-group mt-3">
         </ul>
     </div>
-    
-    <div class="modal fade" id="addPlayList" tabindex="-1" role="dialog" aria-labelledby="addPlayList" aria-hidden="true">
+
+    <div class="modal fade" id="addPlayList" tabindex="-1" role="dialog" aria-labelledby="addPlayList"
+        aria-hidden="true">
         <div class="modal-dialog" role="document">
             <div class="modal-content">
                 <div class="modal-header">
@@ -74,7 +81,7 @@ button {
                 </div>
                 <div class="modal-body">
                     <span>Nome da PlaysList</span>
-                    <input name="playlistnome" class="form-control" id="playlistnome"/>
+                    <input name="playlistnome" class="form-control" id="playlistnome" />
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-dismiss="modal">Fechar</button>
@@ -92,41 +99,41 @@ button {
     <script src="playlists.js"></script>
     <script>
         if ('serviceWorker' in navigator) {
-                window.addEventListener('load', () => {
-                    navigator.serviceWorker.register('service-worker.js')
-                        .then(registration => {
-                            console.log('Service Worker registrado com sucesso:', registration);
-                        })
-                        .catch(error => {
-                            console.log('Falha ao registrar o Service Worker:', error);
-                        });
-                });
-            }
-        function aplicarFiltro(classificacao){
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('service-worker.js')
+                    .then(registration => {
+                        console.log('Service Worker registrado com sucesso:', registration);
+                    })
+                    .catch(error => {
+                        console.log('Falha ao registrar o Service Worker:', error);
+                    });
+            });
+        }
+        function aplicarFiltro(classificacao) {
             $("#search").val(classificacao).trigger("input");
         }
         function normalizeString(str) {
             return str.normalize('NFD').replace(/[\u0300-\u036f]/g, "").toLowerCase();
         }
-        $(document).ready(function() {
+        $(document).ready(function () {
             checkAndCleanCache();
             document.getElementById('clearCacheBtn').addEventListener('click', () => {
-    if ('caches' in window) {
-        caches.keys().then(cacheNames => {
-            return Promise.all(
-                cacheNames.map(cacheName => {
-                    return caches.delete(cacheName);
-                })
-            );
-        }).then(() => {
-            location.reload();
-        }).catch(error => {
-            console.error('Falha ao limpar o cache:', error);
-        });
-    } else {
-        alert('Cache Storage API não é suportada neste navegador.');
-    }
-});
+                if ('caches' in window) {
+                    caches.keys().then(cacheNames => {
+                        return Promise.all(
+                            cacheNames.map(cacheName => {
+                                return caches.delete(cacheName);
+                            })
+                        );
+                    }).then(() => {
+                        location.reload();
+                    }).catch(error => {
+                        console.error('Falha ao limpar o cache:', error);
+                    });
+                } else {
+                    alert('Cache Storage API não é suportada neste navegador.');
+                }
+            });
             songs = songs.sort((a, b) => a.nome.localeCompare(b.nome));
             function renderList(filter = '') {
                 $('#music-list').empty();
@@ -135,10 +142,10 @@ button {
                     normalizeString(song.nome).includes(normalizedFilter) ||
                     normalizeString(song.artista).includes(normalizedFilter) ||
                     normalizeString(song.classificacao).includes(normalizedFilter) ||
-                    normalizeString(song.cifra).includes(normalizedFilter) 
+                    normalizeString(song.cifra).includes(normalizedFilter)
                 );
                 filteredSongs.forEach(song => {
-                    var nome = song.nome +" - " + song.artista ;
+                    var nome = song.nome + " - " + song.artista;
                     $('#music-list').append(
                         `<li class="list-group-item">
                             <a href="music.html?id=${song.id}">${nome}</a>
@@ -147,7 +154,7 @@ button {
                 });
             }
 
-            $('#search').on('input', function() {
+            $('#search').on('input', function () {
                 renderList($(this).val());
             });
 
@@ -155,4 +162,5 @@ button {
         });
     </script>
 </body>
+
 </html>
