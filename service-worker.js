@@ -1,4 +1,4 @@
-const CACHE_NAME = 'cacheFDM22-1.4.2';
+const CACHE_NAME = 'cacheFDM22-1.4.3';
 const STATIC_ASSETS = [
   '/',
   '/index.php',

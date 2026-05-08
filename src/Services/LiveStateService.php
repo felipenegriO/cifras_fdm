@@ -43,17 +43,27 @@ class LiveStateService {
         try {
             $salaId = $this->validarSalaId($salaId);
             $hostId = $this->validarHostId($hostId);
-            $cifraAtual = $this->validarCifraAtual($cifraAtual);
-            $paginaAtual = $this->validarPaginaAtual($paginaAtual, $cifraAtual);
         } catch (InvalidArgumentException $e) {
             http_response_code(400);
             return ['success' => false, 'message' => $e->getMessage()];
         }
 
         $keepAlive = (bool) $keepAlive;
+        $somenteKeepAlive = $keepAlive && $cifraAtual === null && $paginaAtual === null;
+
+        if (!$somenteKeepAlive) {
+            try {
+                $cifraAtual = $this->validarCifraAtual($cifraAtual);
+                $paginaAtual = $this->validarPaginaAtual($paginaAtual, $cifraAtual);
+            } catch (InvalidArgumentException $e) {
+                http_response_code(400);
+                return ['success' => false, 'message' => $e->getMessage()];
+            }
+        }
+
         $now = gmdate('c');
 
-        return $this->withLockedState(LOCK_EX, function ($data) use ($salaId, $hostId, $cifraAtual, $paginaAtual, $keepAlive, $now) {
+        return $this->withLockedState(LOCK_EX, function ($data) use ($salaId, $hostId, $cifraAtual, $paginaAtual, $keepAlive, $somenteKeepAlive, $now) {
             $state = $this->getSalaState($data, $salaId);
 
             if (($state['hostId'] ?? '') === '' || !hash_equals((string)$state['hostId'], $hostId)) {
@@ -67,8 +77,10 @@ class LiveStateService {
                 ];
             }
 
-            $changed = (string)($state['cifraAtual'] ?? '') !== $cifraAtual
-                || (string)($state['paginaAtual'] ?? '') !== $paginaAtual;
+            $changed = !$somenteKeepAlive && (
+                (string)($state['cifraAtual'] ?? '') !== $cifraAtual
+                || (string)($state['paginaAtual'] ?? '') !== $paginaAtual
+            );
 
             if ($changed) {
                 $state['cifraAtual'] = $cifraAtual;

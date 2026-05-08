@@ -24,8 +24,8 @@ $service = new LiveStateService(__DIR__ . '/../../src/backend/data/live-state.js
 $result = $service->atualizar(
     $input['salaId'] ?? 'default',
     $input['hostId'] ?? '',
-    $input['cifraAtual'] ?? '',
-    $input['paginaAtual'] ?? '',
+    array_key_exists('cifraAtual', $input) ? $input['cifraAtual'] : null,
+    array_key_exists('paginaAtual', $input) ? $input['paginaAtual'] : null,
     !empty($input['keepAlive'])
 );
 

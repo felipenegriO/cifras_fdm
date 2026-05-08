@@ -63,23 +63,26 @@
 
         if (path === 'music.php') {
             const id = params.get('id') || '';
+            const validId = /^\d{1,8}$/.test(id);
             return {
-                cifraAtual: /^\d{1,8}$/.test(id) ? id : '',
-                paginaAtual: /^\d{1,8}$/.test(id) ? 'music.php?id=' + id : 'index.php'
+                cifraAtual: validId ? id : '',
+                paginaAtual: validId ? 'music.php?id=' + id : '',
+                podePublicar: validId
             };
         }
 
         if (path === 'roteiro.php') {
-            const id = params.get('id') || '';
             return {
                 cifraAtual: '',
-                paginaAtual: /^\d{1,8}$/.test(id) ? 'roteiro.php?id=' + id : 'index.php'
+                paginaAtual: '',
+                podePublicar: false
             };
         }
 
         return {
             cifraAtual: '',
-            paginaAtual: 'index.php'
+            paginaAtual: '',
+            podePublicar: false
         };
     }
 
@@ -163,13 +166,18 @@
         hostBusy = true;
         try {
             const state = currentPageState();
-            await postJson(apiBase + '/update.php', {
+            const payload = {
                 salaId,
                 hostId,
-                cifraAtual: state.cifraAtual,
-                paginaAtual: state.paginaAtual,
-                keepAlive: !!keepAlive
-            });
+                keepAlive: !!keepAlive || !state.podePublicar
+            };
+
+            if (state.podePublicar) {
+                payload.cifraAtual = state.cifraAtual;
+                payload.paginaAtual = state.paginaAtual;
+            }
+
+            await postJson(apiBase + '/update.php', payload);
             setStatus('Voce e o host', 'host');
         } catch (error) {
             setStatus('Live desconectada', 'offline');
@@ -253,7 +261,7 @@
                 lastVersion = status.version;
                 lastStatusPage = status.paginaAtual;
 
-                if (changed && status.paginaAtual && !samePage(status.paginaAtual)) {
+                if (changed && status.paginaAtual && status.paginaAtual !== 'index.php' && !samePage(status.paginaAtual)) {
                     window.location.href = status.paginaAtual;
                 }
             }
