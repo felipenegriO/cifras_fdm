@@ -1,10 +1,11 @@
-const CACHE_NAME = 'cacheFDM22-1.4.1';
+const CACHE_NAME = 'cacheFDM22-1.4.2';
 const STATIC_ASSETS = [
   '/',
   '/index.php',
   '/music.php',
   '/roteiro.php',
   '/src/js/script.js',
+  '/src/js/live.js',
   '/src/js/musicas.js',
   '/src/js/playlists.js',
   '/src/js/playlists_salvas.js',
@@ -57,6 +58,7 @@ self.addEventListener('fetch', event => {
   const path = url.pathname;
   const ignoredPaths = ['livePlayerLer.php', 'editor.php', 'login.php', 'livePlayerSalvar.php', 'agenda'];
   if (ignoredPaths.some(p => path.endsWith(p))) return;
+  if (path.startsWith('/api/live/')) return;
   if (path.startsWith('/src/backend/editor/')) return;
 
   const isMusicPage = path === '/music.php';

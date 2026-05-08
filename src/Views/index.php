@@ -79,6 +79,13 @@
         <button id="menucloseButton">×</button>
         <h2>Menu</h2>
         <button type="button" class="btn btn-primary" id="clearCacheBtn">Limpar Cache</button>
+        <button type="button" class="btn btn-primary mt-3" id="livePlay">
+            <i class="fa-solid fa-broadcast-tower"></i> VIRAR HOST
+        </button>
+        <button type="button" class="btn btn-primary mt-3" id="entrarlivePlay">
+            <i class="fa-solid fa-play"></i> ENTRAR NO MODO LIVE
+        </button>
+        <div id="liveStatus" class="live-status mt-2">Live desconectada</div>
         <a href="src/backend/editor/editor.php" type="button" class="btn btn-primary mt-3" >Editor</a>
         <a href="src/backend/editor/roteiro.php" type="button" class="btn btn-primary mt-3">Editor Roteiros</a>
         
@@ -147,6 +154,7 @@
     <script src="<?= asset_url('/src/js/playlists_salvas.js') ?>" defer></script>
     <script src="<?= asset_url('/src/js/roteiros_salvos.js') ?>" defer></script>
     <script src="<?= asset_url('/src/js/playlists.js') ?>" defer></script>
+    <script src="<?= asset_url('/src/js/live.js') ?>"></script>
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
@@ -257,44 +265,18 @@
             renderList();
 
              // Verifica a cada 5 segundos
-            setInterval(verificarAlteracao, 5000);
 
             // Verifica já no carregamento inicial também
-            verificarAlteracao();
 
 
             
         });
-
-
-        async function verificarAlteracao() {
-            if (!navigator.onLine) {
-                $("#mostrarbtnplay").hide();
-                return;
-            }
-
-            fetch('src/backend/livePlayerLer.php')
-                .then(res => res.text())
-                .then(numero => {
-                    const novoId = numero.trim();
-                    const urlParams = new URLSearchParams(window.location.search);
-                    const idAtual = urlParams.get('id');
-                    if (numero == null) return;
-                    // Se for diferente e já tínhamos um valor anterior
-                    $("#mostrarbtnplay").show();
-                    $("#entrarlivePlaynow").attr("href", `music.php?id=${novoId}`);
-                })
-                .catch(err => {
-                    $("#mostrarbtnplay").hide();
-                });
-        }
-
         window.addEventListener('offline', () => {
             $("#mostrarbtnplay").hide();
         });
 
         window.addEventListener('online', () => {
-            verificarAlteracao();
+            if (window.LiveMode) window.LiveMode.consultarStatus();
         });
         
     </script>

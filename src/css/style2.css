@@ -157,6 +157,34 @@ refrao, ponte, prerefrao {
     background: transparent;
 }
 
+.live-status {
+    border: 1px solid #fff;
+    color: #fff;
+    padding: 8px;
+    text-align: center;
+    font-size: 14px;
+}
+
+.live-status[data-status="host"] {
+    border-color: #28a745;
+    color: #28a745;
+}
+
+.live-status[data-status="follow"] {
+    border-color: #13ff13;
+    color: #13ff13;
+}
+
+.live-status[data-status="waiting"] {
+    border-color: #ffc107;
+    color: #ffc107;
+}
+
+.live-status[data-status="offline"] {
+    border-color: #dc3545;
+    color: #dc3545;
+}
+
 li a{
     font-size: unset;
 }

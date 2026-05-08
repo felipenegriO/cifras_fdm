@@ -94,15 +94,17 @@
 
         <div class="row" style="margin-bottom: 15px;">
             <button type="button" class="btn btn-primary col" id="entrarlivePlay">
-                <i class="fa-solid fa-play"></i> ENTRAR PRO PLAY
+                <i class="fa-solid fa-play"></i> ENTRAR NO MODO LIVE
             </button>
         </div>
 
         <div class="row" style="margin-bottom: 15px;">
             <button type="button" class="btn btn-primary col" id="livePlay">
-                <i class="fa-solid fa-plus"></i> DEFINIR NOVA PLAY
+                <i class="fa-solid fa-broadcast-tower"></i> VIRAR HOST
             </button>
         </div>
+
+        <div id="liveStatus" class="live-status" style="margin-bottom: 15px;">Live desconectada</div>
 
         <div class="row" style="margin-bottom: 15px;">
             <a href="" id="linkYou" target="_blank" class="btn btn-primary" style="width: 100%;">
@@ -327,6 +329,7 @@
     <script src="<?= asset_url('/src/js/playlists_salvas.js') ?>" defer></script>
     <script src="<?= asset_url('/src/js/roteiros_salvos.js') ?>" defer></script>
     <script src="<?= asset_url('/src/js/playlists.js') ?>" defer></script>
+    <script src="<?= asset_url('/src/js/live.js') ?>"></script>
 
     <script>
         (function () {
@@ -533,18 +536,12 @@
                 }
             });
 
-            setInterval(verificarAlteracao, 5000);
-            verificarAlteracao();
-
             const urlParams = new URLSearchParams(window.location.search);
             const increaseBtn = document.getElementById('increase-text');
             const decreaseBtn = document.getElementById('decrease-text');
 
             const increaseBtnTom = document.getElementById('increase-tom');
             const decreaseBtnTom = document.getElementById('decrease-tom');
-            const livePlay = document.getElementById('livePlay');
-            const entrarlivePlay = document.getElementById('entrarlivePlay');
-
             const cifraDiv = document.getElementById('song-cifra');
             const songId = urlParams.get('id');
             const song = songs.find(song => song.id == songId);
@@ -1730,8 +1727,6 @@
 
                 if (!navigator.onLine) {
                     $("#mostrarbtnplay").hide();
-                    $("#entrarlivePlay").hide();
-                    $("#livePlay").hide();
                 }
 
             } else {
@@ -1871,43 +1866,10 @@
             });
 
 
-            // Live Play
-            livePlay.addEventListener('click', () => {
-                salvarNumero(songId);
-            });
-
-            entrarlivePlay.addEventListener('click', () => {
-                if (!navigator.onLine) return;
-                fetch('src/backend/livePlayerLer.php')
-                    .then(res => res.text())
-                    .then(numero => {
-                        const novoId = numero.trim();
-                        location.href = `music.php?id=${novoId}`;
-                        ultimoNumero = novoId;
-                    })
-                    .catch(err => {});
-            });
+            if (window.LiveMode) {
+                window.LiveMode.atualizarPaginaHost(false);
+            }
         });
-
-        function salvarNumero(numero) {
-            const formData = new FormData();
-            formData.append('numero', numero);
-            if (!navigator.onLine) return;
-
-            fetch('src/backend/livePlayerSalvar.php', { method: 'POST', body: formData })
-                .then(res => res.text())
-                .then(msg => {
-                    const toastElement = document.getElementById('toastNovaPlay');
-                    const toast = new bootstrap.Toast(toastElement);
-                    toast.show();
-                    console.log('Resposta:', msg);
-                })
-                .catch(err => {
-                    const toastElement = document.getElementById('toastNovaPlayErro');
-                    const toast = new bootstrap.Toast(toastElement);
-                    toast.show();
-                });
-        }
 
         let __lastPlayVisible = null;
 
@@ -1922,41 +1884,13 @@
             return true;
         }
 
-        function verificarAlteracao() {
-            if (!navigator.onLine) {
-                const changed = setPlayBarVisible(false);
-                if (changed && window.__reflowCifra) window.__reflowCifra();
-                return;
-            }
-
-            fetch('src/backend/livePlayerLer.php')
-                .then(res => res.text())
-                .then(numero => {
-                    ultimoNumero = numero.trim();
-                    const urlParams = new URLSearchParams(window.location.search);
-                    const idAtual = urlParams.get('id');
-                    if (!ultimoNumero) return;
-
-                    if (ultimoNumero === idAtual) {
-                        const changed = setPlayBarVisible(false);
-                        if (changed && window.__reflowCifra) window.__reflowCifra();
-                        return;
-                    }
-
-                    const changed = setPlayBarVisible(true);
-                    $("#entrarlivePlaynow").attr("href", `music.php?id=${ultimoNumero}`);
-                    if (changed && window.__reflowCifra) window.__reflowCifra();
-                })
-                .catch(err => {});
-        }
-
         window.addEventListener('offline', () => {
             const changed = setPlayBarVisible(false);
             if (changed && window.__reflowCifra) window.__reflowCifra();
         });
 
         window.addEventListener('online', () => {
-            verificarAlteracao();
+            if (window.LiveMode) window.LiveMode.consultarStatus();
         });
 
         // ==========================

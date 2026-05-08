@@ -8,6 +8,7 @@ logs/
 # Cache
 cache/
 tmp/
+src/backend/data/live-state.json
 
 # Uploads temporarios
 uploads/tmp/
