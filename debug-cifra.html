@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Debug Cifra Parser</title>
+    <style>
+        body { font-family: monospace; padding: 20px; }
+        .section { margin: 20px 0; padding: 10px; border: 1px solid #ccc; }
+        .output { background: #f0f0f0; padding: 10px; white-space: pre-wrap; }
+        refrao, prerefrao, ponte { display: block; margin: 5px 0; }
+    </style>
+</head>
+<body>
+    <h1>Debug: buildBlocksFromHtml</h1>
+    
+    <div class="section">
+        <h2>Input HTML (simplified)</h2>
+        <div class="output" id="input"></div>
+    </div>
+    
+    <div class="section">
+        <h2>Parsed Blocks</h2>
+        <div class="output" id="blocks"></div>
+    </div>
+    
+    <div class="section">
+        <h2>Rendered Lines</h2>
+        <div id="rendered"></div>
+    </div>
+
+    <script>
+        // Código extraído de music.php - reproduzir o bug
+        
+        function splitNodeToLines(node) {
+            if (node.nodeType === Node.TEXT_NODE) {
+                return [[document.createTextNode(node.textContent)]];
+            }
+
+            if (node.nodeType !== Node.ELEMENT_NODE) {
+                return [[document.createTextNode('')]];
+            }
+
+            const lines = [[]];
+            node.childNodes.forEach(child => {
+                if (child.nodeName === 'BR') {
+                    lines.push([]);
+                    return;
+                }
+
+                const childLines = splitNodeToLines(child);
+                if (childLines.length === 1) {
+                    lines[lines.length - 1].push(...childLines[0]);
+                    return;
+                }
+
+                lines[lines.length - 1].push(...childLines[0]);
+                for (let i = 1; i < childLines.length; i += 1) {
+                    lines.push([...childLines[i]]);
+                }
+            });
+
+            return lines.map(lineNodes => {
+                const clone = node.cloneNode(false);
+                lineNodes.forEach(child => clone.appendChild(child));
+                return [clone];
+            });
+        }
+
+        function buildLineHtmls(html) {
+            const container = document.createElement('div');
+            container.innerHTML = html;
+
+            const lines = [[]];
+            container.childNodes.forEach(child => {
+                if (child.nodeName === 'BR') {
+                    lines.push([]);
+                    return;
+                }
+
+                const childLines = splitNodeToLines(child);
+                if (childLines.length === 1) {
+                    lines[lines.length - 1].push(...childLines[0]);
+                    return;
+                }
+
+                lines[lines.length - 1].push(...childLines[0]);
+                for (let i = 1; i < childLines.length; i += 1) {
+                    lines.push([...childLines[i]]);
+                }
+            });
+
+            return lines.map(nodes => {
+                const line = document.createElement('div');
+                nodes.forEach(node => line.appendChild(node));
+                return line.innerHTML;
+            });
+        }
+
+        function wrapLinesWithTag(tagName, attributes, lines) {
+            const attrPairs = Array.from(attributes || []).map(attr => `${attr.name}="${attr.value}"`);
+            const attrString = attrPairs.length ? ' ' + attrPairs.join(' ') : '';
+            return lines.map(line => `<${tagName}${attrString}>${line}</${tagName}>`);
+        }
+
+        function buildBlocksFromHtml(html) {
+            const container = document.createElement('div');
+            container.innerHTML = html;
+
+            const blockTags = new Set(['refrao', 'prerefrao', 'ponte', 'intro', 'verso', 'p', 'div']);
+            const blocks = [];
+            let currentLines = [];
+
+            const appendLineHtml = (htmlLine) => {
+                if (currentLines.length === 0) {
+                    currentLines.push(htmlLine);
+                    return;
+                }
+
+                if (currentLines[currentLines.length - 1] === '') {
+                    currentLines[currentLines.length - 1] = htmlLine;
+                    return;
+                }
+
+                currentLines[currentLines.length - 1] += htmlLine;
+            };
+
+            const flushCurrent = () => {
+                if (currentLines.length) {
+                    blocks.push({ lines: currentLines.slice(), splittable: true });
+                    currentLines = [];
+                }
+            };
+
+            container.childNodes.forEach(child => {
+                if (child.nodeName === 'BR') {
+                    currentLines.push('');
+                    return;
+                }
+
+                if (child.nodeType === Node.ELEMENT_NODE && blockTags.has(child.nodeName.toLowerCase())) {
+                    flushCurrent();
+                    const lines = buildLineHtmls(child.innerHTML);
+                    const wrappedLines = wrapLinesWithTag(child.nodeName.toLowerCase(), child.attributes, lines);
+                    blocks.push({ lines: wrappedLines, splittable: true });
+                    return;
+                }
+
+                const childLines = splitNodeToLines(child);
+                if (childLines.length === 1) {
+                    const temp = document.createElement('div');
+                    childLines[0].forEach(node => temp.appendChild(node));
+                    appendLineHtml(temp.innerHTML);
+                    return;
+                }
+
+                const temp = document.createElement('div');
+                childLines[0].forEach(node => temp.appendChild(node));
+                appendLineHtml(temp.innerHTML);
+                for (let i = 1; i < childLines.length; i += 1) {
+                    const line = document.createElement('div');
+                    childLines[i].forEach(node => line.appendChild(node));
+                    currentLines.push(line.innerHTML);
+                }
+            });
+
+            flushCurrent();
+            return blocks;
+        }
+
+        // HTML simplificado do problema
+        const testHtml = `
+<refrao>
+<p><span style="color: teal;">C F</span><br>Necessitem de força de viver</p>
+</refrao>
+        `.trim();
+
+        // Executar parsing
+        document.getElementById('input').textContent = testHtml;
+        
+        const blocks = buildBlocksFromHtml(testHtml);
+        document.getElementById('blocks').textContent = JSON.stringify(blocks, null, 2);
+        
+        // Renderizar
+        const rendered = document.getElementById('rendered');
+        blocks.forEach((block, idx) => {
+            const blockDiv = document.createElement('div');
+            blockDiv.innerHTML = `<strong>Block ${idx}:</strong><br>`;
+            block.lines.forEach((line, lineIdx) => {
+                const lineDiv = document.createElement('div');
+                lineDiv.innerHTML = `Line ${lineIdx}: ${line}`;
+                blockDiv.appendChild(lineDiv);
+            });
+            rendered.appendChild(blockDiv);
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,21 @@
+# Arquivo de environment com dados sensiveis
+.env
+
+# Logs
+*.log
+logs/
+
+# Cache
+cache/
+tmp/
+
+# Uploads temporarios
+uploads/tmp/
+
+# Configuracoes do editor
+.vscode/
+.idea/
+
+# OS generated files
+.DS_Store
+Thumbs.db

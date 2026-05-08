@@ -1,0 +1,326 @@
+/* ================================================================
+   REHEARSAL MODE - Estilos
+   ================================================================ */
+
+:root {
+    --rehearsal-bg: #0a0a0a;
+    --rehearsal-border: #1e1e1e;
+    --rehearsal-text: #e0e0e0;
+    --rehearsal-accent: #00c27a;
+    --rehearsal-accent-dark: #008f5a;
+    --rehearsal-danger: #e53935;
+}
+
+#modo-ensaio {
+    background: var(--rehearsal-bg);
+    color: var(--rehearsal-text);
+    border: 1px solid var(--rehearsal-border);
+    border-radius: 8px;
+    padding: 16px;
+    margin-top: 16px;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+    transition: opacity 0.3s ease, max-height 0.3s ease;
+    
+    /* Estado visível (padrão) */
+    opacity: 0;
+    max-height: 0;
+    overflow: hidden;
+    padding: 0;
+    margin: 0;
+    pointer-events: none;
+}
+
+/* Estado ativo/visível */
+#modo-ensaio.is-active {
+    opacity: 1 !important;
+    max-height: 5000px !important;
+    padding: 16px !important;
+    margin-top: 16px !important;
+    margin-bottom: 16px !important;
+    pointer-events: auto !important;
+    overflow: visible !important;
+    display: grid !important;
+    visibility: visible !important;
+    position: relative !important;
+    z-index: 10 !important;
+    border: 2px solid #ff0000 !important;
+}
+
+#btnAtivarEnsaio {
+    background: transparent !important;
+    border: 1px solid var(--rehearsal-accent) !important;
+    color: var(--rehearsal-accent) !important;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.2s ease;
+    margin-top: 12px;
+}
+
+#btnAtivarEnsaio:hover {
+    background: rgba(0, 194, 122, 0.1) !important;
+}
+
+#btnAtivarEnsaio.active {
+    background: var(--rehearsal-accent) !important;
+    color: #000 !important;
+}
+
+/* ===== YouTube Section ===== */
+.rehearsal-section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px;
+    background: rgba(30, 30, 30, 0.5);
+    border-radius: 6px;
+}
+
+.rehearsal-section-title {
+    font-weight: 600;
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: rgba(224, 224, 224, 0.8);
+    margin: 0 0 8px 0;
+}
+
+#ytPreview {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+}
+
+#ytThumb {
+    width: 80px;
+    height: 60px;
+    object-fit: cover;
+    border-radius: 4px;
+    background: #1a1a1a;
+    display: none;
+}
+
+#ytThumb.is-visible {
+    display: block;
+}
+
+#ytInfo {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 13px;
+}
+
+#ytTitle {
+    font-weight: 500;
+    line-height: 1.4;
+    max-height: 2.8em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+#inputYoutubeUrl {
+    background: #1a1a1a !important;
+    border: 1px solid var(--rehearsal-border) !important;
+    color: var(--rehearsal-text) !important;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+#inputYoutubeUrl::placeholder {
+    color: rgba(224, 224, 224, 0.5) !important;
+}
+
+.rehearsal-button-group {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.rehearsal-button {
+    background: transparent !important;
+    border: 1px solid var(--rehearsal-border) !important;
+    color: var(--rehearsal-text) !important;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    flex: 1;
+    min-width: 80px;
+}
+
+.rehearsal-button:hover:not(:disabled) {
+    background: rgba(224, 224, 224, 0.1) !important;
+    border-color: var(--rehearsal-accent) !important;
+}
+
+.rehearsal-button:active:not(:disabled),
+.rehearsal-button.is-active {
+    background: var(--rehearsal-accent) !important;
+    color: #000 !important;
+    border-color: var(--rehearsal-accent) !important;
+}
+
+.rehearsal-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* ===== Waveform & Audio ===== */
+#waveform {
+    background: #1a1a1a;
+    border: 1px solid var(--rehearsal-border);
+    border-radius: 4px;
+    min-height: 100px;
+}
+
+#inputAudio {
+    padding: 8px;
+    font-size: 13px;
+}
+
+.rehearsal-file-info {
+    font-size: 12px;
+    color: rgba(224, 224, 224, 0.7);
+    margin: 2px 0 0 0;
+}
+
+/* ===== Controls Grid ===== */
+#rehearsalControls {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 8px;
+    background: rgba(30, 30, 30, 0.5);
+    border-radius: 6px;
+    padding: 12px;
+}
+
+#rehearsalControls .rehearsal-button {
+    min-width: 50px;
+    padding: 10px 8px;
+}
+
+/* ===== A/B Controls ===== */
+#rehearsalAB {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    background: rgba(30, 30, 30, 0.5);
+    border-radius: 6px;
+    padding: 12px;
+}
+
+#rehearsalAB .rehearsal-button {
+    min-width: 50px;
+}
+
+/* ===== Pitch Controls ===== */
+#rehearsalPitch {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    background: rgba(30, 30, 30, 0.5);
+    border-radius: 6px;
+    padding: 12px;
+}
+
+#pitchLabelContainer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 13px;
+}
+
+#pitchLabel {
+    font-weight: 600;
+    color: var(--rehearsal-accent);
+}
+
+#rehearsalPitchButtons {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+}
+
+#rehearsalPitchButtons .rehearsal-button {
+    padding: 10px;
+    font-size: 12px;
+}
+
+/* ===== Messages ===== */
+#rehearsalMessage {
+    padding: 10px 12px;
+    border-radius: 4px;
+    font-size: 13px;
+    background: rgba(30, 30, 30, 0.7);
+    color: var(--rehearsal-text);
+    min-height: 1px;
+    display: none;
+}
+
+#rehearsalMessage:not(:empty) {
+    display: block;
+}
+
+#rehearsalMessage.is-error {
+    background: rgba(229, 57, 53, 0.2);
+    color: #ff6b6b;
+}
+
+#rehearsalMessage.is-success {
+    background: rgba(0, 194, 122, 0.2);
+    color: #4ade80;
+}
+
+/* ===== Responsive ===== */
+@media (max-width: 768px) {
+    #modo-ensaio {
+        padding: 12px;
+        gap: 12px;
+    }
+
+    #rehearsalControls,
+    #rehearsalAB {
+        grid-template-columns: repeat(3, 1fr);
+    }
+
+    #rehearsalPitchButtons {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    #ytPreview {
+        flex-wrap: wrap;
+    }
+
+    #ytThumb {
+        width: 100%;
+        max-width: 120px;
+        height: auto;
+        aspect-ratio: 16 / 9;
+    }
+}
+
+@media (max-width: 480px) {
+    #modo-ensaio {
+        grid-template-columns: 1fr;
+    }
+
+    #rehearsalControls,
+    #rehearsalAB,
+    #rehearsalPitchButtons,
+    .rehearsal-button-group {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .rehearsal-button {
+        padding: 10px;
+        font-size: 12px;
+    }
+}

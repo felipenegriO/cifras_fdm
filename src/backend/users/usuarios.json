@@ -1,0 +1,44 @@
+[
+    {
+        "id": "dd7d3a01-68d4-481c-b6c5-f2639d50bf17",
+        "nome": "Felipe",
+        "username": "felipe",
+        "ativo": true,
+        "senhaHash": "$2y$10$SJrCzUigr2BYVnX3YH9ppu4\/rnocV1bICe4Xl6hrdg0AgBnCOwD\/O"
+    },
+    {
+        "id": "28480ec9-2c7b-4bba-b7b8-8299fe50f371",
+        "nome": "Jean Pereira",
+        "username": "jean",
+        "ativo": true,
+        "senhaHash": "$2y$10$XdLHKiHZ1OhsvBZNG.iSH.zsNcIiMjiWRHZjMwhyPtkW8lo8Bznga"
+    },
+    {
+        "id": "648609c8-646a-476e-a3f5-5469281a8233",
+        "nome": "Luana Vitória",
+        "username": "luana",
+        "ativo": true,
+        "senhaHash": "$2y$10$SDM0nvZZwzxe1ctx\/Z.Ig.bLinvUvHtXCSIUgQlaou8q4MIrngope"
+    },
+    {
+        "id": "47c5aacf-0e7b-48f6-b4ac-5fd7f43cb9e0",
+        "nome": "Hiago Rodrigues",
+        "username": "hiago",
+        "ativo": true,
+        "senhaHash": "$2y$10$TswhE9l6DGNGlomtgIxnUuPkkc.9TqdO\/Om04Js7W7EIWiyD9orgy"
+    },
+    {
+        "id": "5c3a7909-bd70-48a2-b89d-13c7cf3ba007",
+        "nome": "Carlos Henrique",
+        "username": "carlos",
+        "ativo": true,
+        "senhaHash": "$2y$10$NwfPxFWk9smFQqP584h0TuthOQEDDdLc6x7BZiY1wrqNJClgCRFsm"
+    },
+    {
+        "id": "5b0d66be-cc56-4b24-895c-2d057b44fb02",
+        "nome": "vitor",
+        "username": "vitor",
+        "ativo": true,
+        "senhaHash": "$2y$10$jMiI.13RvsFLTTmORF787ubrep1gLVaYRNgAxh4Gl5OOeCCYYiIVO"
+    }
+]

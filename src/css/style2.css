@@ -1,0 +1,207 @@
+:root {
+    --bg: #000;
+    --text: #fff;
+    --accent: #007bff;
+    --btn-focus: #025e83a1;
+    --play-bg: #13ff1340;
+    --refrao: #00ff00;
+    --prerefrao: #00ffff;
+    --ponte: #ff0000;
+    --chord: #ff7700;
+}
+
+body {
+    padding: 20px;
+    background: var(--bg);
+    color: var(--text);
+}
+
+.list-group-item {
+    border: var(--text) 1px solid;
+    background: var(--bg);
+    color: var(--text);
+}
+
+a {
+    color: var(--text);
+    font-size: x-large;
+}
+
+
+#sideMenu, #menusideMenu {
+    position: fixed;
+    top: 0;
+    right: -300px; /* Menu começa fora da tela */
+    width: 300px;
+    height: 100%;
+    background-color: #333;
+    color: #fff;
+    transition: right 0.3s ease; /* Animação de slide */
+    padding: 20px;
+    z-index: 1000;
+}
+
+#sideMenu h2,#menusideMenu h2 {
+    margin-top: 0;
+    margin-left: 40px;
+}
+
+#sideMenu ul,#menusideMenu ul {
+    list-style-type: none;
+    padding: 0;
+}
+
+#sideMenu ul li, #menusideMenu ul li {
+    margin: 15px 0;
+}
+
+#sideMenu ul li a,#menusideMenu ul li a {
+    color: #fff;
+    text-decoration: none;
+}
+
+#sideMenu #closeButton, #menusideMenu #menucloseButton{
+    background: none;
+    border: none;
+    font-size: 24px;
+    color: #fff;
+    cursor: pointer;
+    position: absolute;
+    top: 20px;
+    left: 20px;
+}
+
+.liPlaylist a {
+    color: var(--accent);
+}
+
+.playlist-section-title {
+    margin: 12px 0 6px;
+    font-weight: bold;
+    text-transform: uppercase;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    color: #cfcfcf;
+}
+
+.liRoteiro a {
+    color: #8fd3ff;
+    font-size: 20px;
+}
+
+a.liPlaylist-musica {
+    color: var(--text);
+    font-size: 20px;
+}
+.sub-list {
+    display: none;
+    padding-left: 20px; 
+}
+
+.active {
+    font-weight: bold;
+}
+
+refrao, ponte, prerefrao {
+    display: block;
+    page-break-inside: avoid;
+    break-inside: avoid-column; /* para colunas */
+    -webkit-column-break-inside: avoid; /* para Webkit */
+    color: inherit; /* mantém suas cores */
+    font-weight: bold;
+}
+
+.btn-primary:focus {
+    background: var(--btn-focus);
+}
+
+.btn-primary {
+    background: transparent;
+    border: 1px solid #fff;
+    color: #fff;
+}
+
+.btn-primary:hover {
+    background: #111;
+    border-color: #fff;
+    color: #fff;
+}
+
+.btn-primary:active,
+.btn-primary.active {
+    background: #fff;
+    border-color: #fff;
+    color: #000;
+}
+
+#search {
+    background: #000;
+    color: #fff;
+    border-color: #fff;
+}
+
+#search::placeholder {
+    color: #bdbdbd;
+}
+
+#mostrarbtnplay{
+    position: fixed;
+    bottom: 0;
+    width: 80%;
+}
+#entrarlivePlaynow {
+    width: 100%;
+    background: var(--play-bg);
+}
+#entrarlivePlaynow i {
+    background: transparent;
+}
+
+li a{
+    font-size: unset;
+}
+refrao {
+    color: var(--refrao);
+    font-weight: bold;
+}
+
+prerefrao {
+    color: var(--prerefrao);
+    font-weight: bold;
+}
+
+ponte {
+    color: var(--ponte);
+    font-weight: bold;
+}
+
+b {
+    color: var(--chord);
+}
+
+        .cifra {
+            white-space: pre-wrap;
+            transition: column-count 0.3s ease;
+            line-height: 1.0;
+        }
+
+        .cifra {
+            column-gap: 1px;
+            max-width: fit-content;
+        }
+
+        .cifra p {
+            margin: 0;
+        }
+
+        .cifra>div {
+            page-break-inside: avoid;
+        }
+        
+a {
+    cursor: pointer;
+}
+
+pre {
+    color: var(--text);
+}
