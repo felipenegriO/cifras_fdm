@@ -24,6 +24,7 @@
             sessionStorage.removeItem(modeKey);
         }
         renderButtons();
+        renderLiveIndicator();
     }
 
     function getHostId() {
@@ -55,6 +56,31 @@
                 ? '<i class="fa-solid fa-stop"></i> SAIR DO MODO LIVE'
                 : '<i class="fa-solid fa-play"></i> ENTRAR NO MODO LIVE';
         }
+    }
+
+    function renderLiveIndicator() {
+        let indicator = document.getElementById('liveModeIndicator');
+        const mode = getMode();
+
+        if (!mode) {
+            if (indicator) {
+                indicator.remove();
+            }
+            return;
+        }
+
+        if (!indicator) {
+            indicator = document.createElement('div');
+            indicator.id = 'liveModeIndicator';
+            document.body.appendChild(indicator);
+        }
+
+        indicator.className = 'live-mode-indicator live-mode-indicator-' + mode;
+        indicator.title = mode === 'host' ? 'Voce e o host' : 'Seguindo live';
+        indicator.setAttribute('aria-label', indicator.title);
+        indicator.innerHTML = mode === 'host'
+            ? '<span class="live-record-dot"></span>'
+            : '<i class="fa-solid fa-play"></i>';
     }
 
     function currentPageState() {
@@ -293,6 +319,7 @@
         }
 
         renderButtons();
+        renderLiveIndicator();
 
         if (getMode() === 'host') {
             setStatus('Voce e o host', 'host');

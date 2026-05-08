@@ -185,6 +185,46 @@ refrao, ponte, prerefrao {
     color: #dc3545;
 }
 
+.live-mode-indicator {
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1200;
+    border: 2px solid #fff;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
+    pointer-events: none;
+}
+
+.live-mode-indicator-host {
+    background: #d90000;
+}
+
+.live-mode-indicator-follow {
+    background: #13ff13;
+    color: #000;
+}
+
+.live-mode-indicator-follow i {
+    background: transparent;
+    color: #000;
+    font-size: 18px;
+    margin-left: 2px;
+}
+
+.live-record-dot {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #fff;
+    display: block;
+}
+
 li a{
     font-size: unset;
 }
