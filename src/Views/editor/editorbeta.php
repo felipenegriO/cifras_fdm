@@ -152,7 +152,10 @@
       overflow: auto;
       height: 100%;
       background: #f9f9f9 !important;
+      white-space: pre-wrap;
+      font-family: monospace;
     }
+    #livePreview * { white-space: inherit; }
 
     /* Tags preview */
     refrao { color: green !important; font-weight: bold; }
@@ -321,7 +324,7 @@
     tinymce.init({
       selector: '#cifraInput',
       plugins: 'code searchreplace',
-      toolbar: 'undo redo | bold italic | code | versoBtn preRefraoBtn refraoBtn ponteBtn introBtn limparCifraBtn | removeformat',
+      toolbar: 'undo redo | bold italic | code | colarPrepararBtn versoBtn preRefraoBtn refraoBtn ponteBtn introBtn limparCifraBtn | removeformat',
       valid_elements: '*[*]',
       custom_elements: 'refrao,prerefrao,ponte,div,b',
       extended_valid_elements: 'refrao[*],prerefrao[*],ponte[*],div[*],b[*]',
@@ -420,6 +423,21 @@
             atualizarPreview();
             setDirty(true);
             toast('Colagem limpa e normalizada');
+          }
+        });
+        editor.ui.registry.addButton('colarPrepararBtn', {
+          text: 'colar e preparar',
+          tooltip: 'Cole no editor e clique para limpar e preparar',
+          onAction: () => {
+            const cleaned = cleanImportedHtml(editor.getContent());
+            if (!cleaned) {
+              toast('Cole a cifra primeiro.');
+              return;
+            }
+            editor.setContent('<div>[Verso]<br/></div><br/>' + cleaned);
+            atualizarPreview();
+            setDirty(true);
+            toast('Cifra preparada para marcação de blocos');
           }
         });
 
@@ -591,6 +609,17 @@
       });
       
       cifra = normalizarCifraParaSalvar(tempDiv.innerHTML);
+      cifra = cifra.trim();
+
+      if (!cifra || !cifra.replace(/<br\s*\/?>/gi, '').replace(/&nbsp;/gi, '').replace(/\s+/g, '')) {
+        toast('A cifra está vazia.');
+        return;
+      }
+
+      if (/(cifra-column|player--music|player-core|cifra_cnt|js-pl-v)/i.test(cifra)) {
+        toast('Ainda há HTML externo. Use "limpar colagem" antes de salvar.');
+        return;
+      }
       
       // 3. Limpeza adicional de atributos desnecessários
       cifra = cifra.replace(/class="js-modal-trigger"/g, "");

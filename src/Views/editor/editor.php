@@ -58,7 +58,9 @@
     ponte { color: red; font-weight: bold; }
     .cifra {
       white-space: pre-wrap;
+      font-family: monospace;
     }
+    #livePreview * { white-space: inherit; }
      *{
       background-color: white !important;
       color: black !important;
@@ -117,7 +119,7 @@
   tinymce.init({
     selector: '#cifraInput',
     plugins: 'code',
-    toolbar: 'undo redo | bold italic | code | versoBtn preRefraoBtn refraoBtn ponteBtn introBtn limparCifraBtn',
+    toolbar: 'undo redo | bold italic | code | colarPrepararBtn versoBtn preRefraoBtn refraoBtn ponteBtn introBtn limparCifraBtn',
     valid_elements: '*[*]',
     custom_elements: 'refrao,prerefrao,ponte,div,b',
     extended_valid_elements: 'refrao[*],prerefrao[*],ponte[*],div[*],b[*]',
@@ -196,6 +198,20 @@
         onAction: () => {
           editor.setContent(cleanImportedHtml(editor.getContent()));
           atualizarPreview();
+        }
+      });
+      editor.ui.registry.addButton('colarPrepararBtn', {
+        text: 'colar e preparar',
+        tooltip: 'Cole no editor e clique para limpar e preparar',
+        onAction: () => {
+          const cleaned = cleanImportedHtml(editor.getContent());
+          if (!cleaned) {
+            document.getElementById('status').innerText = 'Cole a cifra primeiro.';
+            return;
+          }
+          editor.setContent('<div>[Verso]<br/></div><br/>' + cleaned);
+          atualizarPreview();
+          document.getElementById('status').innerText = 'Cifra preparada para marcação de blocos.';
         }
       });
 
@@ -292,7 +308,11 @@
     }
 
     function salvar() {
-      const titulo = document.getElementById('titulo').value;
+      const titulo = document.getElementById('titulo').value.trim();
+      if (!titulo) {
+        document.getElementById('status').innerText = 'Digite o nome da música.';
+        return;
+      }
       let cifra = tinymce.get('cifraInput').getContent();
       debugger;
       
@@ -323,6 +343,17 @@
       });
       
       cifra = normalizarCifraParaSalvar(tempDiv.innerHTML);
+      cifra = cifra.trim();
+
+      if (!cifra || !cifra.replace(/<br\s*\/?>/gi, '').replace(/&nbsp;/gi, '').replace(/\s+/g, '')) {
+        document.getElementById('status').innerText = 'A cifra está vazia.';
+        return;
+      }
+
+      if (/(cifra-column|player--music|player-core|cifra_cnt|js-pl-v)/i.test(cifra)) {
+        document.getElementById('status').innerText = 'Use "limpar colagem" antes de salvar.';
+        return;
+      }
       
       // 3. Limpeza adicional de atributos desnecessários
       cifra = cifra.replace(/class="js-modal-trigger"/g, "");
