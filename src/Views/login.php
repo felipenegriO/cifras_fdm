@@ -68,6 +68,25 @@
       font-size: 0.85rem;
       margin-top: 0.25rem;
     }
+    .senha-wrap {
+      position: relative;
+    }
+    .senha-toggle {
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      border: 0;
+      background: transparent;
+      color: #555;
+      padding: 0.2rem 0.35rem;
+      line-height: 1;
+      font-size: 1rem;
+      cursor: pointer;
+    }
+    .senha-wrap .form-control {
+      padding-right: 2.2rem;
+    }
   </style>
 </head>
 
@@ -98,16 +117,19 @@
 
       <div class="mb-4">
         <label for="senha" class="form-label">Senha</label>
-        <input
-          type="password"
-          class="form-control"
-          id="senha"
-          name="senha"
-          placeholder="Digite sua senha"
-          required
-          autofocus
-          autocomplete="current-password"
-        >
+        <div class="senha-wrap">
+          <input
+            type="password"
+            class="form-control"
+            id="senha"
+            name="senha"
+            placeholder="Digite sua senha"
+            required
+            autofocus
+            autocomplete="current-password"
+          >
+          <button type="button" id="toggleSenha" class="senha-toggle" aria-label="Mostrar senha" title="Mostrar senha">👁</button>
+        </div>
       </div>
 
       <button type="submit" class="btn btn-primary">Entrar</button>
@@ -119,6 +141,7 @@
     const form = document.getElementById('loginForm');
     const senha = document.getElementById('senha');
     const username = document.getElementById('username');
+    const toggleSenha = document.getElementById('toggleSenha');
 
     function showError(input, message) {
       removeError(input);
@@ -150,6 +173,16 @@
 
       if (!valid) e.preventDefault();
     });
+
+    if (toggleSenha) {
+      toggleSenha.addEventListener('click', () => {
+        const hidden = senha.type === 'password';
+        senha.type = hidden ? 'text' : 'password';
+        toggleSenha.setAttribute('aria-label', hidden ? 'Ocultar senha' : 'Mostrar senha');
+        toggleSenha.setAttribute('title', hidden ? 'Ocultar senha' : 'Mostrar senha');
+        toggleSenha.textContent = hidden ? '🙈' : '👁';
+      });
+    }
   });
   </script>
 </body>

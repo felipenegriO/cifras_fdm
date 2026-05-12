@@ -78,6 +78,7 @@
             <button type="button" class="btn col" style="color: white;" id="tom"></button>
             <button type="button" class="btn btn-primary col" id="increase-tom">+ tom</button>
         </div>
+        <div id="tomInfo" class="live-status" style="margin-bottom: 15px; font-size: 12px;"></div>
 
         <div class="row" style="margin-bottom: 15px;">
             <button type="button" class="btn btn-primary col mr-2" id="increase-text">A+</button>
@@ -329,6 +330,7 @@
     <script src="<?= asset_url('/src/js/playlists_salvas.js') ?>" defer></script>
     <script src="<?= asset_url('/src/js/roteiros_salvos.js') ?>" defer></script>
     <script src="<?= asset_url('/src/js/playlists.js') ?>" defer></script>
+    <script src="<?= asset_url('/src/js/offline-tools.js') ?>"></script>
     <script src="<?= asset_url('/src/js/live.js') ?>"></script>
 
     <script>
@@ -572,6 +574,42 @@
                 const original = (window.__cifraOriginalHtml || '').trim();
                 if (original) return original;
                 return cifraDiv.innerHTML || '';
+            }
+
+            function normalizarTomPlaylist(tom) {
+                const equivalentes = {
+                    'DB': 'C#',
+                    'EB': 'D#',
+                    'GB': 'F#',
+                    'AB': 'G#',
+                    'BB': 'A#'
+                };
+                const valor = String(tom || '').trim().toUpperCase();
+                return equivalentes[valor] || valor;
+            }
+
+            function indiceTomPlaylist(tom) {
+                const notas = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+                return notas.indexOf(normalizarTomPlaylist(tom));
+            }
+
+            function aplicarTomDaPlaylist(html, tomDestino) {
+                const destino = indiceTomPlaylist(tomDestino);
+                const origem = indiceTomPlaylist(identificarTom(html));
+
+                if (origem < 0 || destino < 0 || origem === destino) {
+                    return html;
+                }
+
+                return transporCifraHtml(html, destino - origem);
+            }
+
+            function setTomInfo(texto, tipo) {
+                const el = document.getElementById('tomInfo');
+                if (!el) return;
+                el.textContent = texto || '';
+                el.dataset.status = tipo || '';
+                el.style.display = texto ? 'block' : 'none';
             }
 
             function splitNodeToLines(node) {
@@ -1698,13 +1736,16 @@
                 $('#song-title').text(song.nome);
                 $('#artist-name').text(song.artista);
 
+                const tomPlaylist = normalizarTomPlaylist(urlParams.get('playlistTom'));
                 const sanitizedCifra = sanitizeCifraHtml(song.cifra);
+                const tomDetectadoOriginal = identificarTom(sanitizedCifra);
+                const cifraInicial = aplicarTomDaPlaylist(sanitizedCifra, tomPlaylist);
 
                 // Render inicial
-                setCifraHtml(sanitizedCifra);
+                setCifraHtml(cifraInicial);
 
                 // Guarda original
-                window.__cifraOriginalHtml = sanitizedCifra;
+                window.__cifraOriginalHtml = cifraInicial;
                 window.__modoSomenteLetra = false;
 
                 const savedMode = localStorage.getItem('modoSomenteLetra') === '1';
@@ -1714,7 +1755,17 @@
                     setCifraHtml(letraHtml);
                     $("#tom").text('');
                 } else {
-                    $("#tom").text(identificarTom(sanitizedCifra));
+                    $("#tom").text(identificarTom(cifraInicial));
+                }
+
+                if (tomPlaylist) {
+                    if (indiceTomPlaylist(tomDetectadoOriginal) < 0) {
+                        setTomInfo('Tom da playlist: ' + tomPlaylist + ' | tom original nao identificado com seguranca', 'waiting');
+                    } else {
+                        setTomInfo('Tom da playlist: ' + tomPlaylist + ' | original detectado: ' + tomDetectadoOriginal, 'follow');
+                    }
+                } else {
+                    setTomInfo('Tom original detectado: ' + (tomDetectadoOriginal || 'nao identificado'), tomDetectadoOriginal ? 'host' : 'waiting');
                 }
 
                 $("#linkYou").attr("href", "https://www.youtube.com/results?search_query=" +
@@ -1765,7 +1816,7 @@
             // Tom + / -
             increaseBtnTom.addEventListener('click', () => {
                 if (window.__modoSomenteLetra) return; // sem cifra, não transpõe
-                while (true) {
+                for (let tentativa = 0; tentativa < 12; tentativa += 1) {
                     var cifraAtual = getRawCifraHtml();
                     var tom = identificarTom(cifraAtual);
                     var cifraTransposta = transporCifraHtml(cifraAtual, 1);
@@ -1774,13 +1825,14 @@
                     setCifraHtml(cifraTransposta);
                     window.__cifraOriginalHtml = cifraTransposta;
                     $("#tom").text(tomnovo);
+                    setTomInfo('Tom ajustado manualmente: ' + tomnovo + ' | nao salva na playlist automaticamente', 'waiting');
                     break;
                 }
             });
 
             decreaseBtnTom.addEventListener('click', () => {
                 if (window.__modoSomenteLetra) return; // sem cifra, não transpõe
-                while (true) {
+                for (let tentativa = 0; tentativa < 12; tentativa += 1) {
                     var cifraAtual = getRawCifraHtml();
                     var tom = identificarTom(cifraAtual);
                     var cifraTransposta = transporCifraHtml(cifraAtual, -1);
@@ -1789,6 +1841,7 @@
                     setCifraHtml(cifraTransposta);
                     window.__cifraOriginalHtml = cifraTransposta;
                     $("#tom").text(tomnovo);
+                    setTomInfo('Tom ajustado manualmente: ' + tomnovo + ' | nao salva na playlist automaticamente', 'waiting');
                     break;
                 }
             });

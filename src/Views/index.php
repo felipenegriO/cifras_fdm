@@ -86,8 +86,10 @@
             <i class="fa-solid fa-play"></i> ENTRAR NO MODO LIVE
         </button>
         <div id="liveStatus" class="live-status mt-2">Live desconectada</div>
-        <a href="src/backend/editor/editor.php" type="button" class="btn btn-primary mt-3" >Editor</a>
-        <a href="src/backend/editor/roteiro.php" type="button" class="btn btn-primary mt-3">Editor Roteiros</a>
+        <?php if (function_exists('current_user_is_admin') && current_user_is_admin()): ?>
+            <a href="src/backend/editor/editor.php" type="button" class="btn btn-primary mt-3" >Editor</a>
+            <a href="src/backend/editor/roteiro.php" type="button" class="btn btn-primary mt-3">Editor Roteiros</a>
+        <?php endif; ?>
         
     </div>
     <div id="sideMenu">
@@ -154,6 +156,7 @@
     <script src="<?= asset_url('/src/js/playlists_salvas.js') ?>" defer></script>
     <script src="<?= asset_url('/src/js/roteiros_salvos.js') ?>" defer></script>
     <script src="<?= asset_url('/src/js/playlists.js') ?>" defer></script>
+    <script src="<?= asset_url('/src/js/offline-tools.js') ?>"></script>
     <script src="<?= asset_url('/src/js/live.js') ?>"></script>
     <script>
         if ('serviceWorker' in navigator) {

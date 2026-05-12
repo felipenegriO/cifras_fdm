@@ -7,7 +7,7 @@ class SongController {
     }
 
     public function save() {
-        require_auth();
+        require_admin();
         header('Content-Type: application/json');
 
         $raw = file_get_contents('php://input');
@@ -26,6 +26,8 @@ class SongController {
             echo json_encode(['ok' => false, 'error' => 'Dados incompletos']);
             return;
         }
+
+        $data['cifra'] = $this->normalizarCifraParaSalvar($data['cifra']);
 
         $conteudo = file_get_contents($this->songsFile);
         $conteudo = trim($conteudo);
@@ -94,8 +96,40 @@ class SongController {
         );
 
         $novoConteudo = 'var songs = ' . $novoConteudo . ';';
+        fdm_backup_file($this->songsFile);
         file_put_contents($this->songsFile, $novoConteudo);
+        fdm_bump_cache_version();
 
         echo json_encode(['ok' => true]);
+    }
+
+    private function normalizarCifraParaSalvar($cifra) {
+        $chordRegex = '/^[A-G](?:#|b)?(?:(?:m(?![a-z])|maj|min|dim|aug|sus|add|M)?[0-9]*(?:M)?(?:\([^)]+\))?(?:[+º°])?)(?:\/[A-G](?:#|b)?)?$/iu';
+
+        return preg_replace_callback('/<b\b[^>]*>([\s\S]*?)<\/b>/i', function ($matches) use ($chordRegex) {
+            $texto = html_entity_decode(strip_tags($matches[1]), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            $texto = str_replace("\xc2\xa0", ' ', $texto);
+            $texto = trim(preg_replace('/\s+/u', ' ', $texto));
+
+            if ($texto === '') {
+                return '';
+            }
+
+            $tokens = preg_split('/\s+/u', $texto);
+            $soAcordes = count($tokens) > 0;
+            foreach ($tokens as $token) {
+                $token = trim($token, '.,;:!?');
+                if (!preg_match($chordRegex, $token)) {
+                    $soAcordes = false;
+                    break;
+                }
+            }
+
+            if (!$soAcordes) {
+                return $matches[0];
+            }
+
+            return '<b>' . htmlspecialchars(implode(' ', $tokens), ENT_NOQUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</b>';
+        }, (string)$cifra);
     }
 }

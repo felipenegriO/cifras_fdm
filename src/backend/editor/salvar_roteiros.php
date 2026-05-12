@@ -1,9 +1,15 @@
 <?php
 session_start();
+require_once __DIR__ . '/../backup_helpers.php';
 header("Cache-Control: no-store, no-cache, must-revalidate, max-age=0");
 header("Pragma: no-cache");
 if (!isset($_SESSION['autenticado']) || $_SESSION['autenticado'] !== true) {
     header('Location: login.php');
+    exit;
+}
+if (strtolower((string)($_SESSION['usuario']['perfil'] ?? 'administrador')) !== 'administrador') {
+    http_response_code(403);
+    echo json_encode(["ok" => false, "error" => "Acesso restrito ao administrador."]);
     exit;
 }
 header('Content-Type: application/json');
@@ -69,6 +75,8 @@ if (isset($data['deleteId'])) {
 }
 
 $novoConteudo = "const roteirosSalvos = " . json_encode($roteiros, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ";\n";
+fdm_backup_file($arquivoJs);
 file_put_contents($arquivoJs, $novoConteudo);
+fdm_bump_cache_version();
 
 echo json_encode(["ok" => true]);

@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../../config/env.php';
+require_once __DIR__ . '/backup_helpers.php';
 
 spl_autoload_register(function ($class) {
     $baseDir = __DIR__ . '/../';
@@ -32,6 +33,62 @@ function require_auth() {
         header('Location: /login.php');
         exit;
     }
+
+    if (fdm_session_user_expired()) {
+        $_SESSION = [];
+        if (ini_get('session.use_cookies')) {
+            $params = session_get_cookie_params();
+            setcookie(session_name(), '', time() - 42000, $params['path'], $params['domain'], $params['secure'], $params['httponly']);
+        }
+        session_destroy();
+        header('Location: /login.php?expirado=1');
+        exit;
+    }
+}
+
+function current_user_profile() {
+    $perfil = $_SESSION['usuario']['perfil'] ?? 'administrador';
+    $perfil = strtolower(trim((string)$perfil));
+    return in_array($perfil, ['administrador', 'musico', 'externo'], true) ? $perfil : 'musico';
+}
+
+function current_user_is_admin() {
+    return current_user_profile() === 'administrador';
+}
+
+function require_admin() {
+    require_auth();
+    if (!current_user_is_admin()) {
+        http_response_code(403);
+        echo 'Acesso restrito ao administrador.';
+        exit;
+    }
+}
+
+function fdm_session_user_expired() {
+    $usuario = $_SESSION['usuario'] ?? null;
+    if (!is_array($usuario) || empty($usuario['id'])) {
+        return false;
+    }
+
+    $perfil = strtolower(trim((string)($usuario['perfil'] ?? 'administrador')));
+    if ($perfil !== 'externo') {
+        return false;
+    }
+
+    $validade = trim((string)($usuario['validade'] ?? ''));
+    if ($validade === '') {
+        return true;
+    }
+
+    $timezone = new DateTimeZone('America/Sao_Paulo');
+    $dataValidade = DateTimeImmutable::createFromFormat('!Y-m-d', $validade, $timezone);
+    if (!$dataValidade) {
+        return true;
+    }
+
+    $hoje = new DateTimeImmutable('today', $timezone);
+    return $dataValidade < $hoje;
 }
 
 function asset_url($path) {

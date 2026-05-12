@@ -67,7 +67,9 @@ class AuthController {
         $_SESSION['usuario'] = [
             'id' => $user['id'] ?? null,
             'nome' => $user['nome'] ?? '',
-            'username' => $user['username'] ?? ''
+            'username' => $user['username'] ?? '',
+            'perfil' => $user['perfil'] ?? 'administrador',
+            'validade' => $user['validade'] ?? ''
         ];
 
         $_SESSION['login_attempts'] = ['count' => 0, 'time' => time()];

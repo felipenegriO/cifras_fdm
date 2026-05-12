@@ -1,3 +1,7 @@
+<?php
+require_once __DIR__ . '/../bootstrap.php';
+require_admin();
+?>
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -32,6 +36,8 @@
     li { cursor: pointer; padding: 8px 10px; border-bottom: 1px solid #ccc; display:flex; justify-content:space-between; gap:10px; }
     li:hover { background: #f2f2f2; }
     .tag { font-size: 12px; padding: 2px 8px; border-radius: 999px; border: 1px solid #999; }
+    .tag-expirado { border-color: #c44; color: #c44; }
+    .tag-temp { border-color: #c90; color: #8a5b00; }
 
     .row { display:flex; gap:10px; }
     .row > div { flex: 1; }
@@ -52,6 +58,13 @@
       <div style="margin-top:14px;">
         <label>Filtrar:</label>
         <input id="filtroUsuarios" placeholder="nome ou username..." oninput="renderListaUsuarios()">
+        <select id="filtroStatusUsuarios" onchange="renderListaUsuarios()">
+          <option value="">Todos</option>
+          <option value="ativos">Ativos</option>
+          <option value="temporarios">Temporarios</option>
+          <option value="expirados">Expirados</option>
+          <option value="inativos">Inativos</option>
+        </select>
       </div>
 
       <div style="margin-top:14px;">
@@ -86,11 +99,26 @@
           </select>
         </div>
         <div>
+          <label>Perfil:</label>
+          <select id="perfil">
+            <option value="administrador">Administrador</option>
+            <option value="musico">Musico</option>
+            <option value="externo">Externo</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="row">
+        <div>
           <label>Senha (opcional):</label>
           <input id="senha" type="password" placeholder="deixe em branco para não alterar">
           <div class="muted">A senha é salva como hash (mais seguro).</div>
         </div>
       </div>
+
+      <label>Validade (opcional):</label>
+      <input id="validade" type="date">
+      <div class="muted">Preencha apenas para usuario temporario. Em branco = permanente.</div>
 
       <div style="margin-top:14px;">
         <button onclick="aplicarEdicao()">✅ Aplicar Alteração   </button>
@@ -138,16 +166,37 @@ function preencherSelectUsuarios() {
   });
 }
 
+function formatarData(data) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(data || '')) return '';
+  const [ano, mes, dia] = data.split('-');
+  return `${dia}/${mes}/${ano}`;
+}
+
+function usuarioExpirado(u) {
+  if (!u.validade || !/^\d{4}-\d{2}-\d{2}$/.test(u.validade)) return false;
+  const [ano, mes, dia] = u.validade.split('-').map(Number);
+  const validade = new Date(ano, mes - 1, dia);
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+  return validade < hoje;
+}
+
 function renderListaUsuarios() {
   const ul = document.getElementById('listaUsuarios');
   ul.innerHTML = '';
 
   const filtro = document.getElementById('filtroUsuarios').value.toLowerCase();
+  const filtroStatus = document.getElementById('filtroStatusUsuarios').value;
 
   usuarios
     .filter(u => {
       const texto = (u.nome + ' ' + u.username).toLowerCase();
-      return texto.includes(filtro);
+      if (!texto.includes(filtro)) return false;
+      if (filtroStatus === 'ativos') return !!u.ativo && !usuarioExpirado(u);
+      if (filtroStatus === 'temporarios') return !!u.ativo && !!u.validade && !usuarioExpirado(u);
+      if (filtroStatus === 'expirados') return !!u.ativo && usuarioExpirado(u);
+      if (filtroStatus === 'inativos') return !u.ativo;
+      return true;
     })
     .forEach(u => {
       const li = document.createElement('li');
@@ -158,7 +207,17 @@ function renderListaUsuarios() {
 
       const tag = document.createElement('span');
       tag.className = 'tag';
-      tag.textContent = u.ativo ? 'ATIVO' : 'INATIVO';
+      if (!u.ativo) {
+        tag.textContent = 'INATIVO';
+      } else if (usuarioExpirado(u)) {
+        tag.textContent = 'EXPIRADO';
+        tag.classList.add('tag-expirado');
+      } else if (u.validade) {
+        tag.textContent = `${(u.perfil || 'administrador').toUpperCase()} ATE ${formatarData(u.validade)}`;
+        tag.classList.add('tag-temp');
+      } else {
+        tag.textContent = (u.perfil || 'administrador').toUpperCase();
+      }
       tag.style.opacity = u.ativo ? '1' : '.6';
 
       li.appendChild(left);
@@ -181,17 +240,24 @@ function carregarUsuarioSelecionado() {
   document.getElementById('nome').value = u.nome || '';
   document.getElementById('username').value = u.username || '';
   document.getElementById('ativo').value = String(!!u.ativo);
+  document.getElementById('perfil').value = u.perfil || 'administrador';
+  document.getElementById('validade').value = u.validade || '';
   document.getElementById('senha').value = '';
 
   document.getElementById('hint').textContent =
     `Dica: para inativar um usuário sem apagar, mude para INATIVO.`;
 }
 
-function validarUsuario(nome, username) {
+function validarUsuario(nome, username, validade) {
   if (!nome.trim()) return 'Nome é obrigatório.';
   if (!username.trim()) return 'Username é obrigatório.';
   if (/\s/.test(username)) return 'Username não pode ter espaços.';
   if (!/^[a-zA-Z0-9._-]+$/.test(username)) return 'Username só pode ter letras, números, ponto, hífen e underscore.';
+
+  if (validade && !/^\d{4}-\d{2}-\d{2}$/.test(validade)) return 'Data de validade invalida.';
+  const perfil = document.getElementById('perfil').value;
+  if (!['administrador', 'musico', 'externo'].includes(perfil)) return 'Perfil invalido.';
+  if (perfil === 'externo' && !validade) return 'Usuario externo precisa de data de validade.';
 
   const duplicado = usuarios.some((u, idx) =>
     idx !== usuarioAtualIndex && u.username.toLowerCase() === username.toLowerCase()
@@ -207,14 +273,18 @@ function aplicarEdicao() {
   const nome = document.getElementById('nome').value;
   const username = document.getElementById('username').value;
   const ativo = document.getElementById('ativo').value === 'true';
+  const perfil = document.getElementById('perfil').value;
+  const validade = document.getElementById('validade').value;
   const senha = document.getElementById('senha').value;
 
-  const err = validarUsuario(nome, username);
+  const err = validarUsuario(nome, username, validade);
   if (err) { alert(err); return; }
 
   usuarios[usuarioAtualIndex].nome = nome.trim();
   usuarios[usuarioAtualIndex].username = username.trim();
   usuarios[usuarioAtualIndex].ativo = ativo;
+  usuarios[usuarioAtualIndex].perfil = perfil;
+  usuarios[usuarioAtualIndex].validade = validade;
 
   // senha: manda pro backend pra virar hash (se veio preenchida)
   usuarios[usuarioAtualIndex]._senhaPlain = senha ? senha : null;
@@ -241,6 +311,8 @@ function criarNovoUsuario() {
     nome: nome.trim(),
     username: username.trim(),
     ativo: true,
+    perfil: 'musico',
+    validade: '',
     senhaHash: null,
     _senhaPlain: null
   };
@@ -269,6 +341,8 @@ function deletarUsuario() {
   } else {
     document.getElementById('nome').value = '';
     document.getElementById('username').value = '';
+    document.getElementById('perfil').value = 'musico';
+    document.getElementById('validade').value = '';
     document.getElementById('senha').value = '';
   }
 }

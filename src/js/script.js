@@ -99,7 +99,7 @@ async function checkAndCleanCache() {
     }
 }
 
-function transporCifraHtml(html, semitons) {
+function transporCifraHtmlLegado(html, semitons) {
     const notas = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
     const notasMap = {};
     // Mapear todas as variações possíveis (incluindo equivalentes como Db = C#)
@@ -136,7 +136,7 @@ function transporCifraHtml(html, semitons) {
 
 }
 
-function identificarTom(html) {
+function identificarTomLegado(html) {
     const notasMaiores = ['C', 'G', 'D', 'A', 'E', 'B', 'F#', 'C#', 'F', 'Bb', 'Eb', 'Ab', 'Db', 'Gb'];
     const relativosMenores = {
         'C': 'Am', 'G': 'Em', 'D': 'Bm', 'A': 'F#m', 'E': 'C#m', 'B': 'G#m', 'F#': 'D#m', 'C#': 'A#m',
@@ -182,6 +182,89 @@ function identificarTom(html) {
     } else {
         return `${maisUsada}`;
     }
+}
+
+const __notasTransposicao = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+const __notasMapTransposicao = {
+    C: 0, 'C#': 1, Db: 1,
+    D: 2, 'D#': 3, Eb: 3,
+    E: 4, Fb: 4, 'E#': 5,
+    F: 5, 'F#': 6, Gb: 6,
+    G: 7, 'G#': 8, Ab: 8,
+    A: 9, 'A#': 10, Bb: 10,
+    B: 11, Cb: 11
+};
+
+function normalizarNotaTransposicao(nota, alteracao) {
+    return String(nota || '').toUpperCase() + (alteracao || '');
+}
+
+function transporNotaTransposicao(nota, alteracao, semitons) {
+    const idx = __notasMapTransposicao[normalizarNotaTransposicao(nota, alteracao)];
+    if (idx === undefined) return nota + (alteracao || '');
+    return __notasTransposicao[(idx + semitons + 120) % 12];
+}
+
+function transporTextoAcordes(texto, semitons) {
+    const textoNormalizado = String(texto || '').replace(/&nbsp;|\u00a0/g, ' ');
+    const acordeRegex = /(^|[^A-Za-z0-9#b/])([A-Ga-g])(#|b)?((?:(?:m(?![a-z])|maj|min|dim|aug|sus|add|M)?[0-9]*(?:M)?(?:\([^)]+\))?(?:[+º°])?))(\/([A-Ga-g])(#|b)?)?(?=$|[^A-Za-z0-9#b/])/g;
+
+    return textoNormalizado.replace(acordeRegex, function(match, prefixo, nota, alteracao, sufixo, baixoInteiro, baixoNota, baixoAlteracao) {
+        const novaNota = transporNotaTransposicao(nota, alteracao, semitons);
+        const novoBaixo = baixoInteiro ? '/' + transporNotaTransposicao(baixoNota, baixoAlteracao, semitons) : '';
+        return prefixo + novaNota + (sufixo || '') + novoBaixo;
+    });
+}
+
+function extrairTonicasCifra(html) {
+    const tonicas = [];
+    const cifra = String(html || '');
+    const acordes = Array.from(cifra.matchAll(/<b\b[^>]*>([\s\S]*?)<\/b>/gi)).map(m => m[1]);
+    const acordeRegex = /(^|[^A-Za-z0-9#b/])([A-Ga-g])(#|b)?(?:(?:m(?![a-z])|maj|min|dim|aug|sus|add|M)?[0-9]*(?:M)?(?:\([^)]+\))?(?:[+º°])?)(?:\/[A-Ga-g](?:#|b)?)?(?=$|[^A-Za-z0-9#b/])/g;
+
+    if (acordes.length === 0 && /^[A-Ga-gmM0-9#b\s\u00a0&;(),./+º°\[\]-]+$/.test(cifra) && /[A-Ga-g]/.test(cifra)) {
+        acordes.push(cifra);
+    }
+
+    acordes.forEach(acorde => {
+        const texto = String(acorde || '')
+            .replace(/<[^>]*>/g, ' ')
+            .replace(/&nbsp;|\u00a0/g, ' ');
+
+        let match;
+        while ((match = acordeRegex.exec(texto)) !== null) {
+            const nota = normalizarNotaTransposicao(match[2], match[3]);
+            if (__notasMapTransposicao[nota] !== undefined) {
+                tonicas.push(__notasTransposicao[__notasMapTransposicao[nota]]);
+            }
+        }
+    });
+
+    return tonicas;
+}
+
+function transporCifraHtml(html, semitons) {
+    const cifra = String(html || '');
+    if (!/<b\b/i.test(cifra) && /^[A-Ga-gmM0-9#b\s\u00a0&;(),./+º°\[\]-]+$/.test(cifra) && /[A-Ga-g]/.test(cifra)) {
+        return transporTextoAcordes(cifra, semitons);
+    }
+
+    return cifra.replace(/<b\b([^>]*)>([\s\S]*?)<\/b>/gi, function(match, atributos, conteudo) {
+        return '<b' + atributos + '>' + transporTextoAcordes(conteudo, semitons) + '</b>';
+    });
+}
+
+function identificarTom(html) {
+    const contagem = {};
+    extrairTonicasCifra(html).forEach(tom => {
+        contagem[tom] = (contagem[tom] || 0) + 1;
+    });
+
+    if (Object.keys(contagem).length === 0) {
+        return 'Tom nÃ£o identificado';
+    }
+
+    return Object.entries(contagem).sort((a, b) => b[1] - a[1])[0][0];
 }
 
 const toast = document.getElementById('toast');

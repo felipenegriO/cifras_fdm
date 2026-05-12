@@ -5,6 +5,7 @@
     const modeKey = 'fdmLiveMode_' + salaId;
     const pollMs = 1800;
     const keepAliveMs = 10000;
+    const scrollSyncMs = 700;
 
     let pollingTimer = null;
     let keepAliveTimer = null;
@@ -12,6 +13,13 @@
     let hostBusy = false;
     let lastVersion = null;
     let lastStatusPage = '';
+    let currentHostName = '';
+    let lastLiveOkAt = null;
+    let hostConfirmUntil = 0;
+    let hostConfirmTimer = null;
+    let statusTicker = null;
+    let ignoreFollowerScrollUntil = 0;
+    let disconnectedActive = false;
 
     function getMode() {
         return sessionStorage.getItem(modeKey) || '';
@@ -36,6 +44,45 @@
         if (!el) return;
         el.textContent = text;
         el.dataset.status = type || '';
+        disconnectedActive = type === 'offline' && text.indexOf('ultimo contato') >= 0;
+    }
+
+    function setLiveOk() {
+        lastLiveOkAt = Date.now();
+    }
+
+    function setDisconnectedStatus() {
+        if (!lastLiveOkAt) {
+            setStatus('Live desconectada', 'offline');
+            return;
+        }
+
+        const seconds = Math.max(1, Math.round((Date.now() - lastLiveOkAt) / 1000));
+        setStatus('Live desconectada (ultimo contato ha ' + seconds + 's)', 'offline');
+    }
+
+    function sanitizeText(value) {
+        return String(value || '').replace(/[<>&"']/g, function (char) {
+            return {
+                '<': '&lt;',
+                '>': '&gt;',
+                '&': '&amp;',
+                '"': '&quot;',
+                "'": '&#39;'
+            }[char];
+        });
+    }
+
+    function hostDisplayName(data) {
+        const nome = data && (data.hostNome || data.hostUsername);
+        return String(nome || '').trim();
+    }
+
+    function setCurrentHostName(data) {
+        const nome = hostDisplayName(data);
+        if (nome) {
+            currentHostName = nome;
+        }
     }
 
     function renderButtons() {
@@ -45,9 +92,13 @@
 
         if (hostBtn) {
             hostBtn.classList.toggle('active', mode === 'host');
-            hostBtn.innerHTML = mode === 'host'
-                ? '<i class="fa-solid fa-broadcast-tower"></i> VOCE E O HOST'
-                : '<i class="fa-solid fa-broadcast-tower"></i> VIRAR HOST';
+            if (mode === 'host') {
+                hostBtn.innerHTML = '<i class="fa-solid fa-broadcast-tower"></i> VOCE E O HOST';
+            } else if (Date.now() < hostConfirmUntil) {
+                hostBtn.innerHTML = '<i class="fa-solid fa-check"></i> CONFIRMAR HOST';
+            } else {
+                hostBtn.innerHTML = '<i class="fa-solid fa-broadcast-tower"></i> VIRAR HOST';
+            }
         }
 
         if (followBtn) {
@@ -76,11 +127,18 @@
         }
 
         indicator.className = 'live-mode-indicator live-mode-indicator-' + mode;
-        indicator.title = mode === 'host' ? 'Voce e o host' : 'Seguindo live';
+        const name = sanitizeText(currentHostName);
+        const label = name
+            ? `<span class="live-indicator-label">${name} ${mode === 'host' ? 'esta exibindo' : 'esta exibindo'}</span>`
+            : '';
+
+        indicator.title = mode === 'host'
+            ? (currentHostName ? currentHostName + ' esta exibindo' : 'Voce e o host')
+            : (currentHostName ? currentHostName + ' esta exibindo' : 'Seguindo live');
         indicator.setAttribute('aria-label', indicator.title);
         indicator.innerHTML = mode === 'host'
-            ? '<span class="live-record-dot"></span>'
-            : '<i class="fa-solid fa-play"></i>';
+            ? '<span class="live-record-dot"></span>' + label
+            : '<i class="fa-solid fa-play"></i>' + label;
     }
 
     function currentPageState() {
@@ -89,10 +147,15 @@
 
         if (path === 'music.php') {
             const id = params.get('id') || '';
+            const playlistTom = params.get('playlistTom') || '';
+            const validTom = /^[A-G](?:#|b)?$/.test(playlistTom);
             const validId = /^\d{1,8}$/.test(id);
+            const pagina = validId
+                ? 'music.php?id=' + id + (validTom ? '&playlistTom=' + encodeURIComponent(playlistTom) : '')
+                : '';
             return {
                 cifraAtual: validId ? id : '',
-                paginaAtual: validId ? 'music.php?id=' + id : '',
+                paginaAtual: pagina,
                 podePublicar: validId
             };
         }
@@ -110,6 +173,34 @@
             paginaAtual: '',
             podePublicar: false
         };
+    }
+
+    function getScrollContainer() {
+        return document.getElementById('song-cifra') || document.scrollingElement || document.documentElement;
+    }
+
+    function currentScrollState() {
+        const el = getScrollContainer();
+        const max = Math.max(0, el.scrollHeight - el.clientHeight);
+        const scrollTop = Math.max(0, el.scrollTop || 0);
+        return {
+            scrollTop,
+            scrollPercent: max > 0 ? scrollTop / max : 0,
+            canSync: max > 8
+        };
+    }
+
+    function applyFollowerScroll(status) {
+        if (getMode() !== 'follow' || Date.now() < ignoreFollowerScrollUntil) return;
+        if (!status || !status.canSyncScroll) return;
+        const el = getScrollContainer();
+        const max = Math.max(0, el.scrollHeight - el.clientHeight);
+        const percent = Number(status.scrollPercent || 0);
+        const top = max > 0 ? Math.round(max * Math.max(0, Math.min(1, percent))) : Number(status.scrollTop || 0);
+        if (Math.abs((el.scrollTop || 0) - top) > 4) {
+            ignoreFollowerScrollUntil = Date.now() + 500;
+            el.scrollTop = top;
+        }
     }
 
     function samePage(paginaAtual) {
@@ -158,34 +249,55 @@
 
     async function assumirHost() {
         if (!navigator.onLine) {
-            setStatus('Live desconectada', 'offline');
+            setDisconnectedStatus();
+            return;
+        }
+
+        if (!confirmHostStart()) {
             return;
         }
 
         try {
             const data = await postJson(apiBase + '/host.php', { salaId });
+            setLiveOk();
             localStorage.setItem(hostIdKey, data.hostId);
+            setCurrentHostName(data);
             setMode('host');
             stopPolling();
             startKeepAlive();
             setStatus('Voce e o host', 'host');
             await atualizarHost(false);
         } catch (error) {
-            setStatus('Live desconectada', 'offline');
+            setDisconnectedStatus();
         }
+    }
+
+    function confirmHostStart() {
+        if (getMode() === 'host') return true;
+        if (Date.now() < hostConfirmUntil) return true;
+
+        hostConfirmUntil = Date.now() + 5000;
+        setStatus('Toque novamente para confirmar host', 'waiting');
+        renderButtons();
+        clearTimeout(hostConfirmTimer);
+        hostConfirmTimer = setTimeout(function () {
+            hostConfirmUntil = 0;
+            renderButtons();
+        }, 5000);
+        return false;
     }
 
     async function atualizarHost(keepAlive) {
         if (getMode() !== 'host' || hostBusy) return;
         if (!navigator.onLine) {
-            setStatus('Live desconectada', 'offline');
+            setDisconnectedStatus();
             return;
         }
 
         const hostId = getHostId();
         if (!hostId) {
             setMode('');
-            setStatus('Live desconectada', 'offline');
+            setDisconnectedStatus();
             return;
         }
 
@@ -197,16 +309,27 @@
                 hostId,
                 keepAlive: !!keepAlive || !state.podePublicar
             };
+            const scroll = currentScrollState();
+            if (scroll.canSync) {
+                payload.scrollTop = scroll.scrollTop;
+                payload.scrollPercent = scroll.scrollPercent;
+                payload.canSyncScroll = true;
+            } else {
+                payload.canSyncScroll = false;
+            }
 
             if (state.podePublicar) {
                 payload.cifraAtual = state.cifraAtual;
                 payload.paginaAtual = state.paginaAtual;
             }
 
-            await postJson(apiBase + '/update.php', payload);
+            const data = await postJson(apiBase + '/update.php', payload);
+            setLiveOk();
+            setCurrentHostName(data);
+            renderLiveIndicator();
             setStatus('Voce e o host', 'host');
         } catch (error) {
-            setStatus('Live desconectada', 'offline');
+            setDisconnectedStatus();
         } finally {
             hostBusy = false;
         }
@@ -215,12 +338,20 @@
     function startKeepAlive() {
         stopKeepAlive();
         keepAliveTimer = setInterval(() => atualizarHost(true), keepAliveMs);
+        if (getMode() === 'host') {
+            window.clearInterval(window.__fdmLiveScrollTimer);
+            window.__fdmLiveScrollTimer = setInterval(() => atualizarHost(true), scrollSyncMs);
+        }
     }
 
     function stopKeepAlive() {
         if (keepAliveTimer) {
             clearInterval(keepAliveTimer);
             keepAliveTimer = null;
+        }
+        if (window.__fdmLiveScrollTimer) {
+            clearInterval(window.__fdmLiveScrollTimer);
+            window.__fdmLiveScrollTimer = null;
         }
     }
 
@@ -256,7 +387,7 @@
     async function consultarStatus() {
         if (pollingBusy) return;
         if (!navigator.onLine) {
-            setStatus('Live desconectada', 'offline');
+            setDisconnectedStatus();
             return;
         }
 
@@ -274,9 +405,14 @@
                 throw new Error(status.message || 'Erro na live');
             }
 
+            setLiveOk();
             setLiveShortcut(status);
+            setCurrentHostName(status);
+            renderLiveIndicator();
 
             if (!status.hasHost) {
+                currentHostName = '';
+                renderLiveIndicator();
                 setStatus('Aguardando host', 'waiting');
                 return;
             }
@@ -289,10 +425,12 @@
 
                 if (changed && status.paginaAtual && status.paginaAtual !== 'index.php' && !samePage(status.paginaAtual)) {
                     window.location.href = status.paginaAtual;
+                    return;
                 }
+                applyFollowerScroll(status);
             }
         } catch (error) {
-            setStatus('Live desconectada', 'offline');
+            setDisconnectedStatus();
         } finally {
             pollingBusy = false;
         }
@@ -335,8 +473,14 @@
     }
 
     window.addEventListener('offline', function () {
-        setStatus('Live desconectada', 'offline');
+        setDisconnectedStatus();
     });
+
+    statusTicker = setInterval(function () {
+        if (getMode() && lastLiveOkAt && disconnectedActive) {
+            setDisconnectedStatus();
+        }
+    }, 1000);
 
     window.addEventListener('online', function () {
         if (getMode() === 'host') {

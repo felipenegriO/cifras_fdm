@@ -121,12 +121,18 @@ if (!isset($_SESSION['autenticado']) || $_SESSION['autenticado'] !== true) {
       <span></span>
     </div>
   </div>
+  <?php
+    $perfil = strtolower(trim((string)($_SESSION['usuario']['perfil'] ?? 'administrador')));
+    $isAdmin = $perfil === 'administrador';
+  ?>
   <div class="topnav-right">
     <a href="/index.php">Musicas</a>
+    <?php if ($isAdmin): ?>
     <a href="editorplaylist.php">Playlists</a>
     <a href="editor.php">Editor Musicas</a>
     <a href="roteiro.php">Editor Roteiros</a>
     <a href="/src/backend/users/editoruser.php">Usuários</a>
+    <?php endif; ?>
     <!-- no mobile, aparece -->
     <button class="topnav-btn" type="button" id="menuButtonTop" aria-label="Abrir menu">☰</button>
   </div>

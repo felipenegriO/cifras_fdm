@@ -1,17 +1,17 @@
 <?php
 class EditorController {
     public function showEditor() {
-        require_auth();
+        require_admin();
         render_view('editor/editor');
     }
 
     public function showEditorBeta() {
-        require_auth();
+        require_admin();
         render_view('editor/editorbeta');
     }
 
     public function showPlaylistEditor() {
-        require_auth();
+        require_admin();
         render_view('editor/editorplaylist');
     }
 }

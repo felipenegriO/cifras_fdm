@@ -7,7 +7,7 @@ class PlaylistController {
     }
 
     public function save() {
-        require_auth();
+        require_admin();
         header('Content-Type: application/json');
 
         $entrada = file_get_contents('php://input');
@@ -37,9 +37,11 @@ class PlaylistController {
         }
 
         $conteudoJs = "const playlistsSalvas = " . json_encode($dadosParaSalvar, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) . ";";
+        fdm_backup_file($this->outputPath);
         $sucessoJs = file_put_contents($this->outputPath, $conteudoJs);
 
         if ($sucessoJs !== false) {
+            fdm_bump_cache_version();
             echo json_encode(["sucesso" => true, "mensagem" => "Playlists salvas com sucesso!"]);
             return;
         }

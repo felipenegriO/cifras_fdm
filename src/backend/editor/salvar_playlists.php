@@ -1,9 +1,15 @@
 <?php
 session_start();
+require_once __DIR__ . '/../backup_helpers.php';
 header("Cache-Control: no-store, no-cache, must-revalidate, max-age=0");
 header("Pragma: no-cache");
 if (!isset($_SESSION['autenticado']) || $_SESSION['autenticado'] !== true) {
     header('Location: login.php');
+    exit;
+}
+if (strtolower((string)($_SESSION['usuario']['perfil'] ?? 'administrador')) !== 'administrador') {
+    http_response_code(403);
+    echo json_encode(["sucesso" => false, "mensagem" => "Acesso restrito ao administrador."]);
     exit;
 }
 ?>
@@ -47,9 +53,11 @@ $arquivoJs = __DIR__ . '/../../js/playlists_salvas.js';
 $conteudoJs = "const playlistsSalvas = " . json_encode($dadosParaSalvar, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) . ";";
 
 // Salva o arquivo JS
+fdm_backup_file($arquivoJs);
 $sucessoJs = file_put_contents($arquivoJs, $conteudoJs);
 
 if ($sucessoJs !== false) {
+    fdm_bump_cache_version();
     echo json_encode(["sucesso" => true, "mensagem" => "Playlists salvas com sucesso!"]);
 } else {
     http_response_code(500);

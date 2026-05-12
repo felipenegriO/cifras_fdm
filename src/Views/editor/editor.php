@@ -117,10 +117,10 @@
   tinymce.init({
     selector: '#cifraInput',
     plugins: 'code',
-    toolbar: 'undo redo | bold italic | code | refraoBtn prerefraoBtn ponteBtn bBtn divBtn',
+    toolbar: 'undo redo | bold italic | code | versoBtn preRefraoBtn refraoBtn ponteBtn introBtn limparCifraBtn',
     valid_elements: '*[*]',
-    custom_elements: 'refrao,prerefrao,ponte,b,div',
-    extended_valid_elements: 'refrao[*],prerefrao[*],ponte[*],b[*],div[*]',
+    custom_elements: 'refrao,prerefrao,ponte,div,b',
+    extended_valid_elements: 'refrao[*],prerefrao[*],ponte[*],div[*],b[*]',
     content_style: `
       b { color: #f70 !important; }
       refrao { color: green !important; font-weight: bold !important; display: block; }
@@ -142,26 +142,62 @@
     inline: false,
     content_css: false,
     setup: (editor) => {
-      const createTagButton = (tagName) => {
-        editor.ui.registry.addButton(tagName + 'Btn', {
-          text: tagName,
-          tooltip: `Envolver com <${tagName}>`,
+      const cleanImportedHtml = (rawHtml) => {
+        const root = document.createElement('div');
+        root.innerHTML = String(rawHtml || '');
+        root.querySelectorAll('section.player, .cifra-column--right, script, style, iframe').forEach((el) => el.remove());
+        const pre = root.querySelector('pre');
+        if (pre) root.innerHTML = pre.innerHTML;
+
+        root.querySelectorAll('div,p,span').forEach((el) => {
+          const html = el.innerHTML;
+          el.insertAdjacentHTML('beforebegin', html + '<br/>');
+          el.remove();
+        });
+
+        let cleaned = root.innerHTML;
+        cleaned = cleaned.replace(/\u00a0/g, '&nbsp;');
+        cleaned = cleaned.replace(/<br\s*\/?>/gi, '\n');
+        cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
+        cleaned = cleaned.replace(/\n/g, '<br/>');
+        cleaned = cleaned.replace(/<(?!\/?(?:b|br|refrao|prerefrao|ponte|div)\b)[^>]+>/gi, '');
+        cleaned = cleaned.replace(/class="js-modal-trigger"/g, '');
+        return cleaned.trim();
+      };
+
+      const applySection = (tagName, label) => {
+        const selectedContent = editor.selection.getContent({ format: 'html' });
+        if (selectedContent) {
+          const normalized = selectedContent.replace(/<br\s*\/?>/gi, '\n').replace(/\n{3,}/g, '\n\n').replace(/\n/g, '<br/>');
+          editor.selection.setContent(`<${tagName}>${normalized}</${tagName}>`);
+        } else {
+          editor.insertContent(`<${tagName}>[${label}]<br/></${tagName}><br/>`);
+        }
+      };
+
+      const createSectionButton = (btnName, label, tagName) => {
+        editor.ui.registry.addButton(btnName, {
+          text: label,
+          tooltip: `Marcar como ${label}`,
           onAction: () => {
-            const selectedContent = editor.selection.getContent({ format: 'html' });
-            if (selectedContent) {
-              editor.selection.setContent(`<${tagName}>${selectedContent}</${tagName}>`);
-            } else {
-              editor.insertContent(`<${tagName}><br/></${tagName}>`);
-            }
+            applySection(tagName, label);
           }
         });
       };
 
-      createTagButton('refrao');
-      createTagButton('prerefrao');
-      createTagButton('ponte');
-      createTagButton('b');
-      createTagButton('div');
+      createSectionButton('versoBtn', 'Verso', 'div');
+      createSectionButton('preRefraoBtn', 'Pre-refrão', 'prerefrao');
+      createSectionButton('refraoBtn', 'Refrão', 'refrao');
+      createSectionButton('ponteBtn', 'Ponte', 'ponte');
+      createSectionButton('introBtn', 'Intro', 'div');
+      editor.ui.registry.addButton('limparCifraBtn', {
+        text: 'limpar colagem',
+        tooltip: 'Limpar HTML colado (Cifra Club)',
+        onAction: () => {
+          editor.setContent(cleanImportedHtml(editor.getContent()));
+          atualizarPreview();
+        }
+      });
 
       editor.on('keydown', (e) => {
         if (e.key === 'Enter') {
@@ -177,6 +213,12 @@
       editor.on('BeforeSetContent', (e) => {
         e.content = e.content.replace(/  /g, '&nbsp; ');
         e.content = e.content.replace(/<br\s*?>/g, '<br/>');
+      });
+
+      editor.on('PastePreProcess', (e) => {
+        if (typeof e.content === 'string' && /cifra-column|cifra_cnt|player--music|js-modal-trigger|<pre/i.test(e.content)) {
+          e.content = cleanImportedHtml(e.content);
+        }
       });
     }
   });
@@ -225,6 +267,30 @@
       document.getElementById('livePreview').innerHTML = raw;
     }
 
+    function normalizarCifraParaSalvar(cifra) {
+      const notas = /^(?:[A-G](?:#|b)?(?:(?:m(?![a-z])|maj|min|dim|aug|sus|add|M)?[0-9]*(?:M)?(?:\([^)]+\))?(?:[+º°])?)(?:\/[A-G](?:#|b)?)?)$/i;
+      const container = document.createElement('div');
+      container.innerHTML = cifra;
+
+      container.querySelectorAll('b').forEach(b => {
+        const texto = (b.textContent || '').replace(/\u00a0/g, ' ').trim();
+        if (!texto) {
+          b.remove();
+          return;
+        }
+
+        const tokens = texto.split(/\s+/).filter(Boolean);
+        const soAcordes = tokens.length > 0 && tokens.every(token => notas.test(token.replace(/[.,;:!?]/g, '')));
+        if (soAcordes) {
+          b.textContent = tokens.join(' ');
+          b.removeAttribute('style');
+          b.removeAttribute('class');
+        }
+      });
+
+      return container.innerHTML;
+    }
+
     function salvar() {
       const titulo = document.getElementById('titulo').value;
       let cifra = tinymce.get('cifraInput').getContent();
@@ -256,7 +322,7 @@
         }
       });
       
-      cifra = tempDiv.innerHTML;
+      cifra = normalizarCifraParaSalvar(tempDiv.innerHTML);
       
       // 3. Limpeza adicional de atributos desnecessários
       cifra = cifra.replace(/class="js-modal-trigger"/g, "");

@@ -35,34 +35,53 @@ function isPlaylistVisibleMenu(playlist) {
   return date.getTime() >= Date.now();
 }
 
+function getPlaylistItemId(item) {
+  return typeof item === 'object' && item !== null ? item.id : item;
+}
+
+function getPlaylistItemTom(item) {
+  return typeof item === 'object' && item !== null ? (item.tom || '') : '';
+}
+
 function addListItem(content, idLista, musicasArray) {
   var list = document.getElementById(idLista);
   var newItem = document.createElement('li');
-  newItem.className = "liPlaylist";
+  newItem.className = 'liPlaylist';
   var newItemA = document.createElement('a');
   newItemA.textContent = content;
   newItem.appendChild(newItemA);
 
   var ul = document.createElement('ul');
-  ul.className ="sub-list";
-  ul.style= "overflow: auto;    height: 100%;    border: none;    height: 50vh;";
-  
-  musicasArray.forEach(element => {
+  ul.className = 'sub-list';
+  ul.style = 'overflow: auto; height: 100%; border: none; height: 50vh;';
+
+  musicasArray.forEach(item => {
+    var element = getPlaylistItemId(item);
+    var tom = getPlaylistItemTom(item);
     var musica = document.createElement('li');
     var musicaA = document.createElement('a');
-    musicaA.className = "liPlaylist-musica";
+    musicaA.className = 'liPlaylist-musica';
 
-    musicaA.href = "music.php?id="+element;
+    var params = new URLSearchParams();
+    params.set('id', element);
+    if (tom) {
+      params.set('playlistTom', tom);
+    }
+    musicaA.href = 'music.php?' + params.toString();
+
     const filteredSongs = songs.filter(song => song.id == element);
-    musicaA.textContent = filteredSongs[0]?.nome || "Música " + element;
+    musicaA.textContent = filteredSongs[0]?.nome || 'Musica ' + element;
+    if (tom) {
+      musicaA.textContent += ' [' + tom + ']';
+    }
+
     musica.appendChild(musicaA);
     ul.appendChild(musica);
   });
-  
+
   newItem.appendChild(ul);
   list.appendChild(newItem);
 }
-
 
 function toggleSubList(event) {
   var subList = $(event.target).siblings('.sub-list');
@@ -92,7 +111,7 @@ function renderPlaylistsMenu() {
     if (playlistsVisiveis.length > 0) {
       addSectionTitle('Playlists', 'lista-playlists');
       playlistsVisiveis.forEach(function(playlist) {
-        addListItem(playlist.nome, "lista-playlists", playlist.itens);
+        addListItem(playlist.nome, 'lista-playlists', playlist.itens);
       });
 
       document.querySelectorAll('.liPlaylist').forEach(function(item) {

@@ -110,12 +110,15 @@
       <span></span>
     </div>
   </div>
+  <?php $isAdmin = function_exists('current_user_is_admin') ? current_user_is_admin() : true; ?>
   <div class="topnav-right">
     <a href="/index.php">Musicas</a>
+    <?php if ($isAdmin): ?>
     <a href="/src/backend/editor/editorplaylist.php">Playlists</a>
     <a href="/src/backend/editor/editor.php">Editor Musicas</a>
     <a href="/src/backend/editor/roteiro.php">Editor Roteiros</a>
     <a href="/src/backend/users/editoruser.php">Usuários</a>
+    <?php endif; ?>
     <button class="topnav-btn" type="button" id="menuButtonTop" aria-label="Abrir menu">☰</button>
   </div>
 </nav>

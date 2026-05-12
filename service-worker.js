@@ -1,4 +1,4 @@
-const CACHE_NAME = 'cacheFDM22-1.4.3';
+const CACHE_NAME = 'cacheFDM22-1.4.5';
 const STATIC_ASSETS = [
   '/',
   '/index.php',
@@ -6,6 +6,7 @@ const STATIC_ASSETS = [
   '/roteiro.php',
   '/src/js/script.js',
   '/src/js/live.js',
+  '/src/js/offline-tools.js',
   '/src/js/musicas.js',
   '/src/js/playlists.js',
   '/src/js/playlists_salvas.js',
@@ -64,7 +65,7 @@ self.addEventListener('fetch', event => {
   const isMusicPage = path === '/music.php';
   const isIndexPage = path === '/' || path.endsWith('/index.php');
   const isRoteiroPage = path === '/roteiro.php';
-  const isDataFile = path === '/src/js/playlists_salvas.js' || path === '/src/js/roteiros_salvos.js';
+  const isDataFile = path === '/src/js/musicas.js' || path === '/src/js/playlists_salvas.js' || path === '/src/js/roteiros_salvos.js';
   const coreData = ['/src/js/musicas.js', '/src/js/playlists.js', '/src/js/playlists_salvas.js', '/src/js/roteiros_salvos.js'];
   const isCoreData = coreData.includes(path);
   const assetExts = ['.js', '.css', '.png', '.jpg', '.jpeg', '.webp', '.svg', '.ico', '.woff', '.woff2'];
@@ -72,11 +73,16 @@ self.addEventListener('fetch', event => {
 
   if (isMusicPage && url.searchParams.has('id')) {
     event.respondWith(
-      caches.match('/music.php', { ignoreSearch: true }).then(response => {
-        return response || fetch('/music.php').then(networkResponse => {
-          return caches.open(CACHE_NAME).then(cache => {
-            cache.put('/music.php', networkResponse.clone());
-            return networkResponse;
+      fetch(event.request).then(networkResponse => {
+        return caches.open(CACHE_NAME).then(cache => {
+          cache.put('/music.php', networkResponse.clone());
+          return networkResponse;
+        });
+      }).catch(() => {
+        return caches.match(event.request).then(cachedById => {
+          if (cachedById) return cachedById;
+          return caches.match('/music.php', { ignoreSearch: true }).then(basePage => {
+            return basePage || caches.match('/offline.php');
           });
         });
       })

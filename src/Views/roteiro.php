@@ -77,6 +77,7 @@
   <script src="<?= asset_url('/src/js/playlists_salvas.js') ?>" defer></script>
   <script src="<?= asset_url('/src/js/roteiros_salvos.js') ?>" defer></script>
   <script src="<?= asset_url('/src/js/playlists.js') ?>" defer></script>
+  <script src="<?= asset_url('/src/js/offline-tools.js') ?>"></script>
   <script src="<?= asset_url('/src/js/roteiros.js') ?>" defer></script>
 
   <script>

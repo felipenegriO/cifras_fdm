@@ -7,12 +7,12 @@ class UsersController {
     }
 
     public function showEditor() {
-        require_auth();
+        require_admin();
         render_view('users/editoruser');
     }
 
     public function handleSave() {
-        require_auth();
+        require_admin();
         header('Content-Type: application/json; charset=utf-8');
 
         if ($_SERVER['REQUEST_METHOD'] === 'GET') {
@@ -45,6 +45,8 @@ class UsersController {
             $nome = trim((string) ($u['nome'] ?? ''));
             $username = trim((string) ($u['username'] ?? ''));
             $ativo = (bool) ($u['ativo'] ?? false);
+            $validade = trim((string) ($u['validade'] ?? ''));
+            $perfil = strtolower(trim((string) ($u['perfil'] ?? 'administrador')));
 
             if (!$id) $id = bin2hex(random_bytes(16));
 
@@ -55,6 +57,21 @@ class UsersController {
 
             if (preg_match('/\s/', $username) || !preg_match('/^[a-zA-Z0-9._-]+$/', $username)) {
                 echo json_encode(['sucesso' => false, 'mensagem' => "Username inválido: {$username}"]);
+                return;
+            }
+
+            if (!in_array($perfil, ['administrador', 'musico', 'externo'], true)) {
+                echo json_encode(['sucesso' => false, 'mensagem' => "Perfil invalido para {$username}."]);
+                return;
+            }
+
+            if ($perfil === 'externo' && $validade === '') {
+                echo json_encode(['sucesso' => false, 'mensagem' => "Usuario externo precisa de data de validade: {$username}."]);
+                return;
+            }
+
+            if ($validade !== '' && !$this->isValidDate($validade)) {
+                echo json_encode(['sucesso' => false, 'mensagem' => "Data de validade invalida para {$username}."]);
                 return;
             }
 
@@ -69,6 +86,8 @@ class UsersController {
                 'nome' => $nome,
                 'username' => $username,
                 'ativo' => $ativo,
+                'validade' => $validade,
+                'perfil' => $perfil,
                 'senhaHash' => $senhaHash
             ];
         }
@@ -89,12 +108,23 @@ class UsersController {
             return;
         }
 
+        fdm_backup_file($this->usersFile);
         $ok = file_put_contents($this->usersFile, $json, LOCK_EX);
         if ($ok === false) {
             echo json_encode(['sucesso' => false, 'mensagem' => 'Falha ao salvar arquivo. Verifique permissões.']);
             return;
         }
 
+        fdm_bump_cache_version();
         echo json_encode(['sucesso' => true, 'mensagem' => 'Usuários salvos com sucesso!']);
+    }
+
+    private function isValidDate($value) {
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $value)) {
+            return false;
+        }
+
+        [$year, $month, $day] = array_map('intval', explode('-', $value));
+        return checkdate($month, $day, $year);
     }
 }

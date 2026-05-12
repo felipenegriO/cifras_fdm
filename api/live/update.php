@@ -26,7 +26,10 @@ $result = $service->atualizar(
     $input['hostId'] ?? '',
     array_key_exists('cifraAtual', $input) ? $input['cifraAtual'] : null,
     array_key_exists('paginaAtual', $input) ? $input['paginaAtual'] : null,
-    !empty($input['keepAlive'])
+    !empty($input['keepAlive']),
+    array_key_exists('scrollTop', $input) ? $input['scrollTop'] : null,
+    array_key_exists('scrollPercent', $input) ? $input['scrollPercent'] : null,
+    array_key_exists('canSyncScroll', $input) ? $input['canSyncScroll'] : null
 );
 
 echo json_encode($result);

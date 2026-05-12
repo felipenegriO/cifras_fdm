@@ -23,6 +23,7 @@ class LiveStateService {
             $state['hostId'] = $hostId;
             $state['hostUserId'] = (string)($usuario['id'] ?? '');
             $state['hostUsername'] = (string)($usuario['username'] ?? '');
+            $state['hostNome'] = (string)($usuario['nome'] ?? '');
             $state['updatedAt'] = $now;
             $state['version'] = ((int)($state['version'] ?? 0)) + 1;
 
@@ -33,13 +34,15 @@ class LiveStateService {
                 'result' => [
                     'success' => true,
                     'hostId' => $hostId,
+                    'hostNome' => $state['hostNome'],
+                    'hostUsername' => $state['hostUsername'],
                     'message' => 'Voce agora e o host'
                 ]
             ];
         });
     }
 
-    public function atualizar($salaId, $hostId, $cifraAtual, $paginaAtual, $keepAlive = false) {
+    public function atualizar($salaId, $hostId, $cifraAtual, $paginaAtual, $keepAlive = false, $scrollTop = null, $scrollPercent = null, $canSyncScroll = null) {
         try {
             $salaId = $this->validarSalaId($salaId);
             $hostId = $this->validarHostId($hostId);
@@ -63,7 +66,10 @@ class LiveStateService {
 
         $now = gmdate('c');
 
-        return $this->withLockedState(LOCK_EX, function ($data) use ($salaId, $hostId, $cifraAtual, $paginaAtual, $keepAlive, $somenteKeepAlive, $now) {
+        $scrollTop = $scrollTop === null ? null : max(0, (int)$scrollTop);
+        $scrollPercent = $scrollPercent === null ? null : max(0, min(1, (float)$scrollPercent));
+
+        return $this->withLockedState(LOCK_EX, function ($data) use ($salaId, $hostId, $cifraAtual, $paginaAtual, $keepAlive, $somenteKeepAlive, $now, $scrollTop, $scrollPercent, $canSyncScroll) {
             $state = $this->getSalaState($data, $salaId);
 
             if (($state['hostId'] ?? '') === '' || !hash_equals((string)$state['hostId'], $hostId)) {
@@ -88,6 +94,15 @@ class LiveStateService {
                 $state['version'] = ((int)($state['version'] ?? 0)) + 1;
             }
 
+            if ($canSyncScroll !== null) {
+                $state['canSyncScroll'] = (bool)$canSyncScroll;
+            }
+
+            if ($scrollTop !== null || $scrollPercent !== null) {
+                $state['scrollTop'] = $scrollTop ?? (int)($state['scrollTop'] ?? 0);
+                $state['scrollPercent'] = $scrollPercent ?? (float)($state['scrollPercent'] ?? 0);
+            }
+
             if ($changed || $keepAlive) {
                 $state['updatedAt'] = $now;
             }
@@ -102,7 +117,12 @@ class LiveStateService {
                     'cifraAtual' => $state['cifraAtual'],
                     'paginaAtual' => $state['paginaAtual'],
                     'updatedAt' => $state['updatedAt'],
-                    'version' => (int)$state['version']
+                    'version' => (int)$state['version'],
+                    'scrollTop' => (int)($state['scrollTop'] ?? 0),
+                    'scrollPercent' => (float)($state['scrollPercent'] ?? 0),
+                    'canSyncScroll' => !empty($state['canSyncScroll']),
+                    'hostNome' => (string)($state['hostNome'] ?? ''),
+                    'hostUsername' => (string)($state['hostUsername'] ?? '')
                 ]
             ];
         });
@@ -129,7 +149,12 @@ class LiveStateService {
                     'paginaAtual' => (string)($state['paginaAtual'] ?? ''),
                     'updatedAt' => (string)($state['updatedAt'] ?? ''),
                     'version' => (int)($state['version'] ?? 0),
-                    'hasHost' => $hasHost
+                    'hasHost' => $hasHost,
+                    'scrollTop' => (int)($state['scrollTop'] ?? 0),
+                    'scrollPercent' => (float)($state['scrollPercent'] ?? 0),
+                    'canSyncScroll' => !empty($state['canSyncScroll']),
+                    'hostNome' => $hasHost ? (string)($state['hostNome'] ?? '') : '',
+                    'hostUsername' => $hasHost ? (string)($state['hostUsername'] ?? '') : ''
                 ]
             ];
         });
@@ -213,8 +238,12 @@ class LiveStateService {
             'hostId' => '',
             'hostUserId' => '',
             'hostUsername' => '',
+            'hostNome' => '',
             'cifraAtual' => '',
             'paginaAtual' => 'index.php',
+            'scrollTop' => 0,
+            'scrollPercent' => 0,
+            'canSyncScroll' => false,
             'updatedAt' => '',
             'version' => 0
         ], $state);
@@ -287,11 +316,15 @@ class LiveStateService {
             return $value;
         }
 
-        if (preg_match('/^music\.php\?id=(\d{1,8})$/', $value, $matches)) {
+        if (preg_match('/^music\.php\?id=(\d{1,8})(?:&playlistTom=([A-G](?:%23|#|b)?))?$/', $value, $matches)) {
             if ($cifraAtual !== '' && $cifraAtual !== $matches[1]) {
                 throw new InvalidArgumentException('Pagina e cifra nao conferem');
             }
-            return $value;
+            $pagina = 'music.php?id=' . $matches[1];
+            if (!empty($matches[2])) {
+                $pagina .= '&playlistTom=' . str_replace('#', '%23', $matches[2]);
+            }
+            return $pagina;
         }
 
         if (preg_match('/^roteiro\.php\?id=\d{1,8}$/', $value)) {
