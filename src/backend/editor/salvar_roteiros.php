@@ -1,18 +1,11 @@
 <?php
-session_start();
+require_once __DIR__ . '/../bootstrap.php';
 require_once __DIR__ . '/../backup_helpers.php';
 header("Cache-Control: no-store, no-cache, must-revalidate, max-age=0");
 header("Pragma: no-cache");
-if (!isset($_SESSION['autenticado']) || $_SESSION['autenticado'] !== true) {
-    header('Location: login.php');
-    exit;
-}
-if (strtolower((string)($_SESSION['usuario']['perfil'] ?? 'administrador')) !== 'administrador') {
-    http_response_code(403);
-    echo json_encode(["ok" => false, "error" => "Acesso restrito ao administrador."]);
-    exit;
-}
 header('Content-Type: application/json');
+require_admin_json();
+require_csrf();
 
 $entrada = file_get_contents('php://input');
 $data = json_decode($entrada, true);

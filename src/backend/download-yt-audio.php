@@ -8,7 +8,11 @@
  * Hostinger-Compatible: Uses public APIs instead of yt-dlp
  */
 
+require_once __DIR__ . '/bootstrap.php';
 header("Content-Type: application/json; charset=utf-8");
+
+require_auth_json();
+require_csrf();
 
 function sendJsonError($message, $code = 400) {
     http_response_code($code);

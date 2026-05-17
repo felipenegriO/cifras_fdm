@@ -4,6 +4,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <?php csrf_meta(); ?>
+    <script src="<?= asset_url('/src/js/fdm-csrf.js') ?>"></script>
     <title>Filhos de Maria</title>
     <link href="/src/css/bootstrap.min.css" rel="stylesheet">
     <link href="/src/css/style2.css" rel="stylesheet">

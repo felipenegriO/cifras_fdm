@@ -17,6 +17,11 @@ uploads/tmp/
 .vscode/
 .idea/
 
+# Composer / PHPUnit
+/vendor/
+.phpunit.cache/
+.phpunit.result.cache
+
 # OS generated files
 .DS_Store
 Thumbs.db

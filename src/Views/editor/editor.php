@@ -2,6 +2,8 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
+  <?php csrf_meta(); ?>
+  <script src="<?= asset_url('/src/js/fdm-csrf.js') ?>"></script>
   <title>Editor de Cifras</title>
   <link href="/src/css/style2.css" rel="stylesheet">
   <style>
@@ -88,6 +90,7 @@
       <div id="editor">
         <button onclick="novaMusica()">Limpar</button>
         <button onclick="salvar()">💾 Salvar</button>
+        <button onclick="excluirMusica()" style="background-color: #a32121;">Excluir música</button>
         <div style="display:ruby">
           <input id="titulo" placeholder="Nome da música" style="width: 70%;"><br><br>
           <input id="bit" type="number" placeholder="bit da musica" style="width: 20%;"><br><br>
@@ -144,12 +147,47 @@
     inline: false,
     content_css: false,
     setup: (editor) => {
+      const plainTextToHtml = (text) => {
+        const escaped = String(text || '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;');
+
+        return escaped
+          .replace(/\r\n/g, '\n')
+          .replace(/\r/g, '\n')
+          .replace(/ {2}/g, ' &nbsp;')
+          .replace(/\t/g, '&nbsp;&nbsp;&nbsp;&nbsp;')
+          .replace(/\n/g, '<br/>')
+          .trim();
+      };
+
       const cleanImportedHtml = (rawHtml) => {
+        const preserveSpacesInTextNodes = (html) => {
+          const wrap = document.createElement('div');
+          wrap.innerHTML = String(html || '');
+          const walker = document.createTreeWalker(wrap, NodeFilter.SHOW_TEXT);
+          const nodes = [];
+          while (walker.nextNode()) nodes.push(walker.currentNode);
+          nodes.forEach((node) => {
+            if (!node.nodeValue) return;
+            node.nodeValue = node.nodeValue.replace(/ {2,}/g, (m) => '\u00a0'.repeat(m.length - 1) + ' ');
+          });
+          return wrap.innerHTML;
+        };
+
         const root = document.createElement('div');
         root.innerHTML = String(rawHtml || '');
         root.querySelectorAll('section.player, .cifra-column--right, script, style, iframe').forEach((el) => el.remove());
         const pre = root.querySelector('pre');
-        if (pre) root.innerHTML = pre.innerHTML;
+        if (pre) {
+          let preHtml = pre.innerHTML || '';
+          preHtml = preHtml.replace(/class="js-modal-trigger"/g, '');
+          preHtml = preHtml.replace(/\r\n/g, '\n');
+          preHtml = preHtml.replace(/\r/g, '\n');
+          preHtml = preHtml.replace(/\n/g, '<br/>');
+          return preserveSpacesInTextNodes(preHtml).trim();
+        }
 
         root.querySelectorAll('div,p,span').forEach((el) => {
           const html = el.innerHTML;
@@ -159,12 +197,10 @@
 
         let cleaned = root.innerHTML;
         cleaned = cleaned.replace(/\u00a0/g, '&nbsp;');
-        cleaned = cleaned.replace(/<br\s*\/?>/gi, '\n');
-        cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
-        cleaned = cleaned.replace(/\n/g, '<br/>');
+        cleaned = cleaned.replace(/<br\s*\/?>/gi, '<br/>');
         cleaned = cleaned.replace(/<(?!\/?(?:b|br|refrao|prerefrao|ponte|div)\b)[^>]+>/gi, '');
         cleaned = cleaned.replace(/class="js-modal-trigger"/g, '');
-        return cleaned.trim();
+        return preserveSpacesInTextNodes(cleaned).trim();
       };
 
       const applySection = (tagName, label) => {
@@ -232,6 +268,11 @@
       });
 
       editor.on('PastePreProcess', (e) => {
+        if (typeof e.content === 'string' && e.content.indexOf('<') === -1) {
+          e.content = plainTextToHtml(e.content);
+          return;
+        }
+
         if (typeof e.content === 'string' && /cifra-column|cifra_cnt|player--music|js-modal-trigger|<pre/i.test(e.content)) {
           e.content = cleanImportedHtml(e.content);
         }
@@ -375,10 +416,20 @@
       .then(res => res.json())
       .then(data => {
         if (data.ok) {
+          if (data.id) {
+            if (!selecionada) selecionada = {};
+            selecionada.id = data.id;
+          }
           document.getElementById('status').innerText = 'Salvo com sucesso!';
+          if (!selecionada.nome) selecionada.nome = titulo;
           selecionada.nome = titulo;
           selecionada.cifra = cifra;
-          window.location.reload(); // atualizar lista
+
+          if (!data.created) {
+            return;
+          }
+
+          window.location.reload(); // atualizar lista na primeira criação
         } else {
           document.getElementById('status').innerText = 'Erro ao salvar!';
         }
@@ -393,6 +444,38 @@
       document.getElementById('classificacao').value = '',
       tinymce.get('cifraInput').setContent('');
       atualizarPreview();
+    }
+
+    function excluirMusica() {
+      if (!selecionada || !selecionada.id) {
+        document.getElementById('status').innerText = 'Selecione uma música para excluir.';
+        return;
+      }
+
+      const nome = selecionada.nome || 'esta música';
+      const confirmou = confirm('Tem certeza que deseja excluir "' + nome + '"? Esta ação não pode ser desfeita.');
+      if (!confirmou) return;
+
+      fetch('api.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'delete',
+          id: selecionada.id
+        })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.ok) {
+          document.getElementById('status').innerText = 'Música excluída com sucesso!';
+          window.location.reload();
+        } else {
+          document.getElementById('status').innerText = data.error || 'Erro ao excluir música.';
+        }
+      })
+      .catch(() => {
+        document.getElementById('status').innerText = 'Falha de rede ao excluir música.';
+      });
     }
 
     carregarMusicas();

@@ -57,10 +57,11 @@ self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
 
   const path = url.pathname;
-  const ignoredPaths = ['livePlayerLer.php', 'editor.php', 'login.php', 'livePlayerSalvar.php', 'agenda'];
+  const ignoredPaths = ['livePlayerLer.php', 'editor.php', 'login.php', 'livePlayerSalvar.php', 'agenda', 'editoruser.php', 'salvar_user.php'];
   if (ignoredPaths.some(p => path.endsWith(p))) return;
   if (path.startsWith('/api/live/')) return;
   if (path.startsWith('/src/backend/editor/')) return;
+  if (path.startsWith('/src/backend/users/')) return;
 
   const isMusicPage = path === '/music.php';
   const isIndexPage = path === '/' || path.endsWith('/index.php');

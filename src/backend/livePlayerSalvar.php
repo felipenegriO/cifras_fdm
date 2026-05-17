@@ -7,11 +7,8 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
-if (!isset($_SESSION['autenticado']) || $_SESSION['autenticado'] !== true) {
-    http_response_code(401);
-    echo 'Nao autenticado.';
-    exit;
-}
+require_auth_json();
+require_csrf();
 
 $numero = $_POST['numero'] ?? '';
 $hostId = $_POST['hostId'] ?? '';

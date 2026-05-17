@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -rn 'echo \\\\$\\\\|<?= \\\\$\\\\|<?php echo \\\\$' src/Views src/Controllers src/Views/partials login.php index.php music.php tom.php roteiro.php)",
+      "Bash(grep -v 'echo \\\\$novoConteudo\\\\|echo \\\\$json')",
+      "Bash(grep -rEn '\\(echo|<\\\\?=\\)\\\\s+\\\\$[a-zA-Z_]' src/Views src/Controllers src/Views/partials login.php)"
+    ]
+  }
+}

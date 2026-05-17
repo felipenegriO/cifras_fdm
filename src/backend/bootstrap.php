@@ -22,6 +22,59 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
     session_start();
 }
 
+function e($value) {
+    return htmlspecialchars((string)$value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+}
+
+function csrf_token() {
+    if (empty($_SESSION['csrf_token']) || !is_string($_SESSION['csrf_token'])) {
+        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+    }
+    return $_SESSION['csrf_token'];
+}
+
+function csrf_meta() {
+    echo '<meta name="csrf-token" content="' . htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8') . '">';
+}
+
+function require_auth_json() {
+    if (!isset($_SESSION['autenticado']) || $_SESSION['autenticado'] !== true) {
+        http_response_code(401);
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode(['ok' => false, 'sucesso' => false, 'error' => 'Nao autenticado.', 'mensagem' => 'Nao autenticado.']);
+        exit;
+    }
+    if (fdm_session_user_expired()) {
+        $_SESSION = [];
+        session_destroy();
+        http_response_code(401);
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode(['ok' => false, 'sucesso' => false, 'error' => 'Sessao expirada.', 'mensagem' => 'Sessao expirada.']);
+        exit;
+    }
+}
+
+function require_admin_json() {
+    require_auth_json();
+    if (!current_user_is_admin()) {
+        http_response_code(403);
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode(['ok' => false, 'sucesso' => false, 'error' => 'Acesso restrito ao administrador.', 'mensagem' => 'Acesso restrito ao administrador.']);
+        exit;
+    }
+}
+
+function require_csrf() {
+    $expected = $_SESSION['csrf_token'] ?? '';
+    $received = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? ($_POST['csrf_token'] ?? '');
+    if (!is_string($expected) || $expected === '' || !is_string($received) || !hash_equals($expected, $received)) {
+        http_response_code(403);
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode(['ok' => false, 'sucesso' => false, 'error' => 'Token CSRF inválido.', 'mensagem' => 'Token CSRF inválido.']);
+        exit;
+    }
+}
+
 function send_no_cache_headers() {
     header("Cache-Control: no-store, no-cache, must-revalidate, max-age=0");
     header("Pragma: no-cache");

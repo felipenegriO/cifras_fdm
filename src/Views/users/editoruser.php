@@ -2,6 +2,8 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
+  <?php csrf_meta(); ?>
+  <script src="<?= asset_url('/src/js/fdm-csrf.js') ?>"></script>
   <title>Cadastro de Usuários</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>

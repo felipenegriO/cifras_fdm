@@ -1,11 +1,13 @@
 <?php
+require_once __DIR__ . '/../bootstrap.php';
 require_once __DIR__ . '/../backup_helpers.php';
 header('Content-Type: application/json; charset=utf-8');
-session_start();
-if (!isset($_SESSION['autenticado']) || $_SESSION['autenticado'] !== true || strtolower((string)($_SESSION['usuario']['perfil'] ?? 'administrador')) !== 'administrador') {
-  http_response_code(403);
-  echo json_encode(['sucesso' => false, 'mensagem' => 'Acesso restrito ao administrador.']);
-  exit;
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
+header('Expires: 0');
+require_admin_json();
+if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
+  require_csrf();
 }
 
 $arquivo = 'usuarios.json';

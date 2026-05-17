@@ -1,12 +1,9 @@
 <?php
-header('Content-Type: application/json');
+require_once __DIR__ . '/../bootstrap.php';
 require_once __DIR__ . '/../backup_helpers.php';
-session_start();
-if (!isset($_SESSION['autenticado']) || $_SESSION['autenticado'] !== true || strtolower((string)($_SESSION['usuario']['perfil'] ?? 'administrador')) !== 'administrador') {
-    http_response_code(403);
-    echo json_encode(['ok' => false, 'error' => 'Acesso restrito ao administrador.']);
-    exit;
-}
+header('Content-Type: application/json');
+require_admin_json();
+require_csrf();
 
 // Lê o corpo da requisição JSON
 $raw = file_get_contents('php://input');
@@ -21,7 +18,63 @@ if (json_last_error() !== JSON_ERROR_NONE) {
     exit;
 }
 
-if (!isset( $data['nome'], $data['cifra'])) {
+if (($data['action'] ?? '') === 'delete') {
+    if (!isset($data['id']) || !is_numeric($data['id'])) {
+        echo json_encode(['ok' => false, 'error' => 'ID inválido para exclusão']);
+        exit;
+    }
+
+    $arquivo = __DIR__ . '/../../js/musicas.js';
+    $conteudo = file_get_contents($arquivo);
+    $conteudo = trim($conteudo);
+    $conteudo = preg_replace('/^var\s+songs\s*=\s*/', '', $conteudo);
+    $conteudo = preg_replace('/;\s*$/', '', $conteudo);
+    $conteudo = preg_replace('/(\b\w+\b)\s*:/', '"$1":', $conteudo);
+    $conteudo = preg_replace_callback("/'((?:[^'\\\\]|\\\\.)*)'/s", function($matches) {
+        $str = $matches[1];
+        $str = str_replace("\\'", "'", $str);
+        $str = str_replace("\\\\", "\\", $str);
+        $str = json_encode($str);
+        $str = substr($str, 1, -1);
+        return '"' . $str . '"';
+    }, $conteudo);
+
+    $songs = json_decode($conteudo, true);
+    if (json_last_error() !== JSON_ERROR_NONE || !is_array($songs)) {
+        echo json_encode(['ok' => false, 'error' => 'Erro ao ler lista de músicas']);
+        exit;
+    }
+
+    $idDelete = (int)$data['id'];
+    $before = count($songs);
+    $songs = array_values(array_filter($songs, function ($musica) use ($idDelete) {
+        return (int)($musica['id'] ?? 0) !== $idDelete;
+    }));
+
+    if ($before === count($songs)) {
+        echo json_encode(['ok' => false, 'error' => 'Música não encontrada']);
+        exit;
+    }
+
+    $novoConteudo = json_encode($songs, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    $novoConteudo = preg_replace('/"(\w+)"\s*:/', '$1:', $novoConteudo);
+    $novoConteudo = preg_replace_callback('/"(.*?)"/s', function ($m) {
+        $str = $m[1];
+        $str = str_replace("'", "\\'", $str);
+        $str = str_replace('\\"', '"', $str);
+        return "'$str'";
+    }, $novoConteudo);
+    $novoConteudo = "var songs = " . $novoConteudo . ";";
+
+    fdm_backup_file($arquivo);
+    file_put_contents($arquivo, $novoConteudo);
+    fdm_bump_cache_version();
+
+    echo json_encode(['ok' => true]);
+    exit;
+}
+
+if (!isset($data['nome'], $data['cifra'])) {
     echo json_encode(['ok' => false, 'error' => 'Dados incompletos']);
     exit;
 }
@@ -107,6 +160,7 @@ if (json_last_error() !== JSON_ERROR_NONE) {
 // Atualiza a música
 $encontrado = false;
 $maiorId = 0;
+$idFinal = null;
 foreach ($songs as &$musica) {
      if (isset($musica['id']) && is_numeric($musica['id']) && $musica['id'] > $maiorId) {
         $maiorId = $musica['id'];
@@ -118,12 +172,14 @@ foreach ($songs as &$musica) {
         $musica['artista'] = $data['artista'];
         $musica['classificacao'] = $data['classificacao'];
         $encontrado = true;
+        $idFinal = (int)$musica['id'];
         break;
     }
 }
 
 if (!$encontrado) {
     $data['id'] = $maiorId + 1;
+    $idFinal = (int)$data['id'];
     $songs[] = $data;
 }
 // Converte de volta para JSON formatado
@@ -153,4 +209,8 @@ fdm_backup_file($arquivo);
 file_put_contents($arquivo, $novoConteudo);
 fdm_bump_cache_version();
 
-echo json_encode(['ok' => true]);
+echo json_encode([
+    'ok' => true,
+    'id' => $idFinal,
+    'created' => !$encontrado
+]);
