@@ -1,0 +1,14 @@
+{
+    "salas": {
+        "default": {
+            "salaId": "default",
+            "hostId": "70060fac3e9924b8294ef877bd93db8b",
+            "hostUserId": "dd7d3a01-68d4-481c-b6c5-f2639d50bf17",
+            "hostUsername": "felipe",
+            "cifraAtual": "165",
+            "paginaAtual": "music.php?id=165",
+            "updatedAt": "2026-05-09T18:07:44+00:00",
+            "version": 2
+        }
+    }
+}

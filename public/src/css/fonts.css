@@ -1,0 +1,71 @@
+/* ================================================================
+   Fontes FDM — Inter (UI) + JetBrains Mono (cifra)
+   ================================================================
+   Por padrão usa Google Fonts CDN. Após primeira visita online,
+   o navegador cacheia (cache HTTP forte) e funciona offline.
+
+   Para hospedar 100% local (recomendado para offline-first):
+   1. Baixe os arquivos .woff2:
+      - Inter:        https://rsms.me/inter/  (ou Google Fonts)
+      - JetBrains:    https://www.jetbrains.com/lp/mono/
+   2. Coloque em /src/fonts/inter/ e /src/fonts/jetbrains/
+   3. Comente os blocos "VIA CDN" abaixo
+   4. Descomente os blocos "VIA LOCAL"
+   ================================================================ */
+
+/* ====== VIA CDN (Google Fonts) — default ====== */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+/* ====== VIA LOCAL — descomente quando hospedar localmente ====== */
+/*
+@font-face {
+    font-family: 'Inter';
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url('/src/fonts/inter/Inter-Regular.woff2') format('woff2');
+}
+@font-face {
+    font-family: 'Inter';
+    font-style: normal;
+    font-weight: 500;
+    font-display: swap;
+    src: url('/src/fonts/inter/Inter-Medium.woff2') format('woff2');
+}
+@font-face {
+    font-family: 'Inter';
+    font-style: normal;
+    font-weight: 600;
+    font-display: swap;
+    src: url('/src/fonts/inter/Inter-SemiBold.woff2') format('woff2');
+}
+@font-face {
+    font-family: 'Inter';
+    font-style: normal;
+    font-weight: 700;
+    font-display: swap;
+    src: url('/src/fonts/inter/Inter-Bold.woff2') format('woff2');
+}
+
+@font-face {
+    font-family: 'JetBrains Mono';
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url('/src/fonts/jetbrains/JetBrainsMono-Regular.woff2') format('woff2');
+}
+@font-face {
+    font-family: 'JetBrains Mono';
+    font-style: normal;
+    font-weight: 500;
+    font-display: swap;
+    src: url('/src/fonts/jetbrains/JetBrainsMono-Medium.woff2') format('woff2');
+}
+@font-face {
+    font-family: 'JetBrains Mono';
+    font-style: normal;
+    font-weight: 700;
+    font-display: swap;
+    src: url('/src/fonts/jetbrains/JetBrainsMono-Bold.woff2') format('woff2');
+}
+*/
