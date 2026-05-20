@@ -190,11 +190,11 @@
                 </div>
                 <div class="config-row__control">
                     <select id="cfgCifraSize" aria-label="Tamanho da fonte da cifra">
-                        <option value="14">14px — Pequeno</option>
-                        <option value="16">16px — Médio</option>
-                        <option value="18" selected>18px — Padrão</option>
-                        <option value="20">20px — Grande</option>
-                        <option value="22">22px — Extra grande</option>
+                        <option value="14">Pequeno</option>
+                        <option value="16">Médio</option>
+                        <option value="18" selected>Padrão</option>
+                        <option value="20">Grande</option>
+                        <option value="22">Extra grande</option>
                     </select>
                 </div>
             </div>
@@ -260,12 +260,24 @@
 
             <div class="config-row">
                 <div class="config-row__label">
-                    <p class="config-row__title">Limpar cache do app</p>
-                    <p class="config-row__desc">Remove cifras e dados salvos para uso offline. Recarrega ao confirmar.</p>
+                    <p class="config-row__title">Sincronizar dados</p>
+                    <p class="config-row__desc">Baixa músicas, setlists e roteiros atualizados do servidor.</p>
+                </div>
+                <div class="config-row__control">
+                    <button type="button" class="btn btn--primary btn--sm" id="btnSyncDados" onclick="sincronizarDados()">
+                        <?= fdm_icon('refresh', 14) ?> Sincronizar
+                    </button>
+                </div>
+            </div>
+
+            <div class="config-row">
+                <div class="config-row__label">
+                    <p class="config-row__title">Resetar app</p>
+                    <p class="config-row__desc">Remove todos os dados locais e recarrega. Use apenas se o app estiver com comportamento estranho.</p>
                 </div>
                 <div class="config-row__control">
                     <button type="button" class="btn btn--danger btn--sm" onclick="limparCache()">
-                        <?= fdm_icon('trash', 14) ?> Limpar cache
+                        <?= fdm_icon('trash', 14) ?> Resetar
                     </button>
                 </div>
             </div>
@@ -295,14 +307,16 @@
 
             <div class="config-row">
                 <div class="config-row__label">
-                    <p class="config-row__title">Cifras FDM</p>
-                    <p class="config-row__desc">App de cifras dos Filhos de Maria · versão <span id="cfgVersion">—</span></p>
+                    <p class="config-row__title">StageBox - Cifras</p>
+                    <p class="config-row__desc">versão <span id="cfgVersion">—</span></p>
                 </div>
             </div>
         </section>
     </div>
 
+    <script src="<?= asset_url('/src/js/fdm-sync.js') ?>"></script>
     <script>
+        window.FDM_BAND_ID = '<?= e(current_band_id()) ?>';
         // Config vinda do servidor (PHP → JS)
         var _serverConfig = <?= json_encode($usuario['config'] ?? [], JSON_UNESCAPED_UNICODE) ?>;
 
@@ -406,7 +420,24 @@
             window.atualizarUso = atualizarUso;
             atualizarUso();
 
-            // ---- Limpar cache ----
+            // ---- Sincronizar dados ----
+            window.sincronizarDados = async function () {
+                if (!window.FDM_BAND_ID) {
+                    fdmToast && fdmToast('Banda não identificada. Faça login novamente.', 'error');
+                    return;
+                }
+                var btn = document.getElementById('btnSyncDados');
+                if (btn) { btn.disabled = true; btn.textContent = 'Sincronizando…'; }
+                try {
+                    var ok = await fdmSync.sync(window.FDM_BAND_ID);
+                    fdmToast && fdmToast(ok ? 'Dados sincronizados!' : 'Falha ao sincronizar. Tente novamente.', ok ? 'success' : 'error', { duration: 3000 });
+                } finally {
+                    if (btn) { btn.disabled = false; btn.innerHTML = '<?= addslashes(fdm_icon('refresh', 14)) ?> Sincronizar'; }
+                    atualizarUso();
+                }
+            };
+
+            // ---- Limpar cache (Resetar app) ----
             window.limparCache = async function () {
                 var ok = await fdmConfirm({
                     title: 'Limpar cache do app',

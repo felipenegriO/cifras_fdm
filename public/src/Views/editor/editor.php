@@ -7,7 +7,7 @@
   <script src="<?= asset_url('/src/js/fdm-csrf.js') ?>"></script>
   <script src="<?= asset_url('/src/js/fdm-confirm.js') ?>"></script>
   <script src="<?= asset_url('/src/js/fdm-toast.js') ?>"></script>
-  <title>Editor de Cifras</title>
+  <title>Editor de Cifras — StageBox</title>
   <script src="/src/js/fdm-theme.js"></script>
   <link href="/src/css/fonts.css" rel="stylesheet">
   <link href="/src/css/theme.css" rel="stylesheet">
@@ -127,7 +127,9 @@
     </div>
   <!-- Scripts -->
   <script src="/src/js/jquery-3.5.1.min.js"></script>
-  <script src="<?= asset_url('/src/js/musicas.js') ?>"></script>
+  <script>window.FDM_BAND_ID = '<?= e(current_band_id()) ?>';</script>
+  <script src="<?= asset_url('/src/js/fdm-sync.js') ?>"></script>
+  <script>document.addEventListener('DOMContentLoaded', () => fdmSync.load(window.FDM_BAND_ID));</script>
   <script src="/src/js/script.js" defer></script>
 
   <script src="https://cdn.tiny.cloud/1/56uixiy3yc6tkjs0wqt9924yoehc5nhmyjo3tj0i9xtn0d0m/tinymce/7/tinymce.min.js" referrerpolicy="origin"></script>

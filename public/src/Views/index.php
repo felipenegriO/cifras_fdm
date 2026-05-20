@@ -8,7 +8,7 @@
     <script src="<?= asset_url('/src/js/fdm-csrf.js') ?>"></script>
     <script src="<?= asset_url('/src/js/fdm-confirm.js') ?>"></script>
     <script src="<?= asset_url('/src/js/fdm-toast.js') ?>"></script>
-    <title>Filhos de Maria</title>
+    <title>StageBox - Cifras</title>
     <link rel="manifest" href="manifest.json">
     <script src="/src/js/fdm-theme.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -260,11 +260,11 @@
 
     <script src="/src/js/jquery-3.5.1.min.js" ></script>
     <script src="/src/js/bootstrap.min.js" defer></script>
-    <script src="<?= asset_url('/src/js/musicas.js') ?>" defer></script>
+    <script>window.FDM_BAND_ID = '<?= e(current_band_id()) ?>';</script>
+    <script src="<?= asset_url('/src/js/fdm-sync.js') ?>"></script>
     <script src="<?= asset_url('/src/js/script.js') ?>" defer></script>
     <script src="/src/js/06215d6691.js" defer></script>
-    <script src="<?= asset_url('/src/js/playlists_salvas.js') ?>" defer></script>
-    <script src="<?= asset_url('/src/js/roteiros_salvos.js') ?>" defer></script>
+    <script>document.addEventListener('DOMContentLoaded', () => fdmSync.load(window.FDM_BAND_ID));</script>
     <script src="<?= asset_url('/src/js/playlists.js') ?>" defer></script>
     <script src="<?= asset_url('/src/js/offline-tools.js') ?>"></script>
     <script src="<?= asset_url('/src/js/live.js') ?>"></script>

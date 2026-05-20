@@ -7,7 +7,7 @@
   <script src="<?= asset_url('/src/js/fdm-csrf.js') ?>"></script>
   <script src="<?= asset_url('/src/js/fdm-confirm.js') ?>"></script>
   <script src="<?= asset_url('/src/js/fdm-toast.js') ?>"></script>
-  <title>Editor de Playlists</title>
+  <title>Editor de Playlists — StageBox</title>
   <script src="/src/js/fdm-theme.js"></script>
   <link href="/src/css/fonts.css" rel="stylesheet">
   <link href="/src/css/theme.css" rel="stylesheet">
@@ -119,8 +119,8 @@
       .lists ul { max-height: 50vh; }
     }
   </style>
-  <script src="/src/js/musicas.js"></script>
-  <script src="/src/js/playlists_salvas.js"></script>
+  <script>window.FDM_BAND_ID = '<?= e(current_band_id()) ?>';</script>
+  <script src="<?= asset_url('/src/js/fdm-sync.js') ?>"></script>
 </head>
 <body>
 <?php render_partial('topnav'); ?>
@@ -449,7 +449,7 @@ async function deletarPlaylist() {
   }
 }
 
-carregarPlaylistsDisponiveis();
+fdmSync.load(window.FDM_BAND_ID).then(() => carregarPlaylistsDisponiveis());
 </script>
 
 </body>

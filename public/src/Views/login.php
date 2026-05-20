@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Login</title>
+  <title>Login — StageBox</title>
 
   <!-- Bootstrap CSS -->
   <script src="/src/js/fdm-theme.js"></script>
@@ -151,6 +151,12 @@
       </div>
 
       <button type="submit" class="btn btn-primary">Entrar</button>
+
+      <div style="text-align:center;margin-top:14px;font-size:13px;color:#888">
+        <a href="/esqueci-senha.php" style="color:#888;text-decoration:none">Esqueci minha senha</a>
+        &nbsp;·&nbsp;
+        <a href="/register.php" style="color:#888;text-decoration:none">Criar conta</a>
+      </div>
     </form>
   </div>
 

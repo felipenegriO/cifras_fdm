@@ -7,7 +7,7 @@
   <script src="<?= asset_url('/src/js/fdm-csrf.js') ?>"></script>
   <script src="<?= asset_url('/src/js/fdm-confirm.js') ?>"></script>
   <script src="<?= asset_url('/src/js/fdm-toast.js') ?>"></script>
-  <title>Editor de Roteiros</title>
+  <title>Editor de Roteiros — StageBox</title>
   <script src="/src/js/fdm-theme.js"></script>
   <link href="/src/css/fonts.css" rel="stylesheet">
   <link href="/src/css/theme.css" rel="stylesheet">
@@ -114,9 +114,8 @@
   </div>
 
   <script src="/src/js/jquery-3.5.1.min.js"></script>
-  <script src="<?= asset_url('/src/js/musicas.js') ?>"></script>
-  <script src="<?= asset_url('/src/js/roteiros_salvos.js') ?>"></script>
-
+  <script>window.FDM_BAND_ID = '<?= e(current_band_id()) ?>';</script>
+  <script src="<?= asset_url('/src/js/fdm-sync.js') ?>"></script>
   <script src="https://cdn.tiny.cloud/1/56uixiy3yc6tkjs0wqt9924yoehc5nhmyjo3tj0i9xtn0d0m/tinymce/7/tinymce.min.js" referrerpolicy="origin"></script>
   <script>
     const _fdmIsDark = (window.fdmTheme ? window.fdmTheme.get() : 'dark') !== 'light';
@@ -314,7 +313,7 @@
 
     document.getElementById('filtroMusicasModal')?.addEventListener('input', montarListaMusicas);
 
-    carregarRoteiros();
+    fdmSync.load(window.FDM_BAND_ID).then(() => carregarRoteiros());
 
     function normalizeRoteiroHtml(html) {
       let out = String(html || '');

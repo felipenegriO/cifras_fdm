@@ -41,7 +41,7 @@ function fdm_bump_cache_version() {
         return false;
     }
 
-    $newVersion = 'cacheFDM22-' . date('YmdHis');
+    $newVersion = 'cacheStageBox-' . date('YmdHis');
     $updated = preg_replace(
         "/const\s+CACHE_NAME\s*=\s*'[^']+';/",
         "const CACHE_NAME = '" . $newVersion . "';",

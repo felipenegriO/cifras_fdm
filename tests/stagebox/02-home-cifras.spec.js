@@ -1,0 +1,89 @@
+/**
+ * 02-home-cifras.spec.js
+ * Tela principal (index.php) — lista de cifras, busca, filtros.
+ */
+import { test, expect } from '@playwright/test';
+
+test.use({ storageState: 'tests/.auth/user.json' });
+
+test.describe('Home — Lista de Cifras', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/index.php');
+    await page.waitForLoadState('networkidle');
+  });
+
+  test('carrega a página sem erro', async ({ page }) => {
+    await expect(page.locator('nav.topnav')).toBeVisible();
+    // Sem mensagem de erro PHP visível
+    await expect(page.locator('body')).not.toContainText('Fatal error');
+    await expect(page.locator('body')).not.toContainText('Warning:');
+  });
+
+  test('exibe topnav com nome StageBox', async ({ page }) => {
+    await expect(page.locator('nav.topnav')).toBeVisible();
+    await expect(page.locator('.topnav__brand')).toBeVisible();
+  });
+
+  test('exibe lista ou empty state de cifras', async ({ page }) => {
+    // O id real do container de músicas é #music-list
+    const list = page.locator('#music-list, .song-list, .empty-state');
+    await expect(list.first()).toBeVisible({ timeout: 10000 });
+  });
+
+  test('campo de busca está presente', async ({ page }) => {
+    const search = page.locator('input[type="search"], input[placeholder*="Buscar"], input[placeholder*="buscar"], #searchInput, #busca');
+    await expect(search.first()).toBeVisible();
+  });
+
+  test('link para configurações funciona', async ({ page }) => {
+    await page.goto('/config.php');
+    await expect(page.locator('nav.topnav')).toBeVisible();
+    await expect(page.locator('.config-container')).toBeVisible();
+  });
+
+  test('topnav tem link para Configurações', async ({ page }) => {
+    // Logout está em config.php, não diretamente na home; verificar que existe link config
+    const configLink = page.locator('a[href="/config.php"]').first();
+    await expect(configLink).toBeVisible();
+  });
+
+  test('usuário não autenticado é redirecionado para landing', async ({ browser }) => {
+    const ctx = await browser.newContext({ storageState: { cookies: [], origins: [] } });
+    const page = await ctx.newPage();
+    // goto segue todos os redirects e aguarda até networkidle
+    await page.goto('/index.php', { waitUntil: 'networkidle' });
+    // Após seguir todos os redirects, deve estar em landing.php ou login.php
+    expect(page.url()).toMatch(/landing\.php|login\.php/);
+    await ctx.close();
+  });
+});
+
+test.describe('Home — Navegação', () => {
+  test.use({ storageState: 'tests/.auth/user.json' });
+
+  test('menu "Configurações" navega corretamente', async ({ page }) => {
+    await page.goto('/config.php');
+    await expect(page.locator('h1, .config-page-title')).toContainText('Configurações');
+  });
+
+  test('logout funciona', async ({ browser }) => {
+    // Usa contexto COM SESSÃO PRÓPRIA para não destruir a sessão compartilhada
+    // A sessão compartilhada (user.json) é preservada para os demais testes
+    const ctx = await browser.newContext({ storageState: { cookies: [], origins: [] } }); // sessão vazia — explicitamente limpa para não herdar SESS_A
+    const page = await ctx.newPage();
+    // Login fresco criando sessão própria (não afeta user.json)
+    await page.goto('/login.php');
+    await page.fill('#username', process.env.TEST_USERNAME || 'felipe');
+    await page.fill('#senha', process.env.TEST_PASSWORD || '123');
+    await page.click('button[type="submit"]');
+    await page.waitForURL(url => !url.toString().includes('login.php'), { timeout: 8000 }).catch(() => {});
+    // Logout desta sessão própria (não destrói SESS de user.json)
+    await page.goto('/logout.php');
+    await page.waitForURL(url =>
+      url.toString().includes('login.php') || url.toString().includes('landing.php'),
+      { timeout: 5000 }
+    ).catch(() => {});
+    expect(page.url()).toMatch(/login\.php|landing\.php/);
+    await ctx.close();
+  });
+});

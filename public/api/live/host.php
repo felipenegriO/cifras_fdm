@@ -1,6 +1,5 @@
 <?php
 require_once __DIR__ . '/../../src/backend/bootstrap.php';
-
 header('Content-Type: application/json; charset=utf-8');
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -9,18 +8,12 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
-if (!isset($_SESSION['autenticado']) || $_SESSION['autenticado'] !== true) {
-    http_response_code(401);
-    echo json_encode(['success' => false, 'message' => 'Nao autenticado']);
-    exit;
-}
+require_auth_json();
+require_csrf();
 
 $input = json_decode(file_get_contents('php://input'), true);
-if (!is_array($input)) {
-    $input = $_POST;
-}
+if (!is_array($input)) $input = $_POST;
 
-$service = new LiveStateService(__DIR__ . '/../../src/backend/data/live-state.json');
-$result = $service->assumirHost($input['salaId'] ?? 'default', $_SESSION['usuario'] ?? []);
-
-echo json_encode($result);
+$salaId  = current_band_id() ?: ($input['salaId'] ?? 'default');
+$service = new LiveStateService(new LiveStateRepository());
+echo json_encode($service->assumirHost($salaId, $_SESSION['usuario'] ?? []));

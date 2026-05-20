@@ -1,56 +1,47 @@
 <?php
 require_once __DIR__ . '/../bootstrap.php';
-require_once __DIR__ . '/../backup_helpers.php';
-header("Cache-Control: no-store, no-cache, must-revalidate, max-age=0");
-header("Pragma: no-cache");
 header('Content-Type: application/json');
-require_admin_json();
+send_no_cache_headers();
+require_band_role('gestor');
 require_csrf();
 
-// Lê os dados do corpo da requisição
-$entrada = file_get_contents("php://input");
-$data = json_decode($entrada, true);
-
+$data = json_decode(file_get_contents('php://input'), true);
 if (!$data) {
     http_response_code(400);
-    echo json_encode(["sucesso" => false, "mensagem" => "JSON inválido."]);
+    echo json_encode(['sucesso' => false, 'mensagem' => 'JSON inválido.']);
     exit;
 }
-
-// Garante que o dado será salvo no formato {"playlists": [...]}
-$dadosParaSalvar = [];
 
 if (isset($data['playlists']) && is_array($data['playlists'])) {
-    $dadosParaSalvar = $data['playlists'];  // pega só o array playlists
+    $playlists = $data['playlists'];
 } elseif (is_array($data)) {
-    // Tenta reformatar o JSON no modelo de array simples de playlists
-    $playlistsFormatadas = [];
+    $playlists = [];
     foreach ($data as $nome => $itens) {
-        if (is_array($itens)) {
-            $playlistsFormatadas[] = ["nome" => $nome, "itens" => $itens];
-        }
+        if (is_array($itens)) $playlists[] = ['nome' => $nome, 'itens' => $itens];
     }
-    $dadosParaSalvar = $playlistsFormatadas;
 } else {
     http_response_code(400);
-    echo json_encode(["sucesso" => false, "mensagem" => "Estrutura inválida."]);
+    echo json_encode(['sucesso' => false, 'mensagem' => 'Estrutura inválida.']);
     exit;
 }
 
-// Caminho do arquivo JS que define a variável playlistsSalvas
-$arquivoJs = __DIR__ . '/../../js/playlists_salvas.js';
+$bandaId = current_band_id();
 
-// Gera o conteúdo JS: define a variável global playlistsSalvas (apenas o array)
-$conteudoJs = "const playlistsSalvas = " . json_encode($dadosParaSalvar, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) . ";";
-
-// Salva o arquivo JS
-fdm_backup_file($arquivoJs);
-$sucessoJs = file_put_contents($arquivoJs, $conteudoJs);
-
-if ($sucessoJs !== false) {
-    fdm_bump_cache_version();
-    echo json_encode(["sucesso" => true, "mensagem" => "Playlists salvas com sucesso!"]);
-} else {
-    http_response_code(500);
-    echo json_encode(["sucesso" => false, "mensagem" => "Erro ao salvar o arquivo JS."]);
+$limits = fdm_plan_limits($_SESSION['banda_atual']['plano'] ?? 'bloqueado');
+$maxPlaylists = $limits['playlists'];
+if ($maxPlaylists !== -1 && count($playlists) > $maxPlaylists) {
+    $planoLabel = match($_SESSION['banda_atual']['plano'] ?? '') {
+        'gratuito' => 'Gratuito', 'basico' => 'Básico', default => 'atual',
+    };
+    http_response_code(403);
+    echo json_encode([
+        'sucesso'     => false,
+        'mensagem'    => "Limite do plano {$planoLabel}: máximo de {$maxPlaylists} playlist(s).",
+        'plano_limit' => true,
+    ]);
+    exit;
 }
+
+(new PlaylistRepository())->saveAll($playlists, $bandaId);
+
+echo json_encode(['sucesso' => true, 'mensagem' => 'Playlists salvas com sucesso!']);

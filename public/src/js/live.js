@@ -1,5 +1,5 @@
 (function () {
-    const salaId = 'default';
+    const salaId = (window.FDM_BAND_ID && window.FDM_BAND_ID !== '') ? window.FDM_BAND_ID : 'default';
     const apiBase = '/api/live';
     const hostIdKey = 'fdmLiveHostId_' + salaId;
     const modeKey = 'fdmLiveMode_' + salaId;

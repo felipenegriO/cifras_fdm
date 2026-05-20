@@ -1,10 +1,7 @@
 <?php
 require_once __DIR__ . '/../../src/backend/bootstrap.php';
-
 header('Content-Type: application/json; charset=utf-8');
-header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
-header('Pragma: no-cache');
-header('Expires: 0');
+send_no_cache_headers();
 
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     http_response_code(405);
@@ -12,13 +9,9 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     exit;
 }
 
-if (!isset($_SESSION['autenticado']) || $_SESSION['autenticado'] !== true) {
-    http_response_code(401);
-    echo json_encode(['success' => false, 'message' => 'Nao autenticado']);
-    exit;
-}
+require_auth_json();
 
-$service = new LiveStateService(__DIR__ . '/../../src/backend/data/live-state.json');
-$result = $service->status($_GET['salaId'] ?? 'default');
-
-echo json_encode($result);
+$salaId  = current_band_id() ?: ($_GET['salaId'] ?? 'default');
+session_write_close();
+$service = new LiveStateService(new LiveStateRepository());
+echo json_encode($service->status($salaId));

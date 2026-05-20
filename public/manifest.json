@@ -1,11 +1,12 @@
 {
-    "name": "Cifras Filhos de Maria",
-    "short_name": "CifrasApp",
-    "start_url": "./index.html",
+    "name": "StageBox - Cifras",
+    "short_name": "StageBox",
+    "description": "Cifras, setlists e modo ao vivo para sua banda. Funciona offline.",
+    "start_url": "./index.php",
     "display": "standalone",
-    "background_color": "#ffffff",
-    "theme_color": "#000000",
-    "version": "2.1.0",
+    "background_color": "#0f0f0f",
+    "theme_color": "#7c3aed",
+    "version": "2.2.0",
     "icons": [
   {
    "src": "\/src/images/android-icon-36x36.png",

@@ -1,19 +1,18 @@
-const CACHE_NAME = 'cacheFDM22-1.4.7';
-const DAILY_KEY  = 'fdm-daily-refresh';   // key stored inside the cache itself
+const CACHE_NAME = 'cacheStageBox-2.2.0';
+const DAILY_KEY  = 'stagebox-daily-refresh';   // key stored inside the cache itself
 
 const STATIC_ASSETS = [
   '/',
   '/index.php',
   '/music.php',
   '/roteiro.php',
+  '/landing.php',
   '/src/js/script.js',
   '/src/js/live.js',
   '/src/js/offline-tools.js',
-  '/src/js/musicas.js',
   '/src/js/playlists.js',
-  '/src/js/playlists_salvas.js',
-  '/src/js/roteiros_salvos.js',
   '/src/js/roteiros.js',
+  '/src/js/fdm-sync.js',
   '/src/js/06215d6691.js',
   '/src/js/bootstrap.bundle.min.js',
   '/src/js/bootstrap.min.js',

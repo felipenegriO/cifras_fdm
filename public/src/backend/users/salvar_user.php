@@ -1,138 +1,180 @@
 <?php
 require_once __DIR__ . '/../bootstrap.php';
-require_once __DIR__ . '/../backup_helpers.php';
 header('Content-Type: application/json; charset=utf-8');
-header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
-header('Pragma: no-cache');
-header('Expires: 0');
-require_admin_json();
-if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-  require_csrf();
-}
+header('Cache-Control: no-store');
 
-$arquivo = 'usuarios.json';
+require_band_role('administrador');
 
-// GET: devolve o arquivo (ou array vazio)
-if ($_SERVER['REQUEST_METHOD'] === 'GET') {
-  if (!file_exists($arquivo)) {
-    echo json_encode([]);
+$method  = $_SERVER['REQUEST_METHOD'];
+$bandaId = current_band_id();
+$repo    = new UserRepository();
+
+// ── GET: list users in this band ──────────────────────────────────────────────
+if ($method === 'GET') {
+    echo json_encode($repo->getByBanda($bandaId), JSON_UNESCAPED_UNICODE);
     exit;
-  }
-
-  $json = file_get_contents($arquivo);
-  $data = json_decode($json, true);
-  if (!is_array($data)) $data = [];
-
-  echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
-  exit;
 }
 
-// POST: salva
-$raw = file_get_contents('php://input');
-$payload = json_decode($raw, true);
-
-if (!$payload || !isset($payload['usuarios']) || !is_array($payload['usuarios'])) {
-  echo json_encode(['sucesso' => false, 'mensagem' => 'Payload inválido.']);
-  exit;
+if ($method !== 'POST') {
+    http_response_code(405);
+    echo json_encode(['sucesso' => false]);
+    exit;
 }
 
-$usuarios = $payload['usuarios'];
-$usuariosFinal = [];
+require_csrf();
+$input  = json_decode(file_get_contents('php://input'), true) ?: [];
+$action = $input['action'] ?? 'save';
 
-foreach ($usuarios as $u) {
-  $id = $u['id'] ?? null;
-  $nome = trim((string)($u['nome'] ?? ''));
-  $username = trim((string)($u['username'] ?? ''));
-  $ativo = (bool)($u['ativo'] ?? false);
-  $validade = trim((string)($u['validade'] ?? ''));
-  $perfil = strtolower(trim((string)($u['perfil'] ?? 'administrador')));
+// ── search users not in this band (for import) ────────────────────────────────
+if ($action === 'search') {
+    $q = trim($input['q'] ?? '');
+    if (strlen($q) < 2) {
+        echo json_encode([]);
+        exit;
+    }
+    echo json_encode($repo->searchNotInBanda($bandaId, $q), JSON_UNESCAPED_UNICODE);
+    exit;
+}
 
-  if (!$id) $id = bin2hex(random_bytes(16));
+// ── resend invite to inactive user ───────────────────────────────────────────
+if ($action === 'resend_invite') {
+    $userId = trim($input['userId'] ?? '');
+    if (!$userId) {
+        echo json_encode(['sucesso' => false, 'mensagem' => 'ID inválido.']);
+        exit;
+    }
+    $user = $repo->findById($userId);
+    if (!$user || empty($user['email'])) {
+        echo json_encode(['sucesso' => false, 'mensagem' => 'Usuário sem e-mail cadastrado.']);
+        exit;
+    }
+    try {
+        $banda = $_SESSION['banda_atual'] ?? [];
+        $token = $repo->createToken($userId, 172800);
+        MailService::sendInvite(
+            ['nome' => $user['nome'], 'email' => $user['email'], 'username' => $user['username']],
+            ['nome' => $banda['nome'] ?? ''],
+            $token
+        );
+        echo json_encode(['sucesso' => true]);
+    } catch (Exception $e) {
+        echo json_encode(['sucesso' => false, 'mensagem' => 'Erro ao enviar e-mail.']);
+    }
+    exit;
+}
 
-  if ($nome === '' || $username === '') {
+// ── import existing user into this band ───────────────────────────────────────
+if ($action === 'import') {
+    $userId = trim($input['userId'] ?? '');
+    $perfil = $input['perfil'] ?? 'basico';
+    if (!$userId || !in_array($perfil, ['administrador', 'gestor', 'basico'], true)) {
+        echo json_encode(['sucesso' => false, 'mensagem' => 'Dados inválidos.']);
+        exit;
+    }
+    fdm_require_plan_limit('users', $repo->countByBanda($bandaId));
+    $repo->importToBanda($userId, $bandaId, $perfil);
+    echo json_encode(['sucesso' => true]);
+    exit;
+}
+
+// ── remove user from this band ────────────────────────────────────────────────
+if ($action === 'delete') {
+    $userId = trim($input['userId'] ?? '');
+    if (!$userId) {
+        echo json_encode(['sucesso' => false, 'mensagem' => 'ID inválido.']);
+        exit;
+    }
+    if ($userId === ($_SESSION['usuario']['id'] ?? '')) {
+        echo json_encode(['sucesso' => false, 'mensagem' => 'Você não pode se remover da banda.']);
+        exit;
+    }
+    $repo->removeFromBanda($userId, $bandaId);
+    echo json_encode(['sucesso' => true]);
+    exit;
+}
+
+// ── save (create or update) user ──────────────────────────────────────────────
+$nome        = trim($input['nome']      ?? '');
+$username    = trim($input['username']  ?? '');
+$email       = strtolower(trim($input['email'] ?? ''));
+$ativo       = (bool)($input['ativo']   ?? true);
+$bandaPerfil = $input['bandaPerfil']    ?? 'basico';
+$validade    = trim($input['validade']  ?? '');
+$senhaPlain  = trim($input['_senhaPlain'] ?? '');
+$isNew       = empty($input['id']);
+
+if (!$nome || !$username) {
     echo json_encode(['sucesso' => false, 'mensagem' => 'Nome e username são obrigatórios.']);
     exit;
-  }
-
-  // valida username
-  if (preg_match('/\s/', $username) || !preg_match('/^[a-zA-Z0-9._-]+$/', $username)) {
-    echo json_encode(['sucesso' => false, 'mensagem' => "Username inválido: {$username}"]);
+}
+if (!preg_match('/^[a-zA-Z0-9._-]+$/', $username)) {
+    echo json_encode(['sucesso' => false, 'mensagem' => 'Username inválido (letras, números, ponto, hífen, underscore).']);
     exit;
-  }
-
-  if (!in_array($perfil, ['administrador', 'musico', 'externo'], true)) {
-    echo json_encode(['sucesso' => false, 'mensagem' => "Perfil invalido para {$username}."]);
+}
+if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+    echo json_encode(['sucesso' => false, 'mensagem' => 'E-mail inválido.']);
     exit;
-  }
-
-  if ($perfil === 'externo' && $validade === '') {
-    echo json_encode(['sucesso' => false, 'mensagem' => "Usuario externo precisa de data de validade: {$username}."]);
+}
+if (!in_array($bandaPerfil, ['administrador', 'gestor', 'basico'], true)) {
+    echo json_encode(['sucesso' => false, 'mensagem' => 'Perfil inválido.']);
     exit;
-  }
-
-  if ($validade !== '') {
+}
+if ($validade !== '') {
     if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $validade)) {
-      echo json_encode(['sucesso' => false, 'mensagem' => "Data de validade invalida para {$username}."]);
-      exit;
+        echo json_encode(['sucesso' => false, 'mensagem' => 'Data de validade inválida.']);
+        exit;
     }
-
-    [$year, $month, $day] = array_map('intval', explode('-', $validade));
-    if (!checkdate($month, $day, $year)) {
-      echo json_encode(['sucesso' => false, 'mensagem' => "Data de validade invalida para {$username}."]);
-      exit;
+    [$y, $m, $d] = array_map('intval', explode('-', $validade));
+    if (!checkdate($m, $d, $y)) {
+        echo json_encode(['sucesso' => false, 'mensagem' => 'Data de validade inválida.']);
+        exit;
     }
-  }
+}
 
-  // mantém hash existente
-  $senhaHash = $u['senhaHash'] ?? null;
-
-  // se veio _senhaPlain, gera hash e apaga
-  $senhaPlain = $u['_senhaPlain'] ?? null;
-  if (is_string($senhaPlain) && trim($senhaPlain) !== '') {
-    $senhaHash = password_hash($senhaPlain, PASSWORD_DEFAULT);
-  }
-
-  // preserva config do usuário (salvo via salvar_config.php)
-  $config = isset($u['config']) && is_array($u['config']) ? $u['config'] : null;
-
-  $entry = [
-    'id' => $id,
-    'nome' => $nome,
+$userData = [
+    'id'       => $input['id'] ?? null,
+    'nome'     => $nome,
     'username' => $username,
-    'ativo' => $ativo,
+    'email'    => $email ?: null,
+    'ativo'    => $ativo,
     'validade' => $validade,
-    'perfil' => $perfil,
-    'senhaHash' => $senhaHash
-  ];
-  if ($config !== null) $entry['config'] = $config;
-
-  $usuariosFinal[] = $entry;
+];
+if ($senhaPlain !== '') {
+    $userData['_senhaPlain'] = $senhaPlain;
 }
 
-// checa duplicidade de username
-$usernames = [];
-foreach ($usuariosFinal as $u) {
-  $key = strtolower($u['username']);
-  if (isset($usernames[$key])) {
-    echo json_encode(['sucesso' => false, 'mensagem' => "Username duplicado: {$u['username']}"]);
+// Only check limit when creating a new user
+if ($isNew) {
+    fdm_require_plan_limit('users', $repo->countByBanda($bandaId));
+}
+
+try {
+    $id = $repo->saveToBanda($userData, $bandaId, $bandaPerfil);
+} catch (PDOException $e) {
+    $msg = 'Erro ao salvar.';
+    if (str_contains($e->getMessage(), 'Duplicate entry')) {
+        $msg = str_contains($e->getMessage(), 'uq_email') ? 'E-mail já está em uso.' : 'Username já está em uso.';
+    }
+    echo json_encode(['sucesso' => false, 'mensagem' => $msg]);
     exit;
-  }
-  $usernames[$key] = true;
 }
 
-// salva no arquivo (com lock)
-$json = json_encode($usuariosFinal, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
-if ($json === false) {
-  echo json_encode(['sucesso' => false, 'mensagem' => 'Falha ao gerar JSON.']);
-  exit;
+// Send invite email when creating a new user with an email address
+if ($isNew && $email !== '') {
+    try {
+        $banda = $_SESSION['banda_atual'] ?? [];
+        $token = $repo->createToken($id, 172800); // 48h
+        MailService::sendInvite(
+            ['nome' => $nome, 'email' => $email, 'username' => $username],
+            ['nome' => $banda['nome'] ?? ''],
+            $token
+        );
+        echo json_encode(['sucesso' => true, 'id' => $id, 'convite_enviado' => true]);
+    } catch (Exception $e) {
+        // Email failed but user was saved — don't fail the request
+        echo json_encode(['sucesso' => true, 'id' => $id, 'convite_enviado' => false, 'aviso' => 'Usuário salvo, mas não foi possível enviar o e-mail de convite.']);
+    }
+    exit;
 }
 
-fdm_backup_file($arquivo);
-$ok = file_put_contents($arquivo, $json, LOCK_EX);
-if ($ok === false) {
-  echo json_encode(['sucesso' => false, 'mensagem' => 'Falha ao salvar arquivo. Verifique permissões.']);
-  exit;
-}
-
-fdm_bump_cache_version();
-echo json_encode(['sucesso' => true, 'mensagem' => 'Usuários salvos com sucesso!']);
+echo json_encode(['sucesso' => true, 'id' => $id]);

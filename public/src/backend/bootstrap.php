@@ -1,4 +1,7 @@
 <?php
+// Prevent session file corruption when client disconnects mid-request
+ignore_user_abort(true);
+
 require_once __DIR__ . '/../../config/env.php';
 require_once __DIR__ . '/backup_helpers.php';
 require_once __DIR__ . '/../Views/partials/icons.php';
@@ -19,8 +22,46 @@ spl_autoload_register(function ($class) {
     }
 });
 
+// ===== Security headers =====
+if (!headers_sent()) {
+    header('X-Content-Type-Options: nosniff');
+    header('X-Frame-Options: DENY');
+    header('Referrer-Policy: strict-origin-when-cross-origin');
+    header('Permissions-Policy: camera=(), microphone=(), geolocation=()');
+    header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self' https://fonts.gstatic.com; connect-src 'self'; img-src 'self' data:;");
+}
+
+// ===== Secure session cookie params =====
+if (session_status() === PHP_SESSION_NONE) {
+    $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+        || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
+    session_set_cookie_params([
+        'lifetime' => 0,
+        'path'     => '/',
+        'domain'   => '',
+        'secure'   => $isHttps,
+        'httponly' => true,
+        'samesite' => 'Strict',
+    ]);
+}
+
 if (session_status() !== PHP_SESSION_ACTIVE) {
     session_start();
+}
+
+// ===== Session inactivity timeout (8 hours) =====
+define('SESSION_IDLE_SECONDS', 8 * 3600);
+if (isset($_SESSION['_last_activity']) && (time() - $_SESSION['_last_activity']) > SESSION_IDLE_SECONDS) {
+    $_SESSION = [];
+    if (ini_get('session.use_cookies')) {
+        $p = session_get_cookie_params();
+        setcookie(session_name(), '', time() - 42000, $p['path'], $p['domain'], $p['secure'], $p['httponly']);
+    }
+    session_destroy();
+    session_start();
+}
+if (session_status() === PHP_SESSION_ACTIVE) {
+    $_SESSION['_last_activity'] = time();
 }
 
 function e($value) {
@@ -84,7 +125,7 @@ function send_no_cache_headers() {
 
 function require_auth() {
     if (!isset($_SESSION['autenticado']) || $_SESSION['autenticado'] !== true) {
-        header('Location: /login.php');
+        header('Location: /landing.php');
         exit;
     }
 
@@ -98,19 +139,95 @@ function require_auth() {
         header('Location: /login.php?expirado=1');
         exit;
     }
+
+    fdm_check_plano();
 }
 
-function current_user_profile() {
-    $perfil = $_SESSION['usuario']['perfil'] ?? 'administrador';
-    $perfil = strtolower(trim((string)$perfil));
-    return in_array($perfil, ['administrador', 'musico', 'externo'], true) ? $perfil : 'musico';
+function fdm_check_plano(): void {
+    $banda = $_SESSION['banda_atual'] ?? [];
+    if (empty($banda['id'])) return; // no band selected yet, let select-banda handle it
+
+    $plano = $banda['plano'] ?? 'trial';
+    if ($plano === 'bloqueado') {
+        if (basename($_SERVER['PHP_SELF'] ?? '') !== 'plano-expirado.php') {
+            header('Location: /plano-expirado.php');
+            exit;
+        }
+        return;
+    }
+    if ($plano === 'trial' || $plano === 'gratuito') {
+        $expira = $banda['trial_expira_em'] ?? '';
+        if ($expira && strtotime($expira) < strtotime('today')) {
+            $repo = new BandaRepository();
+            $repo->marcarBloqueada($banda['id']);
+            $_SESSION['banda_atual']['plano'] = 'bloqueado';
+            header('Location: /plano-expirado.php');
+            exit;
+        }
+    }
 }
 
-function current_user_is_admin() {
-    return current_user_profile() === 'administrador';
+// ---------- Role helpers (new multi-band schema) ----------
+
+function band_data_path(string $file): string {
+    $bandId = current_band_id();
+    return __DIR__ . '/../data/bands/' . $bandId . '/' . ltrim($file, '/');
 }
 
-function require_admin() {
+function current_band_id(): string {
+    return $_SESSION['banda_atual']['id'] ?? '';
+}
+
+function current_band_role(): string {
+    return $_SESSION['banda_atual']['perfil'] ?? 'basico';
+}
+
+function is_master(): bool {
+    return ($_SESSION['usuario']['perfil'] ?? '') === 'master';
+}
+
+function can_edit_content(): bool {
+    if (is_master()) return true;
+    return in_array(current_band_role(), ['gestor', 'administrador'], true);
+}
+
+function can_manage_band_users(): bool {
+    if (is_master()) return true;
+    return current_band_role() === 'administrador';
+}
+
+/** Aborts with 403 JSON if caller doesn't have $minRole within current band. */
+function require_band_role(string $minRole): void {
+    require_auth_json();
+    $order = ['basico' => 0, 'gestor' => 1, 'administrador' => 2];
+    $required = $order[$minRole] ?? 0;
+    $actual   = is_master() ? 99 : ($order[current_band_role()] ?? 0);
+    if ($actual < $required) {
+        http_response_code(403);
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode(['ok' => false, 'sucesso' => false, 'error' => 'Permissão insuficiente.', 'mensagem' => 'Permissão insuficiente.']);
+        exit;
+    }
+}
+
+// ---------- Legacy helpers (kept for backwards compat) ----------
+
+function current_user_profile(): string {
+    // Returns the banda-scoped role for views that still check it
+    if (is_master()) return 'administrador';
+    $role = current_band_role();
+    $map = ['administrador' => 'administrador', 'gestor' => 'administrador', 'basico' => 'musico'];
+    return $map[$role] ?? 'musico';
+}
+
+function current_user_is_admin(): bool {
+    if (can_manage_band_users()) return true;
+    // Legacy fallback: sessions created before multi-band migration
+    $legacyPerfil = strtolower(trim((string)($_SESSION['usuario']['perfil'] ?? '')));
+    return $legacyPerfil === 'administrador';
+}
+
+function require_admin(): void {
     require_auth();
     if (!current_user_is_admin()) {
         http_response_code(403);
@@ -119,20 +236,15 @@ function require_admin() {
     }
 }
 
-function fdm_session_user_expired() {
+function fdm_session_user_expired(): bool {
     $usuario = $_SESSION['usuario'] ?? null;
     if (!is_array($usuario) || empty($usuario['id'])) {
         return false;
     }
 
-    $perfil = strtolower(trim((string)($usuario['perfil'] ?? 'administrador')));
-    if ($perfil !== 'externo') {
-        return false;
-    }
-
     $validade = trim((string)($usuario['validade'] ?? ''));
     if ($validade === '') {
-        return true;
+        return false;
     }
 
     $timezone = new DateTimeZone('America/Sao_Paulo');
@@ -189,6 +301,68 @@ function render_partial($partial, $data = []) {
     }
 
     require $partialPath;
+}
+
+// ---------- Plan limits ----------
+
+/**
+ * Returns resource limits for a given plan.
+ * -1 means unlimited.
+ */
+function fdm_plan_limits(string $plano): array {
+    return match($plano) {
+        'gratuito' => ['users' => 1, 'musicas' => 10,  'playlists' => 0],
+        'basico'   => ['users' => 1, 'musicas' => 50,  'playlists' => 1],
+        'banda'    => ['users' => -1, 'musicas' => -1, 'playlists' => -1],
+        'trial'    => ['users' => -1, 'musicas' => -1, 'playlists' => -1],
+        'ativo'    => ['users' => -1, 'musicas' => -1, 'playlists' => -1], // legado
+        default    => ['users' => 0,  'musicas' => 0,  'playlists' => 0],  // bloqueado
+    };
+}
+
+/**
+ * Checks if a resource limit has been reached for the current band.
+ * Aborts with 403 JSON if limit exceeded.
+ * $resource: 'musicas' | 'playlists' | 'users'
+ * $currentCount: current count (caller queries the DB)
+ */
+function fdm_require_plan_limit(string $resource, int $currentCount): void {
+    $plano  = $_SESSION['banda_atual']['plano'] ?? 'bloqueado';
+    $limits = fdm_plan_limits($plano);
+    $limit  = $limits[$resource] ?? 0;
+    if ($limit === -1) return; // unlimited
+    if ($currentCount >= $limit) {
+        $labels = ['musicas' => 'músicas', 'playlists' => 'playlists', 'users' => 'usuários'];
+        $label  = $labels[$resource] ?? $resource;
+        $planoLabel = match($plano) {
+            'gratuito' => 'Gratuito', 'basico' => 'Básico', default => $plano,
+        };
+        http_response_code(403);
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode([
+            'ok'       => false,
+            'sucesso'  => false,
+            'error'    => "Limite do plano {$planoLabel} atingido: máximo de {$limit} {$label}.",
+            'mensagem' => "Limite do plano {$planoLabel} atingido: máximo de {$limit} {$label}.",
+            'plano_limit' => true,
+        ]);
+        exit;
+    }
+}
+
+/**
+ * Simple session-based rate limiter.
+ * $key   — unique key per action (e.g. 'register', 'reset_senha')
+ * $limit — max attempts per $windowSeconds
+ * Returns true if limit exceeded (caller should abort).
+ */
+function fdm_rate_limit(string $key, int $limit = 5, int $windowSeconds = 300): bool {
+    $bucket = &$_SESSION["_rl_$key"];
+    if (!isset($bucket) || (time() - ($bucket['t'] ?? 0)) > $windowSeconds) {
+        $bucket = ['c' => 0, 't' => time()];
+    }
+    $bucket['c']++;
+    return $bucket['c'] > $limit;
 }
 
 send_no_cache_headers();

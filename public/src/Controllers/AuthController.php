@@ -65,17 +65,59 @@ class AuthController {
         session_regenerate_id(true);
         $_SESSION['autenticado'] = true;
         $_SESSION['usuario'] = [
-            'id' => $user['id'] ?? null,
-            'nome' => $user['nome'] ?? '',
+            'id'       => $user['id'] ?? null,
+            'nome'     => $user['nome'] ?? '',
             'username' => $user['username'] ?? '',
-            'perfil' => $user['perfil'] ?? 'administrador',
+            'perfil'   => $user['perfil'] ?? 'usuario',
             'validade' => $user['validade'] ?? '',
-            'config' => $user['config'] ?? []
+            'config'   => $user['config'] ?? [],
+            'bandas'   => $user['bandas'] ?? [],
         ];
+
+        // Resolve which band to start in
+        $bandas = $user['bandas'] ?? [];
+        $configBandaAtual = ($user['config'] ?? [])['banda_atual'] ?? null;
+
+        $bandaAtual = null;
+        if ($configBandaAtual) {
+            foreach ($bandas as $b) {
+                if ($b['id'] === $configBandaAtual) {
+                    $bandaAtual = $b;
+                    break;
+                }
+            }
+        }
+        if (!$bandaAtual && !empty($bandas)) {
+            $bandaAtual = $bandas[0];
+        }
+
+        if ($bandaAtual) {
+            // Load banda details from DB
+            $bandaRepo = new BandaRepository();
+            $bandaInfo = $bandaRepo->findById($bandaAtual['id']);
+            $_SESSION['banda_atual'] = [
+                'id'    => $bandaAtual['id'],
+                'nome'  => $bandaInfo['nome'] ?? '',
+                'perfil'=> $bandaAtual['perfil'],
+                'plano' => $bandaInfo['plano'] ?? 'ativo',
+                'trial_expira_em' => $bandaInfo['trial_expira_em'] ?? null,
+            ];
+        }
 
         $_SESSION['login_attempts'] = ['count' => 0, 'time' => time()];
 
-        $redirect = $_GET['urlcallback'] ?? 'index.php';
+        // master: single band → go directly; no bands → index
+        // normal: single band → go directly; multiple → select-banda.php
+        $redirect = $_GET['urlcallback'] ?? null;
+        if (!$redirect) {
+            $isMaster = ($user['perfil'] ?? '') === 'master';
+            if (!$isMaster && count($bandas) > 1) {
+                $redirect = '/select-banda.php';
+            } else {
+                $redirect = 'index.php';
+            }
+        }
+
         header('Location: ' . $redirect);
         exit;
     }

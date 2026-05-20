@@ -1,0 +1,15 @@
+{
+  "name": "stagebox/cifras",
+  "description": "StageBox - Cifras: multi-band rehearsal app",
+  "require": {
+    "php": ">=8.0",
+    "phpmailer/phpmailer": "^6.9"
+  },
+  "autoload": {
+    "psr-4": {}
+  },
+  "config": {
+    "optimize-autoloader": true,
+    "vendor-dir": "vendor"
+  }
+}
