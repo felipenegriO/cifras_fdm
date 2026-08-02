@@ -61,7 +61,7 @@ class AuthController {
         }
     }
 
-    private function finalizeLogin($user) {
+    public function finalizeLogin($user) {
         session_regenerate_id(true);
         $_SESSION['autenticado'] = true;
         $_SESSION['usuario'] = [
