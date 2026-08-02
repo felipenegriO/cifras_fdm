@@ -361,6 +361,7 @@ test('processa acordes, playlists e roteiros nos componentes reais da cifra', as
     const chordCases = {
       empty: chords.normalizeKey(null),
       invalid: chords.normalizeKey('H#'),
+      invalidSharpB: chords.normalizeKey('B#'),
       flat: chords.normalizeKey('dbm'),
       modes: [chords.modeOf(''), chords.modeOf('Am'), chords.modeOf('C')],
       tonics: [chords.tonicOf('Am'), chords.tonicOf('C')],
@@ -369,6 +370,8 @@ test('processa acordes, playlists e roteiros nos componentes reais da cifra', as
         chords.extractChords('<b>C &amp; G/B</b>'),
         chords.extractChords('C G Am F\nletra comum'),
         chords.extractChords('apenas C'),
+        chords.extractChords('<b></b>'),
+        chords.extractChords('<b>B# G Am F</b>'),
       ],
       keys: [
         chords.identifyKey('<b>C F G C</b>'),
@@ -383,6 +386,8 @@ test('processa acordes, playlists e roteiros nos componentes reais da cifra', as
         chords.transposeHtml('C G\nletra', 2),
         chords.transposeToKey('<b>C</b>', 'H', 'D'),
         chords.transposeToKey('<b>C</b>', 'C', 'D'),
+        chords.transposeHtml('<b>B#</b>', 2),
+        chords.transposeHtml('<b>C/B#</b>', 2),
       ],
       keysForMode: [chords.keysForMode('minor'), chords.keysForMode('major')],
     };
@@ -394,13 +399,14 @@ test('processa acordes, playlists e roteiros nos componentes reais da cifra', as
     window.songs = [
       { id: 1, nome: 'Maior', cifra: '<b>C F G C</b>' },
       { id: 2, nome: 'Menor', cifra: '<b>Am Dm Em Am</b>' },
+      { id: 3, nome: 'SemAcordes', cifra: 'letra sem nenhum acorde identificável aqui' },
     ];
     window.roteirosSalvos = [
       { id: 4, titulo: '', visivel_ate: null },
       { id: 5, titulo: 'Expirado', visivel_ate: '2000-01-01' },
     ];
     window.playlistsSalvas = [
-      { nome: 'Variações', visivel_ate: null, itens: [1, { id: 2, tom: 'D' }, { id: 99, tom: 'inválido' }] },
+      { nome: 'Variações', visivel_ate: null, itens: [1, { id: 2, tom: 'D' }, { id: 99, tom: 'inválido' }, { id: 3, tom: '' }] },
       { nome: 'Expirada', visivel_ate: '2000-01-01', itens: [] },
     ];
     renderPlaylistsMenu();
@@ -431,7 +437,7 @@ test('processa acordes, playlists e roteiros nos componentes reais da cifra', as
   expect(result.chordCases.intervals).toEqual([null, 2]);
   expect(result.chordCases.keys[0].key).toBeTruthy();
   expect(result.visibility).toEqual([true, true, false, true, true, true]);
-  expect(result.playlistLabels).toHaveLength(3);
+  expect(result.playlistLabels).toHaveLength(4);
   expect(result.roteiroCases.found).toBe(4);
   expect(result.roteiroCases.html).not.toContain('<script');
   expect(result.roteiroCases.html).not.toContain('javascript:');
@@ -841,6 +847,7 @@ test('scripts compartilhados permanecem idempotentes com controles opcionais aus
     document.dispatchEvent(new Event('DOMContentLoaded'));
     openSideMenu();
     mostrarToast('Sem elemento');
+    if (window.fdmToast) window.fdmToast('Toast sem tipo explícito');
 
     const originalFetch = window.fetch;
     const meta = document.querySelector('meta[name="csrf-token"]');
@@ -1438,4 +1445,44 @@ test('roteiros.js cobre roteirosSalvos indefinida e ausência de id na URL', asy
   expect(result.html).toContain('music.php?id=5');
   expect(result.html).not.toContain('from=roteiro');
   expect(result.html).toContain('music.php?id=3');
+});
+
+test('fdm-csrf.js resolve a URL de um objeto Request ao aplicar mutação', async ({ page }) => {
+  await page.goto('/index.php?semId=1');
+  await page.route('**/fake-mutation-endpoint', route => {
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ content_revision: 42 }) });
+  });
+  const result = await page.evaluate(async () => {
+    const calls = [];
+    window.fdmSync = window.fdmSync || {};
+    const previousApplyMutation = window.fdmSync.applyMutation;
+    window.fdmSync.applyMutation = async (url, payload, response) => {
+      calls.push({ url, payload, response });
+    };
+    if (!document.querySelector('meta[name="csrf-token"]')) {
+      const meta = document.createElement('meta');
+      meta.name = 'csrf-token';
+      meta.content = 'token-teste';
+      document.head.appendChild(meta);
+    }
+    delete window.fdmCsrfHeaders;
+    const script = document.createElement('script');
+    script.src = '/src/js/fdm-csrf.js';
+    await new Promise((resolve, reject) => {
+      script.onload = resolve;
+      script.onerror = reject;
+      document.head.appendChild(script);
+    });
+    const request = new Request(new URL('/fake-mutation-endpoint', window.location.origin).toString());
+    await window.fetch(request, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ acao: 'teste' }),
+    });
+    if (previousApplyMutation) window.fdmSync.applyMutation = previousApplyMutation;
+    return calls;
+  });
+  expect(result.length).toBeGreaterThanOrEqual(1);
+  expect(result[0].url).toContain('/fake-mutation-endpoint');
+  expect(result[0].response.content_revision).toBe(42);
 });
