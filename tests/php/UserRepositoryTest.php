@@ -55,4 +55,38 @@ final class UserRepositoryTest extends TestCase
         $repo = new UserRepository($this->tmpFile);
         self::assertNull($repo->findByUsername('felipe'));
     }
+
+    public function testFindByGoogleSubRetornaNullQuandoNaoExiste(): void
+    {
+        $repo = new UserRepository();
+        self::assertNull($repo->findByGoogleSub('sub-inexistente-xyz'));
+    }
+
+    public function testLinkGoogleSubEFindByGoogleSubEncontraUsuario(): void
+    {
+        $repo = new UserRepository();
+        $id = bin2hex(random_bytes(16));
+        $repo->save(['id' => $id, 'nome' => 'Google User', 'email' => 'googleuser-' . $id . '@example.com', 'ativo' => 1]);
+
+        $repo->linkGoogleSub($id, 'google-sub-123');
+        $found = $repo->findByGoogleSub('google-sub-123');
+
+        self::assertNotNull($found);
+        self::assertSame($id, $found['id']);
+
+        $repo->delete($id);
+    }
+
+    public function testSavePersisteGoogleSubNaCriacao(): void
+    {
+        $repo = new UserRepository();
+        $id = bin2hex(random_bytes(16));
+        $repo->save(['id' => $id, 'nome' => 'Google New', 'email' => 'googlenew-' . $id . '@example.com', 'ativo' => 1, 'google_sub' => 'google-sub-456']);
+
+        $found = $repo->findByGoogleSub('google-sub-456');
+        self::assertNotNull($found);
+        self::assertSame($id, $found['id']);
+
+        $repo->delete($id);
+    }
 }

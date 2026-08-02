@@ -44,6 +44,40 @@ class UserRepository {
         return $user;
     }
 
+    public function findByGoogleSub(string $sub): ?array {
+        $stmt = $this->pdo->prepare(
+            'SELECT u.*, ub.perfil AS banda_perfil, ub.banda_id
+             FROM usuarios u
+             LEFT JOIN usuario_banda ub ON u.id = ub.usuario_id
+             WHERE u.google_sub = ?'
+        );
+        $stmt->execute([$sub]);
+        $rows = $stmt->fetchAll();
+
+        if (empty($rows)) return null;
+
+        $user = $rows[0];
+        $user['bandas'] = [];
+        foreach ($rows as $row) {
+            if ($row['banda_id']) {
+                $user['bandas'][] = [
+                    'id'    => $row['banda_id'],
+                    'perfil'=> $row['banda_perfil'],
+                ];
+            }
+        }
+        unset($user['banda_id'], $user['banda_perfil']);
+
+        $user['senhaHash'] = $user['senha_hash'] ?? null;
+        $user['config']    = $user['config'] ? json_decode($user['config'], true) : [];
+
+        return $user;
+    }
+
+    public function linkGoogleSub(string $userId, string $sub): void {
+        $this->pdo->prepare('UPDATE usuarios SET google_sub=? WHERE id=?')->execute([$sub, $userId]);
+    }
+
     public function findById(string $id): ?array {
         $stmt = $this->pdo->prepare('SELECT * FROM usuarios WHERE id=?');
         $stmt->execute([$id]);
@@ -70,39 +104,40 @@ class UserRepository {
             : null;
 
         $senha_hash = $user['senhaHash'] ?? $user['senha_hash'] ?? null;
+        $googleSub  = $user['google_sub'] ?? null;
 
         $existing = $this->findById($user['id']);
         if ($existing) {
             $stmt = $this->pdo->prepare(
-                'UPDATE usuarios SET nome=?, username=?, email=?, senha_hash=?, perfil=?,
-                 ativo=?, validade=?, config=? WHERE id=?'
+                'UPDATE usuarios SET nome=?, email=?, senha_hash=?, perfil=?,
+                 ativo=?, validade=?, config=?, google_sub=COALESCE(?, google_sub) WHERE id=?'
             );
             $stmt->execute([
                 $user['nome'],
-                $user['username'],
                 $user['email'] ?? null,
                 $senha_hash,
                 $user['perfil'] ?? 'usuario',
                 (int)($user['ativo'] ?? 1),
                 ($user['validade'] ?? '') ?: null,
                 $config,
+                $googleSub,
                 $user['id'],
             ]);
         } else {
             $stmt = $this->pdo->prepare(
-                'INSERT INTO usuarios (id, nome, username, email, senha_hash, perfil, ativo, validade, config)
+                'INSERT INTO usuarios (id, nome, email, senha_hash, perfil, ativo, validade, config, google_sub)
                  VALUES (?,?,?,?,?,?,?,?,?)'
             );
             $stmt->execute([
                 $user['id'],
                 $user['nome'],
-                $user['username'],
                 $user['email'] ?? null,
                 $senha_hash,
                 $user['perfil'] ?? 'usuario',
                 (int)($user['ativo'] ?? 1),
                 ($user['validade'] ?? '') ?: null,
                 $config,
+                $googleSub,
             ]);
         }
 
