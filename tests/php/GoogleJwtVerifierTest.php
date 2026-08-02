@@ -113,4 +113,32 @@ final class GoogleJwtVerifierTest extends TestCase
         $this->expectException(\RuntimeException::class);
         GoogleJwtVerifier::verify('nao-e-um-jwt', 'my-client-id', fn() => $this->jwks());
     }
+
+    /** Exercises the real default fetchJwksFromGoogle() (no injected $fetchJwks). */
+    public function testUsaFetchJwksPadraoQuandoNaoInjetado(): void
+    {
+        $token = $this->makeToken($this->validPayload());
+        // No third argument: exercises the real default closure, which
+        // attempts a real HTTPS fetch to Google's JWKS endpoint. Depending on
+        // the sandbox's network reachability this either fails outright
+        // ("could not fetch keys") or succeeds but finds no key matching our
+        // test token's arbitrary "kid" ("chave pública não encontrada").
+        // Both outcomes exercise the real default closure/branch and are
+        // acceptable; the happy-path (successful fetch + matching kid) is
+        // covered indirectly by the injected-$fetchJwks tests above, which
+        // use the same decode/validation logic fetchJwksFromGoogle() also
+        // exercises.
+        try {
+            GoogleJwtVerifier::verify($token, 'my-client-id');
+            self::fail('Esperava RuntimeException (rede indisponível ou kid não encontrado).');
+        } catch (\RuntimeException $e) {
+            self::assertThat(
+                $e->getMessage(),
+                self::logicalOr(
+                    self::stringContains('Não foi possível obter as chaves públicas do Google.'),
+                    self::stringContains('Chave pública não encontrada para o kid informado.')
+                )
+            );
+        }
+    }
 }
