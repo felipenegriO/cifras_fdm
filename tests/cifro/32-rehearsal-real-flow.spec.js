@@ -328,3 +328,72 @@ test('conversão de vídeo bem-sucedida com áudio já carregado atualiza o play
   await expect(page.locator('#audioFileName')).toContainText('audio.mp3');
   await expect(page.locator('#rehearsalMessage')).toContainText('Audio loaded');
 });
+
+test('createPitchPlayer chamado diretamente sem callbacks/buffer cobre os guards defensivos', async ({ page }) => {
+  await openMusicPreview(page);
+  // Só precisamos que os módulos do modo ensaio estejam carregados (não precisa abrir o painel via UI).
+  await openRehearsalPanel(page);
+
+  const result = await page.evaluate(async () => {
+    const log = [];
+    // Sem nenhum options: onTimeUpdate/onEnded/onStatus caem nos noops padrão.
+    const p1 = window.Rehearsal.pitch.createPitchPlayer();
+    // Chamadas sem buffer carregado: todos os guards "if (!buffer) return" devem apenas retornar.
+    p1.play();
+    p1.pause();
+    p1.seek(5);
+    p1.setPitchSemitones(3);
+    log.push({ duration: p1.getDuration(), playing: p1.isPlaying(), current: p1.getCurrentTime() });
+
+    // Options parcial: só onStatus definido, onTimeUpdate/onEnded ausentes (cobre os outros ramos ternários).
+    const p2 = window.Rehearsal.pitch.createPitchPlayer({ onStatus: (msg) => log.push(['status', msg]) });
+    p2.seek(1); // sem buffer -> onTimeUpdate padrão (noop) é chamado sem erro
+    return log;
+  });
+
+  expect(result[0].duration).toBe(0);
+  expect(result[0].playing).toBe(false);
+  expect(result[0].current).toBe(0);
+});
+
+test('reproduz o áudio até o fim naturalmente cobrindo o loop de atualização e o fim de faixa (SoundTouch)', async ({ page }) => {
+  await openMusicPreview(page);
+  await openRehearsalPanel(page);
+  await page.locator('#inputAudio').setInputFiles(wavTone());
+  await expect(page.locator('#audioFileName')).toContainText('tom.wav');
+
+  await page.locator('#btnPlayPause').click();
+  await expect(page.locator('#btnPlayPause')).toHaveText('Pause');
+  // O tom de teste dura 2s; espera o loop de updateTimeLoop rodar por completo e onEnded disparar,
+  // o que devolve o botão para "Play" via updateUIFromState().
+  await expect(page.locator('#btnPlayPause')).toHaveText('Play', { timeout: 8000 });
+});
+
+// NOTA: tentamos forçar o fallback de áudio nativo (sem SoundTouch) e o terceiro operando de
+// resolveSoundTouch() (window.soundtouch em vez de window.soundtouchjs) sobrescrevendo/deletando
+// window.soundtouchjs.getWebAudioNode e window.soundtouchjs em si via page.evaluate. Ambos falham
+// silenciosamente: o bundle soundtouch.min.js exporta esse namespace com propriedades definidas via
+// Object.defineProperty (getters, sem setter, non-configurable) - confirmado via debug isolado
+// (Object.defineProperty lança "Cannot redefine property: getWebAudioNode" e `delete
+// window.soundtouchjs` retorna false silenciosamente). Como a biblioteca real sempre está disponível
+// nesse ambiente de teste, os branches de fallback (buildFallbackNode, linhas 99-112) e o terceiro
+// operando de cada OR em resolveSoundTouch (linhas 6-9, idx4) são estruturalmente inalcançáveis sem
+// truques adicionais (ex.: servir uma build alternativa da lib só para o teste), não tentado por
+// orçamento de tempo. Documentado como impedimento.
+
+test('seek durante reprodução ativa reinicia o startFrom com pitch alterado', async ({ page }) => {
+  await openMusicPreview(page);
+  await openRehearsalPanel(page);
+  await page.locator('#inputAudio').setInputFiles(wavTone());
+  await expect(page.locator('#audioFileName')).toContainText('tom.wav');
+
+  await page.locator('#btnPlayPause').click();
+  await expect(page.locator('#btnPlayPause')).toHaveText('Pause');
+  // seek() com playing=true cobre o ramo startFrom(next) dentro de seek().
+  await page.locator('#btnPlus1').click();
+  // setPitchSemitones com playing=true cobre o ramo startFrom(currentTime) dentro de setPitchSemitones().
+  await page.locator('#btnPitchUp').click();
+  await expect(page.locator('#pitchLabel')).toContainText('+1');
+  await page.locator('#btnPlayPause').click();
+  await expect(page.locator('#btnPlayPause')).toHaveText('Play');
+});
