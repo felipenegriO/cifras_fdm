@@ -1,0 +1,101 @@
+<?php
+
+use PHPUnit\Framework\TestCase;
+
+final class GoogleAuthServiceTest extends TestCase
+{
+    private function payload(array $overrides = []): array
+    {
+        return array_merge([
+            'sub' => 'google-sub-1',
+            'email' => 'user@example.com',
+            'email_verified' => true,
+            'name' => 'Google User',
+        ], $overrides);
+    }
+
+    public function testResolveOrCreateUserEncontraPorGoogleSub(): void
+    {
+        $existing = ['id' => 'u1', 'nome' => 'Existing', 'email' => 'user@example.com', 'bandas' => []];
+        $users = $this->createMock(UserRepository::class);
+        $users->method('findByGoogleSub')->with('google-sub-1')->willReturn($existing);
+        $users->expects(self::never())->method('findByEmail');
+        $users->expects(self::never())->method('save');
+
+        $bandas = $this->createMock(BandaRepository::class);
+        $service = new GoogleAuthService($users, $bandas);
+
+        $result = $service->resolveOrCreateUser($this->payload());
+        self::assertSame('u1', $result['id']);
+    }
+
+    public function testResolveOrCreateUserEncontraPorEmailELinkaGoogleSub(): void
+    {
+        $existing = ['id' => 'u2', 'nome' => 'Existing Email', 'email' => 'user@example.com', 'bandas' => []];
+        $users = $this->createMock(UserRepository::class);
+        $users->method('findByGoogleSub')->willReturn(null);
+        $users->method('findByEmail')->with('user@example.com')->willReturn($existing);
+        $users->expects(self::once())->method('linkGoogleSub')->with('u2', 'google-sub-1');
+        $users->expects(self::never())->method('save');
+
+        $bandas = $this->createMock(BandaRepository::class);
+        $service = new GoogleAuthService($users, $bandas);
+
+        $result = $service->resolveOrCreateUser($this->payload());
+        self::assertSame('u2', $result['id']);
+    }
+
+    public function testResolveOrCreateUserCriaContaEBandaQuandoNaoExiste(): void
+    {
+        $users = $this->createMock(UserRepository::class);
+        $users->method('findByGoogleSub')->willReturn(null);
+        $users->method('findByEmail')->willReturn(null);
+        $users->expects(self::once())->method('save')->with(self::callback(function ($user) {
+            return $user['email'] === 'user@example.com'
+                && $user['nome'] === 'Google User'
+                && $user['ativo'] === 1
+                && $user['google_sub'] === 'google-sub-1'
+                && count($user['bandas']) === 1
+                && $user['bandas'][0]['perfil'] === 'administrador';
+        }));
+
+        $bandas = $this->createMock(BandaRepository::class);
+        $bandas->expects(self::once())->method('save')->with(self::callback(fn($b) => $b['plano'] === 'gratuito'));
+
+        $service = new GoogleAuthService($users, $bandas);
+        $result = $service->resolveOrCreateUser($this->payload());
+
+        self::assertSame('user@example.com', $result['email']);
+        self::assertCount(1, $result['bandas']);
+    }
+
+    public function testResolveOrCreateUserRejeitaEmailNaoVerificado(): void
+    {
+        $users = $this->createMock(UserRepository::class);
+        $bandas = $this->createMock(BandaRepository::class);
+        $service = new GoogleAuthService($users, $bandas);
+
+        $this->expectException(\RuntimeException::class);
+        $service->resolveOrCreateUser($this->payload(['email_verified' => false]));
+    }
+
+    public function testExchangeCodeForIdTokenRetornaIdTokenDaResposta(): void
+    {
+        $service = new GoogleAuthService($this->createMock(UserRepository::class), $this->createMock(BandaRepository::class));
+        $token = $service->exchangeCodeForIdToken(
+            'auth-code-123',
+            'client-id',
+            'client-secret',
+            'https://cifro.online/api/auth/google/callback',
+            fn($url, $fields) => ['id_token' => 'fake-jwt-token', 'access_token' => 'x']
+        );
+        self::assertSame('fake-jwt-token', $token);
+    }
+
+    public function testExchangeCodeForIdTokenLancaExcecaoSemIdToken(): void
+    {
+        $service = new GoogleAuthService($this->createMock(UserRepository::class), $this->createMock(BandaRepository::class));
+        $this->expectException(\RuntimeException::class);
+        $service->exchangeCodeForIdToken('code', 'id', 'secret', 'uri', fn($url, $fields) => ['error' => 'invalid_grant']);
+    }
+}
