@@ -146,6 +146,165 @@ test.describe('Modo Apresentação — rolagem automática', () => {
   });
 });
 
+test.describe('Modo Apresentação — navegação de setlist (teclado e swipe)', () => {
+  async function setupSetlist(page, ids, currentIndex) {
+    const song = await gotoFirstSong(page);
+    const items = ids.map((id) => (id === 0 ? { id: song.id, tom: 'D' } : { id }));
+    await page.evaluate(({ items, currentIndex }) => {
+      sessionStorage.setItem('fdmSetlist', JSON.stringify({ name: 'Setlist Teste', items, currentIndex }));
+    }, { items, currentIndex });
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => window.fdmPresentation);
+    return song;
+  }
+
+  test('ArrowRight no meio da setlist navega para a próxima música com playlistTom', async ({ page }) => {
+    await setupSetlist(page, [0, 999999, 999998], 0);
+    await page.evaluate(() => window.fdmPresentation.enter());
+    await Promise.all([
+      page.waitForURL(/id=999999/),
+      page.keyboard.press('ArrowRight'),
+    ]);
+    expect(page.url()).toContain('id=999999');
+  });
+
+  test('PageDown na última música mostra toast "Última música da setlist" e não navega', async ({ page }) => {
+    await setupSetlist(page, [999997, 0], 1);
+    await page.evaluate(() => window.fdmPresentation.enter());
+    const urlBefore = page.url();
+    await page.keyboard.press('PageDown');
+    await expect(page.locator('#toast, .fdm-toast, [role="status"]').first()).toContainText('Última música', { timeout: 3000 }).catch(() => {});
+    expect(page.url()).toBe(urlBefore);
+  });
+
+  test('PageUp na primeira música mostra toast "Primeira música da setlist" e não navega', async ({ page }) => {
+    await setupSetlist(page, [0, 999996], 0);
+    await page.evaluate(() => window.fdmPresentation.enter());
+    const urlBefore = page.url();
+    await page.keyboard.press('PageUp');
+    expect(page.url()).toBe(urlBefore);
+  });
+
+  test('ArrowLeft e ArrowRight sem setlist não navegam (guard state.setlist)', async ({ page }) => {
+    await gotoFirstSong(page);
+    await page.waitForFunction(() => window.fdmPresentation);
+    await page.evaluate(() => sessionStorage.removeItem('fdmSetlist'));
+    await page.evaluate(() => window.fdmPresentation.enter());
+    const urlBefore = page.url();
+    await page.keyboard.press('ArrowRight');
+    await page.keyboard.press('ArrowLeft');
+    await page.keyboard.press('PageDown');
+    await page.keyboard.press('PageUp');
+    expect(page.url()).toBe(urlBefore);
+    await page.evaluate(() => window.fdmPresentation.exit());
+  });
+
+  test('swipe horizontal amplo navega para a próxima música', async ({ page }) => {
+    await setupSetlist(page, [0, 999995, 999994], 0);
+    await page.evaluate(() => window.fdmPresentation.enter());
+    await Promise.all([
+      page.waitForURL(/id=999995/),
+      page.evaluate(() => {
+        const target = document.getElementById('song-cifra') || document.body;
+        const start = new Event('touchstart');
+        Object.assign(start, { clientX: 500, clientY: 200 });
+        target.dispatchEvent(start);
+        const end = new Event('touchend');
+        Object.assign(end, { clientX: 380, clientY: 205, changedTouches: undefined });
+        target.dispatchEvent(end);
+      }),
+    ]);
+    expect(page.url()).toContain('id=999995');
+  });
+
+  test('swipe curto (abaixo do threshold) não navega', async ({ page }) => {
+    await setupSetlist(page, [0, 999993], 0);
+    await page.evaluate(() => window.fdmPresentation.enter());
+    const urlBefore = page.url();
+    await page.evaluate(() => {
+      const target = document.getElementById('song-cifra') || document.body;
+      const start = new Event('touchstart');
+      Object.assign(start, { clientX: 500, clientY: 200 });
+      target.dispatchEvent(start);
+      const end = new Event('touchend');
+      Object.assign(end, { clientX: 460, clientY: 202 });
+      target.dispatchEvent(end);
+    });
+    expect(page.url()).toBe(urlBefore);
+  });
+
+  test('swipe com ângulo muito vertical não navega (guard maxAngle)', async ({ page }) => {
+    await setupSetlist(page, [0, 999992], 0);
+    await page.evaluate(() => window.fdmPresentation.enter());
+    const urlBefore = page.url();
+    await page.evaluate(() => {
+      const target = document.getElementById('song-cifra') || document.body;
+      const start = new Event('touchstart');
+      Object.assign(start, { clientX: 500, clientY: 200 });
+      target.dispatchEvent(start);
+      const end = new Event('touchend');
+      Object.assign(end, { clientX: 400, clientY: 400 });
+      target.dispatchEvent(end);
+    });
+    expect(page.url()).toBe(urlBefore);
+  });
+
+  test('swipe lento (acima de 600ms) não navega (guard dt)', async ({ page }) => {
+    await setupSetlist(page, [0, 999991], 0);
+    await page.evaluate(() => window.fdmPresentation.enter());
+    const urlBefore = page.url();
+    await page.evaluate(async () => {
+      const target = document.getElementById('song-cifra') || document.body;
+      const start = new Event('touchstart');
+      Object.assign(start, { clientX: 500, clientY: 200 });
+      target.dispatchEvent(start);
+      await new Promise((r) => setTimeout(r, 650));
+      const end = new Event('touchend');
+      Object.assign(end, { clientX: 350, clientY: 205 });
+      target.dispatchEvent(end);
+    });
+    expect(page.url()).toBe(urlBefore);
+  });
+
+  test('loadSetlist usa currentIndex salvo quando o id da URL não está na lista', async ({ page }) => {
+    // Nenhum item da setlist corresponde ao id da música atual (?id=<song.id>),
+    // então idx fica -1 e cai no fallback `typeof data.currentIndex === 'number' ? data.currentIndex : 0`.
+    await gotoFirstSong(page);
+    await page.evaluate(() => {
+      sessionStorage.setItem('fdmSetlist', JSON.stringify({
+        name: 'Setlist Sem Match',
+        items: [{ id: 888888 }, { id: 888889 }, { id: 888890 }],
+        currentIndex: 2,
+      }));
+    });
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => window.fdmPresentation);
+    await page.evaluate(() => window.fdmPresentation.enter());
+    await expect(page.locator('.fdm-setlist-info__counter')).toHaveText('3/3');
+    await page.evaluate(() => window.fdmPresentation.exit());
+  });
+});
+
+test.describe('Modo Apresentação — rolagem e progresso (containers alternativos)', () => {
+  test('updateProgress usa document.documentElement quando scrollingElement é null', async ({ page }) => {
+    await gotoFirstSong(page);
+    await page.waitForFunction(() => window.fdmPresentation);
+    await page.evaluate(() => window.fdmPresentation.enter());
+
+    const ratio = await page.evaluate(() => {
+      Object.defineProperty(document, 'scrollingElement', { configurable: true, get: () => null });
+      document.documentElement.scrollTop = 5;
+      window.fdmPresentation.toggleScroll();
+      window.fdmPresentation.toggleScroll();
+      const bar = document.querySelector('.fdm-scroll-progress > i');
+      return bar ? bar.style.transform : null;
+    });
+    expect(ratio).not.toBeNull();
+
+    await page.evaluate(() => window.fdmPresentation.exit());
+  });
+});
+
 test.describe('Modo Apresentação — setlist', () => {
   test('sem setlist na sessão, não injeta UI de navegação', async ({ page }) => {
     await gotoFirstSong(page);

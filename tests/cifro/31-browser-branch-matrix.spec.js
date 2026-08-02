@@ -1153,6 +1153,172 @@ test('modo ensaio cobre fallbacks reais de estado, onda, youtube e pitch', async
   expect(result.pitch).toBe(-12);
 });
 
+test('modo ensaio UI cobre guards de elementos ausentes e handlers ausentes', async ({ page }) => {
+  await openPreview(page);
+  const result = await page.evaluate(async () => {
+    const load = src => new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = src;
+      script.onload = resolve;
+      script.onerror = reject;
+      document.head.appendChild(script);
+    });
+    await load('/src/js/rehearsal/rehearsal.ui.js');
+
+    // Remove todos os elementos reais de modo-ensaio da página real, para
+    // exercitar os ramos "elemento ausente" (return antecipado / guard) de
+    // cada função exportada por rehearsal.ui.js.
+    const ids = [
+      'btnAtivarEnsaio', 'modo-ensaio', 'btnAbrirYoutube', 'inputYoutubeUrl', 'btnVincularYoutube',
+      'inputAudio', 'btnInicio', 'btnMinus1', 'btnPlayPause', 'btnPlus1', 'btnLoop', 'btnSetA',
+      'btnSetB', 'btnClearAB', 'btnPitchDown', 'btnPitchUp', 'btnPitchReset', 'pitchLabel',
+      'ytThumb', 'ytTitle', 'audioFileName', 'rehearsalMessage'
+    ];
+    ids.forEach(id => { const el = document.getElementById(id); if (el) el.remove(); });
+
+    // initUI sem nenhum elemento no DOM e sem handlers: nenhum branch de
+    // binding deve ser tomado, e initUI não deve lançar.
+    const uiEmpty = window.Rehearsal.ui.initUI(undefined);
+
+    // Recria só btnAtivarEnsaio, sem #modo-ensaio, para cobrir o ramo
+    // `if (btnToggle && panel)` com panel ausente (idx1 falso).
+    const btnOnly = document.createElement('button');
+    btnOnly.id = 'btnAtivarEnsaio';
+    document.body.appendChild(btnOnly);
+    window.Rehearsal.ui.initUI({});
+    btnOnly.remove();
+
+    // Recria btnAtivarEnsaio + modo-ensaio, mas já marcado como vinculado
+    // por music.php (dataset.ensaioListenerAdded='true'), para cobrir o
+    // ramo "já vinculado" (idx0 falso de linha 32).
+    const btnToggle2 = document.createElement('button');
+    btnToggle2.id = 'btnAtivarEnsaio';
+    btnToggle2.dataset.ensaioListenerAdded = 'true';
+    const panel2 = document.createElement('section');
+    panel2.id = 'modo-ensaio';
+    document.body.appendChild(btnToggle2);
+    document.body.appendChild(panel2);
+    window.Rehearsal.ui.initUI({ onToggle: () => {} });
+    let toggleFiredAfterAlreadyBound = false;
+    btnToggle2.addEventListener('click', () => { toggleFiredAfterAlreadyBound = true; });
+    btnToggle2.click(); // não deve lançar; listener de initUI não foi re-adicionado
+    btnToggle2.remove();
+    panel2.remove();
+
+    // Recria btnAtivarEnsaio + panel do zero (sem dataset), com handlers
+    // sem onToggle, para cobrir o ramo `handlers && handlers.onToggle`
+    // falso (linha 39) e handlers totalmente ausente.
+    const btnToggle3 = document.createElement('button');
+    btnToggle3.id = 'btnAtivarEnsaio';
+    const panel3 = document.createElement('section');
+    panel3.id = 'modo-ensaio';
+    document.body.appendChild(btnToggle3);
+    document.body.appendChild(panel3);
+    window.Rehearsal.ui.initUI({}); // handlers existe mas sem onToggle
+    btnToggle3.click(); // cobre handlers && handlers.onToggle -> falso
+    btnToggle3.remove();
+    panel3.remove();
+
+    const btnToggle4 = document.createElement('button');
+    btnToggle4.id = 'btnAtivarEnsaio';
+    const panel4 = document.createElement('section');
+    panel4.id = 'modo-ensaio';
+    document.body.appendChild(btnToggle4);
+    document.body.appendChild(panel4);
+    window.Rehearsal.ui.initUI(undefined); // handlers totalmente ausente
+    btnToggle4.click(); // cobre `handlers &&` -> falso
+    btnToggle4.remove();
+    panel4.remove();
+
+    // btnAbrirYoutube presente mas sem handlers.onOpenYoutube.
+    const btnYt = document.createElement('button');
+    btnYt.id = 'btnAbrirYoutube';
+    document.body.appendChild(btnYt);
+    window.Rehearsal.ui.initUI({});
+    btnYt.remove();
+
+    // btnVincularYoutube presente sem handlers.onBindYoutube, e depois
+    // com handler mas sem inputYoutubeUrl no DOM (ternário falso).
+    const btnBind = document.createElement('button');
+    btnBind.id = 'btnVincularYoutube';
+    document.body.appendChild(btnBind);
+    window.Rehearsal.ui.initUI({});
+    btnBind.remove();
+
+    let boundValueNoInput = 'unset';
+    const btnBind2 = document.createElement('button');
+    btnBind2.id = 'btnVincularYoutube';
+    document.body.appendChild(btnBind2);
+    window.Rehearsal.ui.initUI({ onBindYoutube: v => { boundValueNoInput = v; } });
+    btnBind2.click();
+    btnBind2.remove();
+
+    // inputAudio presente sem handlers.onAudioFile, e com handler mas
+    // sem arquivo selecionado (file falsy).
+    const inputA = document.createElement('input');
+    inputA.type = 'file';
+    inputA.id = 'inputAudio';
+    document.body.appendChild(inputA);
+    window.Rehearsal.ui.initUI({});
+    inputA.remove();
+
+    let audioFileResult = 'unset';
+    const inputA2 = document.createElement('input');
+    inputA2.type = 'file';
+    inputA2.id = 'inputAudio';
+    document.body.appendChild(inputA2);
+    window.Rehearsal.ui.initUI({ onAudioFile: f => { audioFileResult = f; } });
+    inputA2.dispatchEvent(new Event('change'));
+    inputA2.remove();
+
+    // bindControl com handler ausente (btnInicio presente, sem onStart).
+    const btnInicio = document.createElement('button');
+    btnInicio.id = 'btnInicio';
+    document.body.appendChild(btnInicio);
+    window.Rehearsal.ui.initUI({});
+    btnInicio.remove();
+
+    // Setters com elemento ausente: não devem lançar.
+    window.Rehearsal.ui.setLoopActive(true);
+    window.Rehearsal.ui.setPlayState(true);
+    window.Rehearsal.ui.setPitchLabel(3);
+    window.Rehearsal.ui.setYoutubePreview({ title: 'Sem thumb' }); // thumb ausente, title truthy sem thumbUrl
+    window.Rehearsal.ui.setYoutubePreview(null); // meta ausente
+    window.Rehearsal.ui.setAudioFileName('x.mp3');
+    window.Rehearsal.ui.showMessage('msg', 'success');
+    window.Rehearsal.ui.setControlsEnabled(true);
+    window.Rehearsal.ui.setPlaybackControlsEnabled(false);
+
+    // showMessage com texto falsy (linha 133 idx1: text || "").
+    const msgEl = document.createElement('div');
+    msgEl.id = 'rehearsalMessage';
+    document.body.appendChild(msgEl);
+    window.Rehearsal.ui.showMessage('', 'success');
+    const emptyMessageText = msgEl.textContent;
+    msgEl.remove();
+
+    // setYoutubePreview com title ausente do DOM mas thumb presente com meta.
+    const thumbOnly = document.createElement('img');
+    thumbOnly.id = 'ytThumb';
+    document.body.appendChild(thumbOnly);
+    window.Rehearsal.ui.setYoutubePreview({ thumbUrl: 'a.png', title: 'T' });
+    thumbOnly.remove();
+
+    return {
+      uiEmptyOk: uiEmpty && typeof uiEmpty === 'object',
+      toggleFiredAfterAlreadyBound,
+      boundValueNoInput,
+      audioFileResult,
+      emptyMessageText
+    };
+  });
+
+  expect(result.uiEmptyOk).toBe(true);
+  expect(result.boundValueNoInput).toBe('');
+  expect(result.audioFileResult).toBeNull();
+  expect(result.emptyMessageText).toBe('');
+});
+
 test('editor e offline usam fallbacks reais quando adaptadores opcionais falham', async ({ page, context }) => {
   await page.goto('/src/backend/editor/editor.php');
   const fallback = await page.evaluate(async () => {
