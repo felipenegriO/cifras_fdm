@@ -45,6 +45,26 @@ function isGoogleOauthConfiguredInEnv() {
     .every((key) => (merged[key] ?? '').trim() !== '');
 }
 
+const envLocalPath = path.resolve(__dirname, '../../.env.local');
+
+/**
+ * Temporarily appends extra vars to the real .env.local (also used for
+ * DB_HOST etc.) so the PHP built-in server (single Playwright worker, tests
+ * run serially) picks up different env() values on the next request, then
+ * restores the original file content exactly. Never overwrites — only
+ * appends and restores.
+ */
+async function withExtraEnv(extraVars, run) {
+  const original = fs.readFileSync(envLocalPath, 'utf8');
+  const extra = Object.entries(extraVars).map(([k, v]) => `${k}=${v}`).join('\n');
+  fs.writeFileSync(envLocalPath, `${original}\n${extra}\n`);
+  try {
+    await run();
+  } finally {
+    fs.writeFileSync(envLocalPath, original);
+  }
+}
+
 test.describe('Login com Google — visibilidade do botão', () => {
   test('login.php e register.php refletem a configuração atual do servidor', async ({ page }) => {
     const configured = isGoogleOauthConfiguredInEnv();
@@ -91,5 +111,57 @@ test.describe('Login com Google — callback.php', () => {
     }).catch(err => err.response ?? null);
     const status = res ? res.status() : null;
     expect([302, 303]).toContain(status);
+  });
+
+  async function goToStartAndCaptureState(page) {
+    // Follows start.php's redirect URL (which encodes the "state" param
+    // Google would echo back) so we can round-trip the exact same state
+    // the session stored, letting the callback's isStateValid() pass.
+    const startRes = await page.request.get('/api/auth/google/start.php', { maxRedirects: 0 }).catch(err => err.response ?? null);
+    if (!startRes || ![302, 303].includes(startRes.status())) return null;
+    const location = startRes.headers()['location'] || '';
+    const match = location.match(/[?&]state=([^&]+)/);
+    return match ? decodeURIComponent(match[1]) : null;
+  }
+
+  // start.php only sets $_SESSION['google_oauth_state'] (needed for the
+  // callback's CSRF check) when google_oauth_configured() is true. This
+  // environment normally has no GOOGLE_CLIENT_ID/SECRET/REDIRECT_URI, so we
+  // temporarily provide fake-but-well-formed ones (never hitting the real
+  // Google endpoints — these tests never reach the token exchange).
+  const fakeGoogleEnv = {
+    GOOGLE_CLIENT_ID: 'playwright-fake-client-id.apps.googleusercontent.com',
+    GOOGLE_CLIENT_SECRET: 'playwright-fake-secret',
+    GOOGLE_REDIRECT_URI: 'http://localhost:8091/api/auth/google/callback.php',
+  };
+
+  test('usuário cancela o consentimento (error=access_denied) retorna erro e redireciona', async ({ page }) => {
+    await withExtraEnv(fakeGoogleEnv, async () => {
+      const state = await goToStartAndCaptureState(page);
+      expect(state).not.toBeNull();
+      const res = await page.request.get(`/api/auth/google/callback.php?state=${encodeURIComponent(state)}&error=access_denied`, {
+        maxRedirects: 0,
+      }).catch(err => err.response ?? null);
+      const status = res ? res.status() : null;
+      expect([302, 303]).toContain(status);
+      expect(res.headers()['location']).toContain('erro=google');
+    });
+  });
+
+  test('code e state válidos, mas troca real do código com o Google falha, retorna erro', async ({ page }) => {
+    await withExtraEnv(fakeGoogleEnv, async () => {
+      const state = await goToStartAndCaptureState(page);
+      expect(state).not.toBeNull();
+      const res = await page.request.get(`/api/auth/google/callback.php?state=${encodeURIComponent(state)}&code=algum-codigo-de-teste`, {
+        maxRedirects: 0,
+      }).catch(err => err.response ?? null);
+      const status = res ? res.status() : null;
+      expect([302, 303]).toContain(status);
+      // Com credenciais falsas (mas bem formadas), isConfigured() é true e o
+      // fluxo chega até exchangeCodeForIdToken(), que falha ao tentar trocar
+      // o código com o Google real — exercitando o catch(Throwable) e o
+      // redirecionamento de erro, sem nunca completar um login real.
+      expect(res.headers()['location']).toContain('erro=google');
+    });
   });
 });
