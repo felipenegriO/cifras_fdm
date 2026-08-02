@@ -36,7 +36,8 @@ CREATE TABLE IF NOT EXISTS usuarios (
   UNIQUE KEY uq_email (email)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- Google account linking
+-- Google account linking (one-time migration; re-running on an existing DB
+-- that already has this column/key errors — apply once per environment)
 ALTER TABLE usuarios ADD COLUMN google_sub VARCHAR(255) DEFAULT NULL;
 ALTER TABLE usuarios ADD UNIQUE KEY uq_google_sub (google_sub);
 
