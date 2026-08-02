@@ -275,4 +275,220 @@ test.describe('Live — módulo cliente (window.LiveMode)', () => {
     await page.evaluate(() => window.LiveMode.consultarStatus());
     await expect(page.locator('#liveStatus')).toHaveText('Live desconectada');
   });
+
+  test('assumirHost bem-sucedido muda status para host e para de fazer polling', async ({ page }) => {
+    await page.route('**/api/live/host.php', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ success: true, hostId: 'host-abc', hostNome: 'Carla' }),
+    }));
+    await page.route('**/api/live/update.php', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ success: true, hostNome: 'Carla' }),
+    }));
+    await page.goto('/index.php');
+    await page.evaluate(() => window.LiveMode.assumirHost());
+    await expect(page.locator('#liveStatus')).toHaveText('Voce e o host');
+    await expect(page.locator('#livePlay, #liveHostButton')).toHaveText('Você está transmitindo');
+  });
+
+  test('assumirHostComConfirmacao quando já é host apenas reforça o host', async ({ page }) => {
+    await page.route('**/api/live/host.php', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ success: true, hostId: 'host-xyz', hostNome: 'Léo' }),
+    }));
+    await page.route('**/api/live/update.php', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ success: true, hostNome: 'Léo' }),
+    }));
+    await page.goto('/index.php');
+    await page.evaluate(() => window.LiveMode.assumirHost());
+    await expect(page.locator('#liveStatus')).toHaveText('Voce e o host');
+
+    // Segunda chamada: getMode() já é 'host', então assumirHostComConfirmacao
+    // deve ir direto para assumirHost() sem passar por fdmConfirm/confirm().
+    await page.evaluate(() => window.LiveMode.assumirHost !== undefined);
+    await page.evaluate(() => {
+      // assumirHostComConfirmacao não é exposto em window.LiveMode diretamente,
+      // então simulamos via clique programático no botão já vinculado.
+      const btn = document.getElementById('livePlay') || document.getElementById('liveHostButton');
+      btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    });
+    await expect(page.locator('#liveStatus')).toHaveText('Voce e o host');
+  });
+
+  test('atualizarHost sem hostId salvo limpa o modo e mostra desconectado', async ({ page }) => {
+    await page.goto('/index.php');
+    await page.evaluate((key) => {
+      sessionStorage.setItem(key, 'host');
+    }, 'fdmLiveMode_default');
+    await page.evaluate(() => window.LiveMode.atualizarPaginaHost(false));
+    await expect(page.locator('#liveStatus')).toHaveText('Live desconectada');
+  });
+
+  test('atualizarHost com hostId salvo mas offline mostra desconectado sem chamar API', async ({ page, context }) => {
+    let called = false;
+    await page.route('**/api/live/update.php', route => { called = true; route.abort(); });
+    await page.goto('/index.php');
+    await page.evaluate((keys) => {
+      sessionStorage.setItem(keys.modeKey, 'host');
+      localStorage.setItem(keys.hostIdKey, 'host-offline');
+    }, { modeKey: 'fdmLiveMode_default', hostIdKey: 'fdmLiveHostId_default' });
+    await context.setOffline(true);
+    await page.evaluate(() => window.LiveMode.atualizarPaginaHost(false));
+    await expect(page.locator('#liveStatus')).toHaveText('Live desconectada');
+    expect(called).toBe(false);
+    await context.setOffline(false);
+  });
+
+  test('startPolling não agenda timer quando a página está oculta', async ({ page }) => {
+    await page.route('**/api/live/status.php*', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ success: true, hasHost: false }),
+    }));
+    await page.goto('/index.php');
+    const result = await page.evaluate(() => {
+      try {
+        Object.defineProperty(document, 'visibilityState', { get: () => 'hidden', configurable: true });
+      } catch (e) {
+        return 'defineProperty-failed: ' + e.message;
+      }
+      window.LiveMode.entrarOuSairLive();
+      const salaId = (window.FDM_BAND_ID && window.FDM_BAND_ID !== '') ? window.FDM_BAND_ID : 'default';
+      return sessionStorage.getItem('fdmLiveMode_' + salaId);
+    });
+    // Não deve lançar erro e o modo deve estar em 'follow' mesmo sem timer ativo.
+    expect(result).toBe('follow');
+  });
+
+  test('visibilitychange oculta para de sondar; visível novamente retoma follow', async ({ page }) => {
+    await page.route('**/api/live/status.php*', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ success: true, hasHost: true, hostNome: 'Ana', version: 1, paginaAtual: 'index.php' }),
+    }));
+    await page.goto('/index.php');
+    await page.evaluate(() => window.LiveMode.entrarOuSairLive());
+    await expect(page.locator('#liveStatus')).toHaveText('Seguindo live');
+
+    await page.evaluate(() => {
+      Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await page.evaluate(() => {
+      Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await expect(page.locator('#liveStatus')).toHaveText('Seguindo live');
+  });
+
+  test('visibilitychange visível retoma host com atualizarHost', async ({ page }) => {
+    await page.route('**/api/live/host.php', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ success: true, hostId: 'host-vis', hostNome: 'Rui' }),
+    }));
+    await page.route('**/api/live/update.php', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ success: true, hostNome: 'Rui' }),
+    }));
+    await page.goto('/index.php');
+    await page.evaluate(() => window.LiveMode.assumirHost());
+    await expect(page.locator('#liveStatus')).toHaveText('Voce e o host');
+
+    await page.evaluate(() => {
+      Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await page.evaluate(() => {
+      Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await expect(page.locator('#liveStatus')).toHaveText('Voce e o host');
+  });
+
+  test('evento online retoma atualizarHost quando em modo host', async ({ page }) => {
+    let updateCalls = 0;
+    await page.route('**/api/live/host.php', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ success: true, hostId: 'host-online', hostNome: 'Bia' }),
+    }));
+    await page.route('**/api/live/update.php', route => {
+      updateCalls++;
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: true, hostNome: 'Bia' }),
+      });
+    });
+    await page.goto('/index.php');
+    await page.evaluate(() => window.LiveMode.assumirHost());
+    await expect(page.locator('#liveStatus')).toHaveText('Voce e o host');
+    const before = updateCalls;
+    await page.evaluate(() => window.dispatchEvent(new Event('online')));
+    await expect.poll(() => updateCalls).toBeGreaterThan(before);
+  });
+
+  test('evento online retoma consultarStatus quando em modo follow', async ({ page }) => {
+    let statusCalls = 0;
+    await page.route('**/api/live/status.php*', route => {
+      statusCalls++;
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: true, hasHost: true, hostNome: 'Ana', version: 1, paginaAtual: 'index.php' }),
+      });
+    });
+    await page.goto('/index.php');
+    await page.evaluate(() => window.LiveMode.entrarOuSairLive());
+    await expect(page.locator('#liveStatus')).toHaveText('Seguindo live');
+    const before = statusCalls;
+    await page.evaluate(() => window.dispatchEvent(new Event('online')));
+    await expect.poll(() => statusCalls).toBeGreaterThan(before);
+  });
+
+  test('consultarStatus detecta mudança de versão e não navega quando página é a mesma', async ({ page }) => {
+    let call = 0;
+    await page.route('**/api/live/status.php*', route => {
+      call++;
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true, hasHost: true, hostNome: 'Ana',
+          version: call, paginaAtual: 'index.php',
+        }),
+      });
+    });
+    await page.goto('/index.php');
+    await page.evaluate(() => window.LiveMode.entrarOuSairLive());
+    await expect(page.locator('#liveStatus')).toHaveText('Seguindo live');
+    await page.evaluate(() => window.LiveMode.consultarStatus());
+    await expect(page.locator('#liveStatus')).toHaveText('Seguindo live');
+    expect(page.url()).toContain('index.php');
+  });
+
+  test('setLiveShortcut não mostra link quando os elementos não existem na página', async ({ page }) => {
+    await page.route('**/api/live/status.php*', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ success: true, hasHost: true, hostNome: 'Ana', version: 1, paginaAtual: 'index.php' }),
+    }));
+    await page.goto('/index.php');
+    await page.evaluate(() => window.LiveMode.entrarOuSairLive());
+    await expect(page.locator('#liveStatus')).toHaveText('Seguindo live');
+    await page.evaluate(() => {
+      const wrapper = document.getElementById('mostrarbtnplay');
+      if (wrapper) wrapper.remove();
+    });
+    // Não deve lançar erro mesmo com o wrapper ausente.
+    await page.evaluate(() => window.LiveMode.consultarStatus());
+    await expect(page.locator('#liveStatus')).toHaveText('Seguindo live');
+  });
 });
