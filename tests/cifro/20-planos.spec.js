@@ -277,6 +277,40 @@ test.describe('Plano — página', () => {
       await expect(modal.locator('#pix-whatsapp-link')).toHaveAttribute('href', /^https:\/\/wa\.me\/\d+\?text=.+/);
     });
   });
+
+  test('cards Semestral e Anual mostram link Stripe "Renovar" quando são o plano atual', async ({ page }) => {
+    await withExtraEnv({
+      STRIPE_SECRET_KEY: 'sk_test_playwright_stripe_key',
+      STRIPE_LINK_MENSAL: 'https://buy.stripe.com/test_mensal',
+      STRIPE_LINK_SEMESTRAL: 'https://buy.stripe.com/test_semestral',
+      STRIPE_LINK_ANUAL: 'https://buy.stripe.com/test_anual',
+    }, async () => {
+      for (const [plano, label] of [['semestral', 'Renovar semestral'], ['anual', 'Renovar anual']]) {
+        await withCurrentBandPlan(page, plano, async () => {
+          await page.goto('/plano.php');
+          const currentCard = page.locator('.price-card--current');
+          await expect(currentCard.locator('a.btn-upgrade')).toHaveAttribute('href', `https://buy.stripe.com/test_${plano}`);
+          await expect(currentCard.locator('a.btn-upgrade')).toContainText(label);
+        });
+      }
+    });
+  });
+
+  test('pagamento indisponível quando PIX está desabilitado e Stripe não configurado (cards próprios e alheios)', async ({ page }) => {
+    await withExtraEnv({ PAYMENT_PIX_PHONE: '', PAYMENT_WHATSAPP_PHONE: '' }, async () => {
+      for (const plano of ['mensal', 'semestral', 'anual']) {
+        await withCurrentBandPlan(page, plano, async () => {
+          await page.goto('/plano.php');
+          // Card atual: sem Stripe e sem PIX -> "Pagamento indisponível"
+          const currentCard = page.locator('.price-card--current');
+          await expect(currentCard.locator('.btn-upgrade--disabled')).toContainText('Pagamento indisponível');
+          // Cards alheios: mesma condição, mesmo rótulo
+          const disabled = page.locator('.btn-upgrade--disabled');
+          await expect(disabled).toHaveCount(3);
+        });
+      }
+    });
+  });
 });
 
 // ── Topnav badge de plano ─────────────────────────────────────────────────────
