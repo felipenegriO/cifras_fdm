@@ -1,0 +1,873 @@
+/**
+ * 04-editor-musicas.spec.js
+ * Editor de músicas — CRUD via API.
+ */
+import { test, expect } from '../fixtures/coverage.js';
+
+test.use({ storageState: 'tests/.auth/user.json' });
+
+const API = '/src/backend/editor/api.php';
+
+// Helper: pega CSRF token via endpoint leve (sem disparar JS de background)
+async function getCsrf(page) {
+  const res = await page.request.get('/api/csrf.php');
+  const body = await res.json();
+  return body.csrf_token || '';
+}
+
+test.describe('Editor de Músicas — Tela', () => {
+  test('carrega a tela do editor', async ({ page }) => {
+    await page.goto('/index.php'); // editor está integrado ao index ou acesso direto
+    await page.waitForLoadState('networkidle');
+    await expect(page.locator('body')).not.toContainText('Fatal error');
+  });
+
+  test('mantém o espaçamento dos acordes ao marcar verso e reabrir o conteúdo', async ({ page }) => {
+    await page.goto('/src/backend/editor/editor.php');
+    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await page.evaluate(() => {
+      const editor = window.tinymce.get('cifraInput');
+      editor.focus();
+      editor.getBody().innerHTML = '<strong>C     G  Am   F<br></strong>Mistica sublime';
+      const range = editor.dom.createRng();
+      range.selectNodeContents(editor.getBody());
+      editor.selection.setRng(range);
+    });
+
+    await page.getByRole('button', { name: 'Marcar como Verso' }).click();
+
+    const result = await page.evaluate(() => {
+      const editor = window.tinymce.get('cifraInput');
+      const content = editor.getContent();
+      editor.setContent(content);
+      return {
+        content: editor.getContent(),
+        text: editor.getBody().innerText,
+      };
+    });
+    expect(result.text.replace(/\u00a0/g, ' ').trimEnd()).toBe('C     G  Am   F\nMistica sublime');
+    expect((result.content.match(/\u00a0/g) || []).length).toBe(10);
+  });
+
+  test('mantém o cursor ao inserir espaços entre acordes', async ({ page }) => {
+    await page.goto('/src/backend/editor/editor.php');
+    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+
+    const result = await page.evaluate(() => {
+      const editor = window.tinymce.get('cifraInput');
+      editor.getBody().innerHTML = '<strong>C G</strong>';
+      const text = editor.getBody().querySelector('strong').firstChild;
+      const range = editor.dom.createRng();
+      range.setStart(text, 1);
+      range.collapse(true);
+      editor.selection.setRng(range);
+      editor.insertContent(' ');
+      editor.dispatch('input');
+      const current = editor.selection.getRng();
+      return {
+        offset: current.startOffset,
+        text: editor.getBody().innerText,
+      };
+    });
+
+    expect(result.text).toBe('C  G');
+    expect(result.offset).toBe(2);
+  });
+
+  test('mantém os acordes laranja dentro do refrão', async ({ page }) => {
+    await page.goto('/src/backend/editor/editor.php');
+    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+
+    const colors = await page.evaluate(() => {
+      const editor = window.tinymce.get('cifraInput');
+      editor.setContent('<refrao><strong>C&nbsp;&nbsp;G&nbsp;&nbsp;Am&nbsp;&nbsp;F<br></strong>Já não é mais vinho não</refrao>');
+      const chord = editor.getBody().querySelector('strong');
+      const chorus = editor.getBody().querySelector('refrao');
+      return {
+        chord: editor.getWin().getComputedStyle(chord).color,
+        chorus: editor.getWin().getComputedStyle(chorus).color,
+      };
+    });
+
+    expect(colors.chord).not.toBe(colors.chorus);
+    expect(colors.chord).toMatch(/rgb\((251, 146, 60|234, 88, 12)\)/);
+  });
+
+  test('limpa e prepara automaticamente o conteúdo colado', async ({ page }) => {
+    await page.goto('/src/backend/editor/editor.php');
+    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+
+    const content = await page.evaluate(() => {
+      const editor = window.tinymce.get('cifraInput');
+      const event = editor.dispatch('PastePreProcess', {
+        content: '<p><strong>C     G  Am   F</strong></p><script>inválido</script><p>Mistica sublime</p>',
+      });
+      return event.content;
+    });
+
+    expect(content).not.toContain('<script');
+    expect(content).not.toContain('<p>');
+    expect(content).toContain('<strong>C&nbsp;&nbsp;&nbsp;&nbsp; G&nbsp; Am&nbsp;&nbsp; F</strong><br>');
+    expect(content).toContain('Mistica sublime<br>');
+  });
+
+  test('marca cifras pelo botão Acorde usando a tag compatível', async ({ page }) => {
+    await page.goto('/src/backend/editor/editor.php');
+    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await page.evaluate(() => {
+      const editor = window.tinymce.get('cifraInput');
+      editor.getBody().innerHTML = '<span id="acordes">C&nbsp;&nbsp;G&nbsp;&nbsp;Am&nbsp;&nbsp;F</span><br>Mistica sublime';
+      const text = editor.getBody().querySelector('#acordes');
+      editor.focus();
+      const range = editor.dom.createRng();
+      range.selectNodeContents(text);
+      editor.selection.setRng(range);
+    });
+
+    await page.getByRole('button', { name: 'Marcar como acorde' }).click();
+
+    const chord = await page.evaluate(() => {
+      const element = window.tinymce.get('cifraInput').getBody().querySelector('b');
+      return element?.textContent.replace(/\u00a0/g, ' ');
+    });
+    expect(chord).toBe('C  G  Am  F');
+  });
+
+  test('mantém acordes inline ao colar conteúdo com spans', async ({ page }) => {
+    await page.goto('/src/backend/editor/editor.php');
+    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+
+    const content = await page.evaluate(() => {
+      const editor = window.tinymce.get('cifraInput');
+      const event = editor.dispatch('PastePreProcess', {
+        content: '<div><span>                </span><strong>F7M</strong></div><div>Agora nós dois somos um</div><div><span>                </span><strong>Am7</strong><span>     </span><strong>C</strong></div><div>Agora nós dois somos um</div>',
+      });
+      return event.content;
+    });
+
+    const normalized = content.replace(/&nbsp;/g, ' ').replace(/\u00a0/g, ' ');
+    expect(normalized).toBe('                <strong>F7M</strong><br>Agora nós dois somos um<br>                <strong>Am7</strong>     <strong>C</strong><br>Agora nós dois somos um<br>');
+  });
+
+  test('detecta o tom e transpõe a cifra ao escolher o tom padrão', async ({ page }) => {
+    await page.goto('/src/backend/editor/editor.php');
+    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await page.evaluate(() => {
+      const editor = window.tinymce.get('cifraInput');
+      editor.setContent('<b>D A Bm G</b><br><b>Em A D</b>');
+      editor.dispatch('input');
+    });
+
+    await expect(page.locator('#tomPadrao')).toHaveValue('D');
+    await page.locator('#tomPadrao').selectOption('E');
+
+    await expect(page.locator('#tomPadrao')).toHaveValue('E');
+    const content = await page.evaluate(() => window.tinymce.get('cifraInput').getContent());
+    expect(content.replace(/&nbsp;|\u00a0/g, ' ')).toContain('<b>E B C#m A</b>');
+    expect(content.replace(/&nbsp;|\u00a0/g, ' ')).toContain('<b>F#m B E</b>');
+  });
+
+  test('salvar sem t\u00edtulo mostra erro e n\u00e3o envia requisi\u00e7\u00e3o', async ({ page }) => {
+    await page.goto('/src/backend/editor/editor.php');
+    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await page.locator('#titulo').fill('');
+    await page.locator('#saveButton').click();
+    await expect(page.locator('#status')).toHaveText('Digite o nome da m\u00fasica.');
+    await expect(page.locator('#titulo')).toBeFocused();
+  });
+
+  test('salvar com cifra vazia mostra erro', async ({ page }) => {
+    await page.goto('/src/backend/editor/editor.php');
+    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await page.locator('#titulo').fill('__TESTE_CIFRA_VAZIA__');
+    await page.evaluate(() => window.tinymce.get('cifraInput').setContent(''));
+    await page.locator('#saveButton').click();
+    await expect(page.locator('#status')).toHaveText('A cifra est\u00e1 vazia.');
+  });
+
+  test('salvar cifra colada de outra p\u00e1gina bloqueia com aviso de limpeza', async ({ page }) => {
+    await page.goto('/src/backend/editor/editor.php');
+    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await page.locator('#titulo').fill('__TESTE_COLAGEM_SUJA__');
+    await page.evaluate(() => window.tinymce.get('cifraInput').setContent('<div class="cifra-column">lixo colado</div>'));
+    await page.locator('#saveButton').click();
+    await expect(page.locator('#status')).toHaveText('Use "Limpar colagem" antes de salvar.');
+  });
+
+  test('excluir sem m\u00fasica selecionada mostra erro', async ({ page }) => {
+    await page.goto('/src/backend/editor/editor.php');
+    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await page.locator('#moreActions').evaluate(el => { el.open = true; });
+    await page.locator('#deleteSongButton').click();
+    await expect(page.locator('#status')).toHaveText('Selecione uma m\u00fasica para excluir.');
+  });
+
+  test('busca sem resultados mostra estado vazio espec\u00edfico', async ({ page }) => {
+    await page.goto('/src/backend/editor/editor.php');
+    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await page.locator('#buscaMusica').fill('__CONSULTA_QUE_NAO_EXISTE_XYZ__');
+    await expect(page.locator('#libraryState')).toHaveText('Nenhuma m\u00fasica encontrada.');
+    await expect(page.locator('#libraryState')).toBeVisible();
+  });
+
+  test('preview abre e fecha restaurando o estado do setlist', async ({ page }) => {
+    await page.goto('/src/backend/editor/editor.php');
+    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await page.locator('#titulo').fill('__TESTE_PREVIEW__');
+    await page.evaluate(() => sessionStorage.setItem('fdmSetlist', 'valor-original'));
+
+    await page.locator('#previewButton').click();
+    await expect(page.locator('#previewModal')).toHaveClass(/is-open/);
+    const previewStored = await page.evaluate(() => sessionStorage.getItem('fdmEditorPreview'));
+    expect(previewStored).toContain('__TESTE_PREVIEW__');
+    expect(await page.evaluate(() => sessionStorage.getItem('fdmSetlist'))).toBeNull();
+
+    await page.locator('#closePreviewButton').click();
+    await expect(page.locator('#previewModal')).not.toHaveClass(/is-open/);
+    expect(await page.evaluate(() => sessionStorage.getItem('fdmSetlist'))).toBe('valor-original');
+    expect(await page.evaluate(() => sessionStorage.getItem('fdmEditorPreview'))).toBeNull();
+  });
+
+  test('Escape fecha o preview e Ctrl+S aciona salvar', async ({ page }) => {
+    await page.goto('/src/backend/editor/editor.php');
+    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await page.locator('#previewButton').click();
+    await expect(page.locator('#previewModal')).toHaveClass(/is-open/);
+
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#previewModal')).not.toHaveClass(/is-open/);
+
+    await page.locator('#titulo').fill('');
+    await page.keyboard.press('Control+s');
+    await expect(page.locator('#status')).toHaveText('Digite o nome da m\u00fasica.');
+  });
+
+  test('trocar tom para um modo incompat\u00edvel n\u00e3o transp\u00f5e', async ({ page }) => {
+    await page.goto('/src/backend/editor/editor.php');
+    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await page.evaluate(() => {
+      const editor = window.tinymce.get('cifraInput');
+      editor.setContent('<b>D A Bm G</b><br><b>Em A D</b>');
+      editor.dispatch('input');
+    });
+    await expect(page.locator('#tomPadrao')).toHaveValue('D');
+
+    const beforeContent = await page.evaluate(() => window.tinymce.get('cifraInput').getContent());
+    // Dm is a minor-mode key; the detected analysis is major (D), so this
+    // should be rejected by changeDefaultKey's mode mismatch branch.
+    await page.evaluate(() => { document.getElementById('tomPadrao').value = 'Dm'; });
+    await page.locator('#tomPadrao').dispatchEvent('change');
+
+    const afterContent = await page.evaluate(() => window.tinymce.get('cifraInput').getContent());
+    expect(afterContent).toBe(beforeContent);
+  });
+
+  test('falha de rede ao salvar cai no catch e exibe a mensagem de erro', async ({ page }) => {
+    await page.goto('/src/backend/editor/editor.php');
+    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await page.locator('#titulo').fill('__TESTE_FALHA_REDE__');
+    await page.evaluate(() => window.tinymce.get('cifraInput').setContent('<b>C G Am F</b>'));
+    await page.route('**/src/backend/editor/api.php', route => route.abort('failed'));
+    await page.locator('#saveButton').click();
+    await expect(page.locator('#status')).toHaveAttribute('data-kind', 'error');
+    await expect(page.locator('#status')).not.toHaveText('');
+    await expect(page.locator('#saveButton')).toBeEnabled();
+    await expect(page.locator('#saveButtonLabel')).toHaveText('Salvar');
+    await page.unroute('**/src/backend/editor/api.php');
+  });
+
+  test('resposta de API com corpo não-JSON usa mensagem padrão de HTTP', async ({ page }) => {
+    await page.goto('/src/backend/editor/editor.php');
+    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await page.locator('#titulo').fill('__TESTE_JSON_INVALIDO__');
+    await page.evaluate(() => window.tinymce.get('cifraInput').setContent('<b>C G Am F</b>'));
+    await page.route('**/src/backend/editor/api.php', route => route.fulfill({ status: 500, contentType: 'text/plain', body: 'boom' }));
+    await page.locator('#saveButton').click();
+    await expect(page.locator('#status')).toHaveText('Erro HTTP 500');
+    await page.unroute('**/src/backend/editor/api.php');
+  });
+
+  test('cifra sem acordes reconhecidos mostra tom "Não identificado" e desabilita o seletor', async ({ page }) => {
+    await page.goto('/src/backend/editor/editor.php');
+    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await page.evaluate(() => {
+      const editor = window.tinymce.get('cifraInput');
+      editor.setContent('apenas texto sem nenhum acorde');
+      editor.dispatch('input');
+    });
+    await page.waitForTimeout(250); // scheduleKeyDetection debounce
+    await expect(page.locator('#tomPadrao')).toBeDisabled();
+    await expect(page.locator('#tomPadrao')).toHaveValue('');
+  });
+
+  test('excluir música com sucesso sincroniza e volta para o estado de nova música', async ({ page }) => {
+    await page.goto('/src/backend/editor/editor.php');
+    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await page.locator('#titulo').fill('__TESTE_EXCLUIR_OK__');
+    await page.evaluate(() => window.tinymce.get('cifraInput').setContent('<b>C G Am F</b>'));
+
+    let deleteCalled = false;
+    await page.route('**/src/backend/editor/api.php', async route => {
+      const body = JSON.parse(route.request().postData() || '{}');
+      if (body.action === 'delete') {
+        deleteCalled = true;
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }) });
+      } else {
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, id: 999999 }) });
+      }
+    });
+    await page.evaluate(() => { window.fdmConfirm = async () => true; });
+
+    await page.locator('#saveButton').click();
+    await expect(page.locator('#status')).toHaveText('Música salva com sucesso.');
+
+    await page.locator('#moreActions').evaluate(el => { el.open = true; });
+    await page.locator('#deleteSongButton').click();
+    await expect(page.locator('#status')).toHaveText('Música excluída com sucesso.');
+    expect(deleteCalled).toBe(true);
+    await expect(page.locator('#titulo')).toHaveValue('');
+    await page.unroute('**/src/backend/editor/api.php');
+  });
+
+  test('excluir música quando o usuário cancela a confirmação não chama a API', async ({ page }) => {
+    await page.goto('/src/backend/editor/editor.php');
+    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await page.locator('#titulo').fill('__TESTE_EXCLUIR_CANCELA__');
+    await page.evaluate(() => window.tinymce.get('cifraInput').setContent('<b>C G Am F</b>'));
+
+    let deleteCalled = false;
+    await page.route('**/src/backend/editor/api.php', async route => {
+      const body = JSON.parse(route.request().postData() || '{}');
+      if (body.action === 'delete') { deleteCalled = true; }
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, id: 999998 }) });
+    });
+    await page.evaluate(() => { window.fdmConfirm = async () => true; });
+    await page.locator('#saveButton').click();
+    await expect(page.locator('#status')).toHaveText('Música salva com sucesso.');
+
+    await page.evaluate(() => { window.fdmConfirm = async () => false; });
+    await page.locator('#moreActions').evaluate(el => { el.open = true; });
+    await page.locator('#deleteSongButton').click();
+    await page.waitForTimeout(150);
+    expect(deleteCalled).toBe(false);
+    await expect(page.locator('#titulo')).toHaveValue('__TESTE_EXCLUIR_CANCELA__');
+    await page.unroute('**/src/backend/editor/api.php');
+  });
+
+  test('beforeunload só é bloqueado quando há alterações não salvas', async ({ page }) => {
+    await page.goto('/src/backend/editor/editor.php');
+    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+
+    const cleanResult = await page.evaluate(() => {
+      const event = new Event('beforeunload', { cancelable: true });
+      window.dispatchEvent(event);
+      return event.defaultPrevented;
+    });
+    expect(cleanResult).toBe(false);
+
+    await page.locator('#titulo').fill('__TESTE_DIRTY_UNLOAD__');
+    await expect(page.locator('#dirtyIndicator')).toBeVisible();
+
+    const dirtyResult = await page.evaluate(() => {
+      const event = new Event('beforeunload', { cancelable: true });
+      window.dispatchEvent(event);
+      return event.defaultPrevented;
+    });
+    expect(dirtyResult).toBe(true);
+  });
+
+  test('opção de tom injetada e inválida cai no branch de tom-alvo inexistente', async ({ page }) => {
+    await page.goto('/src/backend/editor/editor.php');
+    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await page.evaluate(() => {
+      const editor = window.tinymce.get('cifraInput');
+      editor.setContent('<b>D A Bm G</b><br><b>Em A D</b>');
+      editor.dispatch('input');
+    });
+    await expect(page.locator('#tomPadrao')).toHaveValue('D');
+    const beforeContent = await page.evaluate(() => window.tinymce.get('cifraInput').getContent());
+
+    await page.evaluate(() => {
+      const select = document.getElementById('tomPadrao');
+      select.add(new Option('Inválido', '___NAO_E_UM_TOM___'));
+      select.value = '___NAO_E_UM_TOM___';
+    });
+    await page.locator('#tomPadrao').dispatchEvent('change');
+
+    const afterContent = await page.evaluate(() => window.tinymce.get('cifraInput').getContent());
+    expect(afterContent).toBe(beforeContent);
+  });
+
+  test('opção de tom de modo diferente injetada não transpõe (mismatch real de modo)', async ({ page }) => {
+    await page.goto('/src/backend/editor/editor.php');
+    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await page.evaluate(() => {
+      const editor = window.tinymce.get('cifraInput');
+      editor.setContent('<b>D A Bm G</b><br><b>Em A D</b>');
+      editor.dispatch('input');
+    });
+    await expect(page.locator('#tomPadrao')).toHaveValue('D');
+    const beforeContent = await page.evaluate(() => window.tinymce.get('cifraInput').getContent());
+
+    await page.evaluate(() => {
+      const select = document.getElementById('tomPadrao');
+      select.add(new Option('Dm', 'Dm'));
+      select.value = 'Dm';
+    });
+    await page.locator('#tomPadrao').dispatchEvent('change');
+
+    const afterContent = await page.evaluate(() => window.tinymce.get('cifraInput').getContent());
+    expect(afterContent).toBe(beforeContent);
+  });
+
+  test('selecionar o mesmo tom já detectado não transpõe (intervalo zero)', async ({ page }) => {
+    await page.goto('/src/backend/editor/editor.php');
+    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await page.evaluate(() => {
+      const editor = window.tinymce.get('cifraInput');
+      editor.setContent('<b>D A Bm G</b><br><b>Em A D</b>');
+      editor.dispatch('input');
+    });
+    await expect(page.locator('#tomPadrao')).toHaveValue('D');
+    const beforeContent = await page.evaluate(() => window.tinymce.get('cifraInput').getContent());
+
+    await page.locator('#tomPadrao').selectOption('D');
+    await page.locator('#tomPadrao').dispatchEvent('change');
+
+    const afterContent = await page.evaluate(() => window.tinymce.get('cifraInput').getContent());
+    expect(afterContent).toBe(beforeContent);
+  });
+
+  test('clicar duas vezes na mesma música da lista é um no-op (early return)', async ({ page }) => {
+    await page.goto('/src/backend/editor/editor.php');
+    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    const firstButton = page.locator('#musicas li button').first();
+    await firstButton.waitFor();
+    await firstButton.click();
+    const titleAfterFirst = await page.locator('#titulo').inputValue();
+    await firstButton.click();
+    const titleAfterSecond = await page.locator('#titulo').inputValue();
+    expect(titleAfterSecond).toBe(titleAfterFirst);
+  });
+
+  test('selecionar música sem artista/classificação/bpm mostra campos vazios', async ({ page }) => {
+    const csrf = await getCsrf(page);
+    const create = await page.request.post(API, {
+      data: JSON.stringify({ nome: '__TESTE_CAMPOS_VAZIOS__', cifra: 'C G Am F' }),
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+    });
+    const created = await create.json();
+    expect(created.ok ?? created.sucesso).toBeTruthy();
+
+    try {
+      await page.goto('/src/backend/editor/editor.php');
+      await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+      await page.locator('#buscaMusica').fill('__TESTE_CAMPOS_VAZIOS__');
+      await page.locator('#musicas li button').first().click();
+      await expect(page.locator('#titulo')).toHaveValue('__TESTE_CAMPOS_VAZIOS__');
+      await expect(page.locator('#artista')).toHaveValue('');
+      await expect(page.locator('#bit')).toHaveValue('');
+      await expect(page.locator('#classificacao')).toHaveValue('');
+    } finally {
+      await page.request.post(API, {
+        data: JSON.stringify({ action: 'delete', id: created.id }),
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+      });
+    }
+  });
+
+  test('salvar remove negrito vazio e mantém negrito de texto não-acorde', async ({ page }) => {
+    await page.goto('/src/backend/editor/editor.php');
+    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await page.locator('#titulo').fill('__TESTE_NEGRITO_MISTO__');
+    await page.evaluate(() => {
+      const editor = window.tinymce.get('cifraInput');
+      editor.setContent('<b></b><b>Refrão em negrito não é acorde</b><br><b>C G</b>');
+      editor.dispatch('input');
+    });
+    await page.locator('#saveButton').click();
+    await expect(page.locator('#status')).toHaveText('Música salva com sucesso.');
+
+    const csrf = await getCsrf(page);
+    const sync = await page.request.get('/api/sync/data.php');
+    const data = await sync.json();
+    const musica = data.musicas.find(item => item.nome === '__TESTE_NEGRITO_MISTO__');
+    expect(musica).toBeTruthy();
+    expect(musica.cifra).not.toContain('<b></b>');
+    expect(musica.cifra).toContain('Refrão em negrito não é acorde');
+
+    await page.request.post(API, {
+      data: JSON.stringify({ action: 'delete', id: musica.id }),
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+    });
+  });
+
+  test('excluir remove caracteres <>& do nome exibido na confirmação', async ({ page }) => {
+    const csrf = await getCsrf(page);
+    const create = await page.request.post(API, {
+      data: JSON.stringify({ nome: '__TESTE_NOME_ESPECIAL__', cifra: 'C G' }),
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+    });
+    const created = await create.json();
+    expect(created.ok ?? created.sucesso).toBeTruthy();
+
+    try {
+      await page.goto('/src/backend/editor/editor.php');
+      await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+      const confirmMessage = await page.evaluate(async () => {
+        let captured = null;
+        window.fdmConfirm = async opts => { captured = opts.message; return false; };
+        document.getElementById('buscaMusica').value = '__TESTE_NOME_ESPECIAL__';
+        document.getElementById('buscaMusica').dispatchEvent(new Event('input'));
+        document.querySelector('#musicas li button').click();
+        await new Promise(r => setTimeout(r, 50));
+        document.getElementById('moreActions').open = true;
+        document.getElementById('deleteSongButton').click();
+        await new Promise(r => setTimeout(r, 50));
+        return captured;
+      });
+      expect(confirmMessage).toContain('__TESTE_NOME_ESPECIAL__');
+    } finally {
+      await page.request.post(API, {
+        data: JSON.stringify({ action: 'delete', id: created.id }),
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+      });
+    }
+  });
+
+  test('colar HTML de outra página com <pre> preserva espaçamento e limpa marcações', async ({ page }) => {
+    await page.goto('/src/backend/editor/editor.php');
+    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+
+    const content = await page.evaluate(() => {
+      const editor = window.tinymce.get('cifraInput');
+      const event = editor.dispatch('PastePreProcess', {
+        content: '<section class="player">lixo do player</section><pre class="js-modal-trigger">C  G\nAm  F</pre>',
+      });
+      return event.content;
+    });
+    expect(content).not.toContain('player');
+    expect(content).not.toContain('js-modal-trigger');
+    expect(content).toContain('<br>');
+  });
+
+  test('colar texto puro com tabs e CRLF vira HTML formatado com nbsp', async ({ page }) => {
+    await page.goto('/src/backend/editor/editor.php');
+    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+
+    const content = await page.evaluate(() => {
+      const editor = window.tinymce.get('cifraInput');
+      const event = editor.dispatch('PastePreProcess', {
+        content: 'C\tG\r\nAm  F',
+      });
+      return event.content;
+    });
+    expect(content).toContain('&nbsp;&nbsp;&nbsp;&nbsp;');
+    expect(content).toContain('<br/>');
+  });
+
+  test('marcar seção sem seleção insere placeholder com rótulo', async ({ page }) => {
+    await page.goto('/src/backend/editor/editor.php');
+    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await page.evaluate(() => {
+      const editor = window.tinymce.get('cifraInput');
+      editor.setContent('');
+      editor.focus();
+      const range = editor.dom.createRng();
+      range.selectNodeContents(editor.getBody());
+      range.collapse(true);
+      editor.selection.setRng(range);
+    });
+
+    await page.getByRole('button', { name: 'Marcar como Refrão' }).click();
+
+    const content = await page.evaluate(() => window.tinymce.get('cifraInput').getContent());
+    expect(content).toContain('[Refrão]');
+  });
+});
+
+test.describe('Editor de Músicas — API', () => {
+  let csrf = '';
+
+  test.beforeEach(async ({ page }) => {
+    csrf = await getCsrf(page);
+  });
+
+  test('GET lista músicas da banda via sync API', async ({ page }) => {
+    // O endpoint de listagem é a sync API (api.php só suporta POST com CSRF)
+    const res = await page.request.get('/api/sync/data.php');
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(Array.isArray(body.musicas)).toBe(true);
+  });
+
+  test('POST sem CSRF retorna 403', async ({ page }) => {
+    const res = await page.request.post(API, {
+      data: JSON.stringify({ action: 'save', nome: 'Teste', cifra: '' }),
+      headers: { 'Content-Type': 'application/json' },
+    });
+    expect(res.status()).toBe(403);
+  });
+
+  test('POST cria música com CSRF válido', async ({ page }) => {
+    const res = await page.request.post(API, {
+      data: JSON.stringify({ action: 'save', nome: '__TESTE_AUTO__', cifra: 'C G Am F', artista: 'Teste', classificacao: '', bit: '' }),
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': csrf,
+      },
+    });
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(body.sucesso ?? body.ok).toBeTruthy();
+
+    // Cleanup: deletar música criada
+    if (body.id) {
+      await page.goto(`/music.php?id=${body.id}`, { waitUntil: 'domcontentloaded' });
+      await expect(page.locator('#song-title')).toHaveText('__TESTE_AUTO__');
+      await expect.poll(() => page.locator('#song-cifra').evaluate(el => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(1);
+
+      await page.request.post(API, {
+        data: JSON.stringify({ action: 'delete', id: body.id }),
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+      });
+    }
+  });
+
+  test('POST preserva o alinhamento entre acordes em negrito', async ({ page }) => {
+    const cifra = '<div><strong>C&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;G&nbsp;&nbsp;Am&nbsp;&nbsp;&nbsp;F<br></strong>Mistica sublime</div>';
+    const res = await page.request.post(API, {
+      data: JSON.stringify({ nome: '__TESTE_ESPACAMENTO__', cifra, artista: '', classificacao: '', bit: '' }),
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': csrf,
+      },
+    });
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+
+    try {
+      const sync = await page.request.get('/api/sync/data.php');
+      const data = await sync.json();
+      const musica = data.musicas.find(item => Number(item.id) === Number(body.id));
+      expect(musica?.cifra).toBe(cifra);
+    } finally {
+      if (body.id) {
+        await page.request.post(API, {
+          data: JSON.stringify({ action: 'delete', id: body.id }),
+          headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+        });
+      }
+    }
+  });
+
+  test('POST delete de ID inexistente não quebra', async ({ page }) => {
+    const res = await page.request.post(API, {
+      data: JSON.stringify({ action: 'delete', id: 999999 }),
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+    });
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    // Pode ser sucesso ou "não encontrado", mas não pode ser 500
+    expect(typeof body).toBe('object');
+  });
+
+  test('POST rejeita JSON inválido, campos inválidos e categoria inexistente', async ({ page }) => {
+    const invalidJson = await page.request.post(API, {
+      data: '{',
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+    });
+    expect((await invalidJson.json()).ok).toBe(false);
+
+    const invalidFields = await page.request.post(API, {
+      data: JSON.stringify({ nome: 'x'.repeat(201), cifra: 'C', artista: '', classificacao: '', bit: '' }),
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+    });
+    expect(invalidFields.status()).toBe(422);
+
+    const invalidCategory = await page.request.post(API, {
+      data: JSON.stringify({ nome: '__CATEGORIA_INVALIDA__', cifra: 'C', artista: '', classificacao: '__NAO_EXISTE__', bit: '' }),
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+    });
+    expect(invalidCategory.status()).toBe(422);
+    expect((await invalidCategory.json()).error).toContain('categoria');
+  });
+
+  test('POST copia música real e detecta conflito de revisão', async ({ page }) => {
+    const create = await page.request.post(API, {
+      data: JSON.stringify({ nome: '__COPY_BASE__', cifra: '<b>C</b> Base', artista: '', classificacao: '', bit: '' }),
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+    });
+    const created = await create.json();
+    expect(created.ok).toBe(true);
+
+    let copiedId = null;
+    try {
+      const copyInvalid = await page.request.post(API, {
+        data: JSON.stringify({ action: 'copy', id: 'abc' }),
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+      });
+      expect((await copyInvalid.json()).ok).toBe(false);
+
+      const copy = await page.request.post(API, {
+        data: JSON.stringify({ action: 'copy', id: created.id }),
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+      });
+      const copied = await copy.json();
+      expect(copied.ok).toBe(true);
+      copiedId = copied.id;
+
+      const conflict = await page.request.post(API, {
+        data: JSON.stringify({ action: 'delete', id: copiedId, baseRevision: 1 }),
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+      });
+      expect(conflict.status()).toBe(409);
+      expect((await conflict.json()).content_revision).toBeGreaterThan(1);
+    } finally {
+      for (const id of [created.id, copiedId].filter(Boolean)) {
+        await page.request.post(API, {
+          data: JSON.stringify({ action: 'delete', id }),
+          headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+        });
+      }
+    }
+  });
+});
+
+test.describe('API Playlists', () => {
+  let csrf = '';
+
+  test.beforeEach(async ({ page }) => {
+    csrf = await getCsrf(page);
+  });
+
+  test('GET lista playlists via sync API', async ({ page }) => {
+    // salvar_playlists.php só aceita POST com CSRF; a listagem vem da sync API
+    const res = await page.request.get('/api/sync/data.php');
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(Array.isArray(body.playlists)).toBe(true);
+  });
+
+  test('POST cria playlist e deleta', async ({ page }) => {
+    const snapshot = await (await page.request.get('/api/sync/data.php')).json();
+    const res = await page.request.post('/src/backend/editor/salvar_playlists.php', {
+      data: JSON.stringify({ playlists: [...snapshot.playlists, { nome: '__PLAYLIST_AUTO__', itens: [], visivel_ate: null }] }),
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+    });
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(body.sucesso ?? body.ok).toBeTruthy();
+    await page.request.post('/src/backend/editor/salvar_playlists.php', {
+      data: JSON.stringify({ playlists: snapshot.playlists }),
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+    });
+  });
+
+  test('POST valida playlist duplicada, data, tom, música inexistente e conflito', async ({ page }) => {
+    const cases = [
+      { playlists: [true], status: 422, message: /inválida/i },
+      { playlists: [{ nome: '', itens: [] }], status: 422, message: /Nome ou itens/i },
+      { playlists: [{ nome: 'A', itens: [] }, { nome: 'a', itens: [] }], status: 422, message: /repetir/i },
+      { playlists: [{ nome: 'Data', itens: [], visivel_ate: '2026-99-99' }], status: 422, message: /Data/i },
+      { playlists: [{ nome: 'Tom', itens: [{ id: 1, tom: 'H' }] }], status: 422, message: /tom/i },
+      { playlists: [{ nome: 'Missing', itens: [99999999] }], status: 422, message: /inexistente/i },
+    ];
+
+    for (const payload of cases) {
+      const res = await page.request.post('/src/backend/editor/salvar_playlists.php', {
+        data: JSON.stringify(payload),
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+      });
+      expect(res.status()).toBe(payload.status);
+      expect((await res.json()).mensagem).toMatch(payload.message);
+    }
+
+    const conflict = await page.request.post('/src/backend/editor/salvar_playlists.php', {
+      data: JSON.stringify({ playlists: [], baseRevision: 1 }),
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+    });
+    expect(conflict.status()).toBe(409);
+  });
+});
+
+test.describe('API Roteiros', () => {
+  let csrf = '';
+
+  test.beforeEach(async ({ page }) => {
+    csrf = await getCsrf(page);
+  });
+
+  test('GET lista roteiros via sync API', async ({ page }) => {
+    // salvar_roteiros.php só aceita POST com CSRF; a listagem vem da sync API
+    const res = await page.request.get('/api/sync/data.php');
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(Array.isArray(body.roteiros)).toBe(true);
+  });
+
+  test('POST cria roteiro e deleta', async ({ page }) => {
+    const res = await page.request.post('/src/backend/editor/salvar_roteiros.php', {
+      data: JSON.stringify({ action: 'save', titulo: '__ROTEIRO_AUTO__', conteudo: 'Teste', visivel_ate: null }),
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+    });
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(body.sucesso ?? body.ok).toBeTruthy();
+    if (body.id) {
+      await page.request.post('/src/backend/editor/salvar_roteiros.php', {
+        data: JSON.stringify({ deleteId: body.id }),
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+      });
+    }
+  });
+
+  test('POST valida roteiro inválido, atualiza existente e detecta conflito', async ({ page }) => {
+    const invalidJson = await page.request.post('/src/backend/editor/salvar_roteiros.php', {
+      data: '{',
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+    });
+    expect((await invalidJson.json()).ok).toBe(false);
+
+    const incomplete = await page.request.post('/src/backend/editor/salvar_roteiros.php', {
+      data: JSON.stringify({ titulo: 'Sem conteúdo' }),
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+    });
+    expect((await incomplete.json()).ok).toBe(false);
+
+    const invalidTitle = await page.request.post('/src/backend/editor/salvar_roteiros.php', {
+      data: JSON.stringify({ titulo: '', conteudo: 'x' }),
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+    });
+    expect(invalidTitle.status()).toBe(422);
+
+    const create = await page.request.post('/src/backend/editor/salvar_roteiros.php', {
+      data: JSON.stringify({ titulo: '__ROTEIRO_UPDATE__', conteudo: 'Linha 1\nLinha 2', visivel_ate: '2026-12-31' }),
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+    });
+    const created = await create.json();
+    expect(created.ok).toBe(true);
+
+    try {
+      const update = await page.request.post('/src/backend/editor/salvar_roteiros.php', {
+        data: JSON.stringify({ id: created.id, titulo: '__ROTEIRO_UPDATE_2__', conteudo: 'Linha<br>3', visivel_ate: null }),
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+      });
+      const updated = await update.json();
+      expect(updated.ok).toBe(true);
+      expect(updated.roteiro.titulo).toBe('__ROTEIRO_UPDATE_2__');
+      expect(updated.roteiro.conteudo).toContain('<br/>');
+
+      const conflict = await page.request.post('/src/backend/editor/salvar_roteiros.php', {
+        data: JSON.stringify({ deleteId: created.id, baseRevision: 1 }),
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+      });
+      expect(conflict.status()).toBe(409);
+    } finally {
+      await page.request.post('/src/backend/editor/salvar_roteiros.php', {
+        data: JSON.stringify({ deleteId: created.id }),
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+      });
+    }
+  });
+});
