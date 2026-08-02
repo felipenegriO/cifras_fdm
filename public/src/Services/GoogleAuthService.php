@@ -69,6 +69,15 @@ class GoogleAuthService
         $bandaId = bin2hex(random_bytes(16));
         $bandaNome = $name !== '' ? $name . "'s Band" : 'Minha Banda';
 
+        // Band must exist before the user is linked to it via usuario_banda's FK.
+        $this->bandas->save([
+            'id' => $bandaId,
+            'nome' => $bandaNome,
+            'ativo' => 1,
+            'plano' => 'gratuito',
+            'trial_expira_em' => null,
+        ]);
+
         $this->users->save([
             'id' => $userId,
             'nome' => $name !== '' ? $name : $email,
@@ -79,14 +88,6 @@ class GoogleAuthService
             'validade' => null,
             'google_sub' => $sub,
             'bandas' => [['id' => $bandaId, 'perfil' => 'administrador']],
-        ]);
-
-        $this->bandas->save([
-            'id' => $bandaId,
-            'nome' => $bandaNome,
-            'ativo' => 1,
-            'plano' => 'gratuito',
-            'trial_expira_em' => null,
         ]);
 
         return [

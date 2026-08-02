@@ -5,17 +5,66 @@
  * (impossible to script the real consent screen in CI); this covers the
  * parts our own code controls: state CSRF check and config-missing guard.
  */
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { test, expect } from '../fixtures/coverage.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+/**
+ * Mirrors bootstrap.php's google_oauth_configured(): the button only renders
+ * when GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and GOOGLE_REDIRECT_URI are all
+ * non-empty. Reads the same .env/.env.local files the PHP app loads so this
+ * test's expectation always matches whatever this environment is actually
+ * configured with, instead of hardcoding presence/absence.
+ */
+function readEnvFile(file) {
+  const values = {};
+  if (!fs.existsSync(file)) return values;
+  for (const line of fs.readFileSync(file, 'utf8').split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const idx = trimmed.indexOf('=');
+    if (idx === -1) continue;
+    const key = trimmed.slice(0, idx).trim();
+    let value = trimmed.slice(idx + 1).trim();
+    if (value.startsWith('"') || value.startsWith("'")) value = value.slice(1, -1);
+    values[key] = value;
+  }
+  return values;
+}
+
+function isGoogleOauthConfiguredInEnv() {
+  const repoRoot = path.resolve(__dirname, '../..');
+  const merged = {
+    ...readEnvFile(path.join(repoRoot, '.env')),
+    ...readEnvFile(path.join(repoRoot, '.env.local')),
+  };
+  return ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'GOOGLE_REDIRECT_URI']
+    .every((key) => (merged[key] ?? '').trim() !== '');
+}
 
 test.describe('Login com Google — visibilidade do botão', () => {
   test('login.php e register.php refletem a configuração atual do servidor', async ({ page }) => {
+    const configured = isGoogleOauthConfiguredInEnv();
+    const googleButton = 'a[href="/api/auth/google/start.php"]';
+
     const loginRes = await page.goto('/login.php');
     expect(loginRes.status()).toBe(200);
+    if (configured) {
+      await expect(page.locator(googleButton)).toBeVisible();
+    } else {
+      await expect(page.locator(googleButton)).toHaveCount(0);
+    }
+
     const registerRes = await page.goto('/register.php');
     expect(registerRes.status()).toBe(200);
-    // Botão só aparece se GOOGLE_CLIENT_ID estiver configurado no ambiente
-    // de teste; ambos os casos (presente/ausente) são válidos, então esta
-    // suíte apenas garante que a página carrega sem erro fatal com o bloco novo.
+    if (configured) {
+      await expect(page.locator(googleButton)).toBeVisible();
+    } else {
+      await expect(page.locator(googleButton)).toHaveCount(0);
+    }
   });
 });
 

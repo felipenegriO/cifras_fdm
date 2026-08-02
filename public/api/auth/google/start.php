@@ -4,7 +4,7 @@ require_once __DIR__ . '/../../../src/backend/bootstrap.php';
 $clientId = trim((string) env('GOOGLE_CLIENT_ID', ''));
 $redirectUri = trim((string) env('GOOGLE_REDIRECT_URI', ''));
 
-if ($clientId === '' || $redirectUri === '') {
+if (!google_oauth_configured()) {
     http_response_code(500);
     echo 'Login com Google não está configurado.';
     exit;

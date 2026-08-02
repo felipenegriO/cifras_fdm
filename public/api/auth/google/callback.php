@@ -15,6 +15,12 @@ if ($expectedState === '' || !is_string($receivedState) || !hash_equals($expecte
     googleLoginFailed('state mismatch');
 }
 
+if (!empty($_GET['error'])) {
+    error_log('[google-auth] user cancelled: ' . $_GET['error']);
+    header('Location: /login.php?erro=google');
+    exit;
+}
+
 $code = $_GET['code'] ?? '';
 if (!is_string($code) || $code === '') {
     googleLoginFailed('missing code');

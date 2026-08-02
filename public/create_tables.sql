@@ -37,8 +37,8 @@ CREATE TABLE IF NOT EXISTS usuarios (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Google account linking
-ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS google_sub VARCHAR(255) DEFAULT NULL;
-ALTER TABLE usuarios ADD UNIQUE KEY IF NOT EXISTS uq_google_sub (google_sub);
+ALTER TABLE usuarios ADD COLUMN google_sub VARCHAR(255) DEFAULT NULL;
+ALTER TABLE usuarios ADD UNIQUE KEY uq_google_sub (google_sub);
 
 -- Vínculo usuário ↔ banda
 CREATE TABLE IF NOT EXISTS usuario_banda (

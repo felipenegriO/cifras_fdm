@@ -41,7 +41,7 @@ if (session_status() === PHP_SESSION_NONE) {
         'domain'   => '',
         'secure'   => $isHttps,
         'httponly' => true,
-        'samesite' => 'Strict',
+        'samesite' => 'Lax',
     ]);
 }
 
@@ -77,6 +77,13 @@ function csrf_token() {
 
 function csrf_meta() {
     echo '<meta name="csrf-token" content="' . htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8') . '">';
+}
+
+/** True when all three Google OAuth env vars are set, so the flow can run end-to-end. */
+function google_oauth_configured(): bool {
+    return trim((string) env('GOOGLE_CLIENT_ID', '')) !== ''
+        && trim((string) env('GOOGLE_CLIENT_SECRET', '')) !== ''
+        && trim((string) env('GOOGLE_REDIRECT_URI', '')) !== '';
 }
 
 function require_auth_json() {
