@@ -305,6 +305,100 @@ test.describe('Modo Apresentação — rolagem e progresso (containers alternati
   });
 });
 
+test.describe('Modo Apresentação — ramos residuais de cobertura', () => {
+  test('loadSetlist sem currentIndex e sem id correspondente cai no fallback 0 (não NaN)', async ({ page }) => {
+    // id da URL não bate com nenhum item da setlist (idx = -1) e a setlist
+    // não tem `currentIndex`, então `typeof data.currentIndex === 'number'`
+    // é falso e o fallback final `: 0` é usado (não o próprio currentIndex).
+    await gotoFirstSong(page);
+    await page.evaluate(() => {
+      sessionStorage.setItem('fdmSetlist', JSON.stringify({
+        name: 'Setlist Sem currentIndex',
+        items: [{ id: 777001 }, { id: 777002 }],
+      }));
+    });
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => window.fdmPresentation);
+    await page.evaluate(() => window.fdmPresentation.enter());
+    await expect(page.locator('.fdm-setlist-info__counter')).toHaveText('1/2');
+    await page.evaluate(() => window.fdmPresentation.exit());
+    await page.evaluate(() => sessionStorage.removeItem('fdmSetlist'));
+  });
+
+  test('navegar para item de setlist sem tom não inclui playlistTom na URL', async ({ page }) => {
+    const song = await gotoFirstSong(page);
+    await page.evaluate((id) => {
+      sessionStorage.setItem('fdmSetlist', JSON.stringify({
+        name: 'Setlist Sem Tom',
+        items: [{ id }, { id: 777003 }],
+        currentIndex: 0,
+      }));
+    }, song.id);
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => window.fdmPresentation);
+    await page.evaluate(() => window.fdmPresentation.enter());
+    await Promise.all([
+      page.waitForURL(/id=777003/),
+      page.keyboard.press('ArrowRight'),
+    ]);
+    expect(page.url()).toContain('id=777003');
+    expect(page.url()).not.toContain('playlistTom');
+  });
+
+  test('enter sem suporte a requestFullscreen não quebra (guard ausência da API)', async ({ page }) => {
+    await gotoFirstSong(page);
+    await page.waitForFunction(() => window.fdmPresentation);
+    await page.evaluate(() => { delete document.documentElement.requestFullscreen; });
+    await page.evaluate(() => window.fdmPresentation.enter());
+    await expect(page.locator('body')).toHaveClass(/fdm-presenting/);
+    await page.evaluate(() => window.fdmPresentation.exit());
+  });
+
+  test('exit com fullscreenElement ativo chama exitFullscreen', async ({ page }) => {
+    await gotoFirstSong(page);
+    await page.waitForFunction(() => window.fdmPresentation);
+    await page.evaluate(() => window.fdmPresentation.enter());
+
+    const exitCalled = await page.evaluate(() => {
+      let called = false;
+      Object.defineProperty(document, 'fullscreenElement', { configurable: true, get: () => document.body });
+      document.exitFullscreen = () => { called = true; return Promise.resolve(); };
+      window.fdmPresentation.exit();
+      return called;
+    });
+    expect(exitCalled).toBe(true);
+  });
+
+  test('attachSwipe usa document.body quando #song-cifra não existe', async ({ page }) => {
+    const song = await gotoFirstSong(page);
+    await page.evaluate((id) => {
+      sessionStorage.setItem('fdmSetlist', JSON.stringify({
+        name: 'Setlist Sem Cifra',
+        items: [{ id }, { id: 777004 }],
+        currentIndex: 0,
+      }));
+    }, song.id);
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => window.fdmPresentation);
+    await page.evaluate(() => { const el = document.getElementById('song-cifra'); if (el) el.remove(); });
+    await page.evaluate(() => window.fdmPresentation.enter());
+
+    await Promise.all([
+      page.waitForURL(/id=777004/),
+      page.evaluate(() => {
+        const target = document.body;
+        const start = new Event('touchstart');
+        Object.assign(start, { clientX: 500, clientY: 200 });
+        target.dispatchEvent(start);
+        const end = new Event('touchend');
+        Object.assign(end, { clientX: 380, clientY: 205 });
+        target.dispatchEvent(end);
+      }),
+    ]);
+    expect(page.url()).toContain('id=777004');
+  });
+});
+
 test.describe('Modo Apresentação — setlist', () => {
   test('sem setlist na sessão, não injeta UI de navegação', async ({ page }) => {
     await gotoFirstSong(page);
