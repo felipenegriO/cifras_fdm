@@ -25,24 +25,38 @@ test('script.js — guards de elementos ausentes, clique fora fechando o menu e 
   await openPreview(page);
   const result = await page.evaluate(() => {
     // openSideMenu sem window.renderPlaylistsMenu definido (idx falso).
-    delete window.renderPlaylistsMenu;
+    // `window.renderPlaylistsMenu = renderPlaylistsMenu` em playlists.js
+    // reaproveita a mesma propriedade criada pela declaração `function
+    // renderPlaylistsMenu() {}` no topo do arquivo — declarações de função
+    // no escopo global criam propriedades NÃO configuráveis em `window`,
+    // então `delete window.renderPlaylistsMenu` é um no-op silencioso (não
+    // lança, mas também não remove nada), e nem Object.defineProperty
+    // consegue redefinir a propriedade ("Cannot redefine property"). Como
+    // ela É writable, uma atribuição simples para um valor não-função já
+    // derruba o `typeof ... === 'function'` para false.
+    window.renderPlaylistsMenu = undefined;
     let threw = false;
     try { openSideMenu(); } catch (e) { threw = true; }
 
-    // Remove menusideMenu e sideMenu para exercitar os guards "elemento
-    // ausente" dentro dos handlers de menuButton/menucloseButton/closeButton
-    // (menuButtonTop não existe em music.php — ver teste dedicado em
-    // index.php abaixo), e depois disparamos os cliques via
-    // getElementById (os listeners já registrados no DOMContentLoaded
-    // seguem válidos mesmo com os alvos removidos).
+    // menucloseButton é FILHO de #menusideMenu, e closeButton é FILHO de
+    // #sideMenu (ver music.php) — remover o container também remove o
+    // botão do DOM, fazendo `document.getElementById(id)?.click()` virar
+    // um no-op silencioso que nunca alcança o guard interno do handler.
+    // Por isso capturamos as referências aos botões ANTES de remover os
+    // containers: o listener já registrado no DOMContentLoaded continua
+    // válido no objeto do botão mesmo depois dele ser desconectado do DOM.
+    const menuCloseBtn = document.getElementById('menucloseButton');
+    const closeBtn = document.getElementById('closeButton');
+    const menuBtn = document.getElementById('menuButton');
+
     const menuSide = document.getElementById('menusideMenu');
     const sideMenu = document.getElementById('sideMenu');
     if (menuSide) menuSide.remove();
     if (sideMenu) sideMenu.remove();
 
-    ['menuButton', 'menucloseButton', 'closeButton'].forEach((id) => {
-      document.getElementById(id)?.click();
-    });
+    menuBtn?.click();
+    menuCloseBtn?.click();
+    closeBtn?.click();
 
     return { threw };
   });
