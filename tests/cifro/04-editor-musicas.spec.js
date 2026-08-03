@@ -584,6 +584,187 @@ test.describe('Editor de Músicas — Tela', () => {
     const content = await page.evaluate(() => window.tinymce.get('cifraInput').getContent());
     expect(content).toContain('[Refrão]');
   });
+
+  test('editor visual indisponível usa textarea como fallback', async ({ page }) => {
+    // Bloqueia o carregamento do script do TinyMCE para que window.tinymce
+    // nunca exista quando initialiseEditor() rodar (fdm-sync.js já garante
+    // window.songs/categorias como array antes do render, então esses dois
+    // guards de songs()/renderCategories() são defensivos e inalcançáveis
+    // pela UI real — ver nota no log de cobertura).
+    await page.route('**/tinymce.min.js*', route => route.abort('failed'));
+    await page.goto('/src/backend/editor/editor.php');
+    await expect(page.locator('#editorLoadError')).toBeVisible();
+    await expect(page.locator('#status')).toHaveText('Editor visual indisponível. Usando edição em texto.');
+    await page.locator('#cifraInput').fill('C G Am F texto simples');
+    await expect(page.locator('#dirtyIndicator')).toBeVisible();
+    await page.unroute('**/tinymce.min.js*');
+  });
+
+  test('descartar alterações: cancelar a confirmação mantém edição atual ao trocar de música', async ({ page }) => {
+    await page.goto('/src/backend/editor/editor.php');
+    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    const buttons = page.locator('#musicas li button');
+    const count = await buttons.count();
+    test.skip(count < 2, 'precisa de pelo menos duas músicas cadastradas');
+
+    await buttons.first().click();
+    const firstTitle = await page.locator('#titulo').inputValue();
+    await page.locator('#titulo').fill(firstTitle + ' __DIRTY__');
+    await expect(page.locator('#dirtyIndicator')).toBeVisible();
+
+    await page.evaluate(() => { window.fdmConfirm = async () => false; });
+    await buttons.nth(1).click();
+    await page.waitForTimeout(100);
+    await expect(page.locator('#titulo')).toHaveValue(firstTitle + ' __DIRTY__');
+  });
+
+  test('nova música com alterações pendentes pede confirmação de descarte', async ({ page }) => {
+    await page.goto('/src/backend/editor/editor.php');
+    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await page.locator('#titulo').fill('__TESTE_NOVA_DIRTY__');
+    await expect(page.locator('#dirtyIndicator')).toBeVisible();
+
+    let confirmCalled = false;
+    await page.evaluate(() => {
+      window.fdmConfirm = async opts => { window.__confirmCalled = true; return true; };
+    });
+    await page.locator('#newSongMenuButton').evaluate(el => el.click());
+    await page.waitForTimeout(100);
+    confirmCalled = await page.evaluate(() => window.__confirmCalled === true);
+    expect(confirmCalled).toBe(true);
+    await expect(page.locator('#titulo')).toHaveValue('');
+  });
+
+  test('excluir música cuja referência local já não existe não quebra a lista', async ({ page }) => {
+    const csrf = await getCsrf(page);
+    const create = await page.request.post(API, {
+      data: JSON.stringify({ nome: '__TESTE_DELETE_LOCAL_AUSENTE__', cifra: 'C G' }),
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+    });
+    const created = await create.json();
+    expect(created.ok ?? created.sucesso).toBeTruthy();
+
+    await page.goto('/src/backend/editor/editor.php');
+    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await page.locator('#buscaMusica').fill('__TESTE_DELETE_LOCAL_AUSENTE__');
+    await page.locator('#musicas li button').first().click();
+    // Remove a música do array local em memória antes de excluir, para
+    // exercer o ramo `index >= 0` falso em deleteSong.
+    await page.evaluate(id => {
+      const idx = window.songs.findIndex(s => String(s.id) === String(id));
+      if (idx >= 0) window.songs.splice(idx, 1);
+    }, created.id);
+    await page.evaluate(() => { window.fdmConfirm = async () => true; });
+    await page.locator('#moreActions').evaluate(el => { el.open = true; });
+    await page.locator('#deleteSongButton').click();
+    await expect(page.locator('#status')).toHaveText('Música excluída com sucesso.');
+  });
+
+  test('erro de rede ao excluir sem mensagem usa texto padrão', async ({ page }) => {
+    await page.goto('/src/backend/editor/editor.php');
+    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await page.locator('#titulo').fill('__TESTE_EXCLUIR_FALHA_REDE__');
+    await page.evaluate(() => window.tinymce.get('cifraInput').setContent('<b>C G</b>'));
+
+    await page.route('**/src/backend/editor/api.php', async route => {
+      const body = JSON.parse(route.request().postData() || '{}');
+      if (body.action === 'delete') {
+        await route.abort('failed');
+      } else {
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, id: 888888 }) });
+      }
+    });
+    await page.evaluate(() => { window.fdmConfirm = async () => true; });
+    await page.locator('#saveButton').click();
+    await expect(page.locator('#status')).toHaveText('Música salva com sucesso.');
+
+    await page.locator('#moreActions').evaluate(el => { el.open = true; });
+    await page.locator('#deleteSongButton').click();
+    await expect(page.locator('#status')).toHaveAttribute('data-kind', 'error');
+    await expect(page.locator('#status')).not.toHaveText('');
+    await expect(page.locator('#deleteSongButton')).toBeEnabled();
+    await page.unroute('**/src/backend/editor/api.php');
+  });
+
+  test('cleanForSave remove spans sem estilo relevante e preserva os laranjas', async ({ page }) => {
+    await page.goto('/src/backend/editor/editor.php');
+    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await page.locator('#titulo').fill('__TESTE_SPAN_LIMPEZA__');
+    await page.evaluate(() => {
+      const editor = window.tinymce.get('cifraInput');
+      editor.setContent('<span></span><span style="color: #123456;">texto cinza</span><span style="color: #ff7700;">C</span><b>G</b>');
+      editor.dispatch('input');
+    });
+    await page.locator('#saveButton').click();
+    await expect(page.locator('#status')).toHaveText('Música salva com sucesso.');
+
+    const csrf = await getCsrf(page);
+    const sync = await page.request.get('/api/sync/data.php');
+    const data = await sync.json();
+    const musica = data.musicas.find(item => item.nome === '__TESTE_SPAN_LIMPEZA__');
+    expect(musica).toBeTruthy();
+    expect(musica.cifra).not.toContain('<span></span>');
+    expect(musica.cifra).not.toContain('#123456');
+    expect(musica.cifra).toContain('texto cinza');
+    expect(musica.cifra).toContain('#ff7700');
+
+    await page.request.post(API, {
+      data: JSON.stringify({ action: 'delete', id: musica.id }),
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+    });
+  });
+
+  test('salvar sem música selecionada envia id indefinido e adiciona a lista local ao sincronizar', async ({ page }) => {
+    await page.goto('/src/backend/editor/editor.php');
+    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await page.locator('#titulo').fill('__TESTE_NOVO_SEM_SELECAO__');
+    await page.evaluate(() => window.tinymce.get('cifraInput').setContent('<b>C G Am F</b>'));
+
+    let sentId;
+    await page.route('**/src/backend/editor/api.php', async route => {
+      const body = JSON.parse(route.request().postData() || '{}');
+      sentId = body.id;
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, id: 777777 }) });
+    });
+    const beforeCount = await page.evaluate(() => (Array.isArray(window.songs) ? window.songs.length : 0));
+    await page.locator('#saveButton').click();
+    await expect(page.locator('#status')).toHaveText('Música salva com sucesso.');
+    expect(sentId).toBeUndefined();
+    const afterCount = await page.evaluate(() => window.songs.length);
+    expect(afterCount).toBeGreaterThanOrEqual(beforeCount);
+    await page.unroute('**/src/backend/editor/api.php');
+
+    const csrf = await getCsrf(page);
+    await page.request.post(API, {
+      data: JSON.stringify({ action: 'delete', id: 777777 }),
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+    });
+  });
+
+  test('tom não identificado exibido no item da lista quando cifra não tem acordes', async ({ page }) => {
+    const csrf = await getCsrf(page);
+    const create = await page.request.post(API, {
+      data: JSON.stringify({ nome: '__TESTE_SEM_TOM_LISTA__', cifra: 'apenas texto sem acordes', artista: '', classificacao: '', bit: '' }),
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+    });
+    const created = await create.json();
+    expect(created.ok ?? created.sucesso).toBeTruthy();
+
+    try {
+      await page.goto('/src/backend/editor/editor.php');
+      await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+      await page.locator('#buscaMusica').fill('__TESTE_SEM_TOM_LISTA__');
+      const meta = page.locator('#musicas li .song-list__meta').first();
+      await expect(meta).toBeVisible();
+      const text = await meta.textContent();
+      expect(text).not.toContain('Tom');
+    } finally {
+      await page.request.post(API, {
+        data: JSON.stringify({ action: 'delete', id: created.id }),
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+      });
+    }
+  });
 });
 
 test.describe('Editor de Músicas — API', () => {
