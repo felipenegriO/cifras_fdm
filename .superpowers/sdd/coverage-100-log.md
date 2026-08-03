@@ -2269,3 +2269,97 @@ f5d94da (flake fix), 927eb9a (editor.js).
 4. editor.js linha 168: exigiria fixture de conta com exatamente 1 música -
    considerar um teste com usuário/banda dedicado e isolado.
 5. editor.js linhas 67, 277, 290 seguem não tentadas.
+
+## Iteracao 36 - fixes reais (2), 1 revert, novo impedimento crítico descoberto (crash de pipeline)
+
+### Commits desta passada
+- `9af7308`: corrige teste enganoso `26-offline-sync.spec.js:535` (gravava a
+  própria chave no localStorage e conferia o próprio valor - não exercitava
+  `storageKey`/`pendingBandStorageKey` de fato). Corrigido para chamar
+  `window.fdmSync.selectOnlineBand()` real, apagando `window.FDM_USER_ID`
+  em runtime (o bootstrap inline de `index.php:257` reatribui a variável
+  antes do `addInitScript` surtir efeito no boot do módulo). Também tenta
+  cobertura via postMessage real (context.route) para service-worker.js
+  linhas 55/65.
+- `a9dda1f`: tentativa (equivocada) de corrigir flake de
+  `04-editor-musicas.spec.js:588` (dirtyIndicator) aumentando timeout para
+  15000ms - **não funcionou**, o pipeline relançado reproduziu a mesma
+  falha determinística (18x hidden ao longo dos 15s inteiros, não um
+  atraso).
+- `f757df3`: causa raiz real do flake acima encontrada e corrigida.
+  `editor.js`'s `initialise()` roda
+  `await Promise.all([initialiseEditor(), fdmSync.load(...)])` e só então
+  chama `setBaseline()` (zera `state.dirty`/esconde o indicador).
+  `elements.editorError.hidden = false` é setado de forma síncrona DENTRO
+  de `initialiseEditor()`, então os `await expect(...)` no início do teste
+  passam bem antes do fetch real de `fdmSync.load()` terminar. Sob a suite
+  completa, esse fetch pode terminar DEPOIS do fill()+detectDirty() do
+  teste, e o `setBaseline()` subsequente reseta silenciosamente o dirty
+  que acabamos de forçar. Corrigido com `page.waitForLoadState('networkidle')`
+  antes de interagir com o textarea. Confirmado passando isolado.
+- `e405202`: reverte a tentativa de postMessage/context.route em
+  `30-service-worker-coverage.spec.js` (de 9af7308) após o pipeline
+  completo relançado (task bseszl72i) crashar (exit 2, sem "X failed",
+  sem tabela de cobertura do monocart) exatamente no teste 654 - suspeitou-
+  se na hora que fosse a mudança recém-adicionada.
+
+### IMPORTANTE: o crash não era causado pela mudança revertida
+Relançado o pipeline mais uma vez (task bmesj7j8r) já com o revert
+aplicado (e405202 incluído no HEAD) - **o crash reproduziu de forma
+idêntica**: exit code 2, 652 passed / 2 skipped / 0 failed reportado, teste
+654 (`30-service-worker-coverage.spec.js`) aparece com marcador de
+interrompido (traço, sem duração, sem pass/fail), nenhuma tabela de
+cobertura do monocart impressa. Ou seja, **o crash é pré-existente e
+independente de conteúdo** - um problema de infraestrutura (esse teste
+gerencia seu próprio subprocesso Chrome bruto via
+`chromium.executablePath()` + sessão CDP manual, em vez do fixture `page`
+padrão do Playwright; a suspeita é de exaustão de recursos/timeout desse
+subprocesso sob a contenção de CPU/memória da suite completa, já que
+passa de forma limpa isolado - confirmado 2x nesta passada). **Novo
+impedimento crítico**: nenhum pipeline completo terminou limpo hoje (3
+tentativas, todas viciadas por este mesmo teste ou pelo flake do
+dirtyIndicator já corrigido) - bloqueia a extração de BRDA fresca para
+qualquer arquivo.
+
+### Números confirmados hoje
+- PHP: 324 tests, 670 assertions, OK. Branch coverage 94.24% (1834/1946) -
+  estável em 3 execuções seguidas hoje, esta parte do pipeline nunca falhou.
+- JS: **nenhum número confiável hoje** - todas as 3 execuções completas do
+  pipeline (bofndhnxq, badvl4os5, bmesj7j8r) falharam antes de gerar um
+  lcov.info fresco e íntegro.
+
+### Trabalho não feito nesta passada (falta de BRDA fresca confiável)
+live.js (48 testes já existentes em `13-live-mode.spec.js`),
+rehearsal.bootstrap.js (coberto extensivamente por
+`32-rehearsal-real-flow.spec.js`) e fdm-presentation.js (30 testes em
+`33-presentation-mode.spec.js`) foram revisados por leitura de código-fonte
+- todos os três já têm suítes de teste substanciais e nenhum gap óbvio foi
+identificado por leitura pura sem dados BRDA reais. Escrever testes às
+cegas contra esses arquivos correria o risco real de gerar testes que
+"passam pelo motivo errado" (já capturado como anti-padrão em passadas
+anteriores) - decisão consciente de não commitar nada nesses três arquivos
+nesta passada.
+
+### Próximo (prioridade máxima: destravar o pipeline)
+1. Investigar/corrigir a instabilidade de `30-service-worker-coverage.spec.js`
+   sob a suite completa - candidatos: (a) mover para um projeto/execução
+   separada do restante do pipeline coverage (já roda num project `pwa`
+   dedicado - considerar rodá-lo ANTES da suite pesada `visual`/`cifro`
+   para ter mais memória livre, ou aumentar o timeout do subprocesso
+   Chrome), (b) adicionar retry/kill mais robusto do processo `chrome`
+   spawned se ele não responder ao debugger em tempo hábil, (c) investigar
+   se há vazamento de processos Chrome órfãos de execuções anteriores
+   competindo por recursos (usuário já limpou processos órfãos de ~3.5h
+   atrás nesta sessão - vale conferir se ficam novos órfãos após cada
+   crash desta suite).
+2. Assim que o pipeline rodar limpo uma vez, extrair BRDA fresca e atacar
+   live.js/rehearsal.bootstrap.js/fdm-presentation.js em lote (múltiplos
+   arquivos por passada, testes verificados isoladamente, UMA execução
+   completa só no final do lote - estratégia adotada a partir desta
+   passada por orientação explícita, para não gastar ciclo completo de
+   14 min a cada teste individual).
+3. service-worker.js linhas 55/65: quirk de atribuição de cobertura ainda
+   não resolvido (postMessage/context.route revertido por instabilidade,
+   não por não funcionar - o teste em si passava). Retomar em uma sessão
+   futura com um teste dedicado separado do teste CDP existente, para não
+   arriscar a estabilidade do teste que já funciona.
