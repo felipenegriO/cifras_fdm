@@ -1404,3 +1404,93 @@ ranking da Iteracao 27.
   fallbacks) e editor.js (linhas 57-58 setContent, 354/357-367 saveSong,
   382-408 deleteSong, 518-536 restante do initialiseEditor) antes de
   passar para fdm-presentation.js/live.js/rehearsal.pitch.js/script.js.
+
+## Iteracao 29 (continuacao autonoma) - fdm-sync.js/editor.js: gaps residuais
+
+### Pipeline JS: recuperacao apos execucao concorrente acidental
+A primeira tentativa desta passada de rodar `scripts/coverage/run-js.ps1`
+ficou presa por confusao operacional: uma chamada em background (`&` no
+shell) e uma segunda chamada sincrona do mesmo script acabaram rodando
+concorrentemente (dois conjuntos de processos node visiveis via
+`Get-Process node`, com StartTime diferentes), disputando a mesma porta/
+diretorio de cobertura. Matei todos os processos node
+(`Get-Process node | Stop-Process -Force`), limpei `test-results/` e
+rodei novamente uma unica vez, do inicio ao fim, sem interferir - essa
+rodada (12m45s) terminou de ponta a ponta com 640 testes (639 passed, 1
+skipped, 0 failed) e gerou os numeros finais usados nesta secao.
+
+### fdm-sync.js (tests/cifro/26-offline-sync.spec.js)
+1 teste novo: `window.songs/playlistsSalvas/roteirosSalvos/categorias`
+ja em array no boot preservam a mesma referencia - cobre o ramo
+verdadeiro (ainda nao tentado) de
+`Array.isArray(window.songs) ? window.songs : []` e equivalentes
+(linhas 12-15). O unico teste existente ate entao ('...nao-array sao
+normalizados para []') so exercitava o ramo falso. Usa `addInitScript`
+para pre-popular as quatro globais como arrays com um item sentinela
+antes do boot de fdm-sync.js, depois confirma que a mesma referencia
+(nao uma copia) chega ate `window.*` apos `page.goto`.
+
+Tentativa descartada: teste para o ramo "anonymous" de `storageKey()`
+(linha 17, distinto de offlineBandStorageKey/pendingBandStorageKey que
+ja tem cobertura). Forcei `window.FDM_USER_ID = undefined` via
+`addInitScript` e chamei `fdmSync.applyMutation(...)` diretamente,
+esperando que a chave de persistencia no IndexedDB usasse o prefixo
+"anonymous:". Na pratica, um bootstrap de sessao do servidor (mesmo
+inline `<script>` que reatribui `window.FDM_BAND_ID` em cenarios
+anteriores) reatribui `window.FDM_USER_ID` para o ID real do usuario
+autenticado ANTES de fdm-sync.js rodar, mesmo com o `addInitScript`
+tentando fixar `undefined` via `Object.defineProperty` com
+`writable:true`. Confirmado lendo `window.FDM_USER_ID` no momento exato
+da chamada a `applyMutation`: o valor efetivo era o ID real (ex.:
+"00000000000000000000000000000001"), nao `undefined`. Documentado como
+impedimento: a sessao de teste sempre tem um usuario autenticado com
+FDM_USER_ID valido antes que qualquer mutacao real possa rodar, entao o
+ramo "anonymous" de `storageKey()` especificamente (diferente das duas
+outras funcoes irmãs, que rodam ANTES do bootstrap de sessao, no
+carregamento sincrono do modulo) e inalcancavel via fluxo real de UI
+autenticado - so seria alcancavel simulando uma sessao nao-autenticada
+completa, fora do escopo runtime de fdmSync.applyMutation.
+
+### editor.js (tests/cifro/04-editor-musicas.spec.js)
+1 teste estendido: o teste existente "editor visual indisponivel usa
+textarea como fallback" ganhou um passo adicional - apos confirmar o
+fallback de textarea, estuba `window.fdmConfirm = async () => true` e
+clica em `#newSongButton`, disparando `newSong() -> setContent('')`
+com `state.editor` nulo. Isso cobre o ramo `else elements.textarea.value
+= value || ''` (linhas 57-58) de `setContent()`, que nao era alcancado
+no boot inicial da pagina (nenhuma chamada a setContent() acontece antes
+de uma musica ser selecionada ou criada).
+
+### Numeros finais da passada
+- JS: 92.23% branches (1794/1945) via check-js-branches.mjs; lcov global
+  (todos os arquivos, incluindo visual/pwa-only) 92.25% (1846/2001
+  branches). 640 testes, 639 passed, 1 skipped, 0 failed (alta de +8
+  branches sobre a Iteracao 28: 91.82%/1786/1945 -> 92.23%/1794/1945).
+- PHP: nao reexecutado nesta passada (sem mudancas de codigo/teste PHP);
+  mantido 94.24% (1834/1946) conforme ultima confirmacao (Iteracao 28).
+- Commit: 116dc76 "test: cover fdm-sync.js array-preset boot branch and
+  editor.js setContent fallback branch" (tests/cifro/26-offline-sync.spec.js
+  +27 linhas, tests/cifro/04-editor-musicas.spec.js +9 linhas).
+
+### Impedimentos / pendencias
+- fdm-sync.js linha 17 (storageKey ramo "anonymous"): inalcancavel via
+  fluxo real autenticado, ver detalhamento acima.
+- fdm-sync.js: gaps remanescentes maiores em validateSnapshot (linhas
+  98/104-105 - condicoes de validacao de playlists/musicas ainda nao
+  tentadas), applyMutation linha 277 (`window.categorias.find` dentro do
+  branch de categorias), linhas 135-138 (defaults `??` apos
+  Array.isArray - baixo retorno conforme Iteracao 13), linha 204 (branch
+  204), linha 253, linhas 369-410 (reconcileOfflineBand branches
+  403/regex "acesso negado", guard serviceWorker+FDM_USER_ID no final do
+  modulo).
+- editor.js: gaps remanescentes maiores em saveSong (354-367),
+  deleteSong (382-408), linhas 459-474 e 518-582 (restante de
+  initialiseEditor/paste handlers) - nao tentados nesta passada por
+  tempo, ver BRDA bruto extraido de coverage/js/lcov.info nesta sessao
+  para retomar.
+- Proximo: usar as BRDA gaps ja extraidas nesta sessao (via
+  `awk '/SF:.*ARQUIVO/{flag=1} flag{print} /end_of_record/{if(flag){exit}}' coverage/js/lcov.info | grep "^BRDA:" | awk -F',' '$4==0'`)
+  para continuar fdm-sync.js (validateSnapshot, reconcileOfflineBand) e
+  editor.js (saveSong/deleteSong/initialiseEditor), depois seguir para
+  fdm-presentation.js/live.js/rehearsal.pitch.js/script.js conforme
+  planejado.
