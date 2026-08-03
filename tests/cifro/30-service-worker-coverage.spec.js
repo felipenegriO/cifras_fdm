@@ -146,6 +146,35 @@ test('service worker executa instalação, cache, mensagens e recuperação offl
           await cache.put('/__cifro_context__', new Response(JSON.stringify({ outro: 1 }), { headers: { 'Content-Type': 'application/json' } }));
           checks.push(await getContext());
         }
+        // populateStatic lança quando um asset estático vem com content-type
+        // inesperado (linha 55, ramo verdadeiro do throw dentro do for).
+        {
+          const originalFetch = self.fetch;
+          self.fetch = async () => new Response('', { status: 200, headers: { 'content-type': 'application/octet-stream' } });
+          try {
+            await populateStatic(await caches.open('cifro-static-3.1.0'));
+            checks.push('no-throw-static');
+          } catch (error) {
+            checks.push(error.message);
+          } finally {
+            self.fetch = originalFetch;
+          }
+        }
+        // preparePages lança quando a página buscada não passa em
+        // validStagePage (linha 65, ramo verdadeiro do throw dentro do for,
+        // distinto do guard de userId ausente já coberto abaixo).
+        {
+          const originalFetch = self.fetch;
+          self.fetch = async () => new Response('<html></html>', { status: 200, headers: { 'content-type': 'text/html' } });
+          try {
+            await preparePages('usuario-com-pagina-invalida');
+            checks.push('no-throw-pages');
+          } catch (error) {
+            checks.push(error.message);
+          } finally {
+            self.fetch = originalFetch;
+          }
+        }
         await setContext('');
         checks.push(await preparePages('').then(() => '', error => error.message));
         return checks;
@@ -162,6 +191,12 @@ test('service worker executa instalação, cache, mensagens e recuperação offl
     expect(helperChecks[7]).toBe(false);
     expect(helperChecks[8]).toBe(false);
     expect(helperChecks[9]).toContain('a%20b%26c');
+    // Índices [13] e [14]: throws de populateStatic/preparePages para asset e
+    // página inválidos (linhas 55 e 65) - após os 3 checks de getContext
+    // ([10]-[12]), antes do check final de preparePages('') que segue sendo
+    // o último elemento (at(-1) acima).
+    expect(helperChecks[13]).toContain('Asset inválido:');
+    expect(helperChecks[14]).toContain('Página inválida:');
 
     await page.evaluate(async appOrigin => {
       const registration = await navigator.serviceWorker.ready;
