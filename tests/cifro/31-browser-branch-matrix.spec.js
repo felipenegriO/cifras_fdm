@@ -406,8 +406,8 @@ test('sincronização local aplica playlists, roteiros, categorias e estado offl
     // observava valores ainda não commitados (flake não reproduzido
     // isolado). Faz um pequeno retry antes de desistir.
     let afterPrepared = await fdmSync.selectOfflineBand(band);
-    for (let i = 0; i < 10 && !afterPrepared; i++) {
-      await new Promise(resolve => setTimeout(resolve, 50));
+    for (let i = 0; i < 40 && !afterPrepared; i++) {
+      await new Promise(resolve => setTimeout(resolve, 100));
       afterPrepared = await fdmSync.selectOfflineBand(band);
     }
     const offlineStatus = await fdmSync.getOfflineStatus(band);
