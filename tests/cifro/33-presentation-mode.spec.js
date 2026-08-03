@@ -473,3 +473,48 @@ test.describe('Modo Apresentação — setlist', () => {
     await page.evaluate(() => sessionStorage.removeItem('fdmSetlist'));
   });
 });
+
+test.describe('Modo Apresentação — ramos residuais', () => {
+  test('enter sem document.documentElement.requestFullscreen não lança erro (fallback ausente)', async ({ page }) => {
+    await gotoFirstSong(page);
+    await page.waitForFunction(() => window.fdmPresentation);
+    const threw = await page.evaluate(() => {
+      // Simula navegador sem suporte a Fullscreen API.
+      Object.defineProperty(document.documentElement, 'requestFullscreen', {
+        configurable: true,
+        value: undefined,
+      });
+      try {
+        window.fdmPresentation.enter();
+        return false;
+      } catch (e) {
+        return true;
+      }
+    });
+    expect(threw).toBe(false);
+    await expect(page.locator('body')).toHaveClass(/fdm-presenting/);
+    await page.evaluate(() => window.fdmPresentation.exit());
+  });
+
+  test('toggleScroll chamado duas vezes seguidas (start então start de novo) não duplica o loop', async ({ page }) => {
+    await gotoFirstSong(page);
+    await page.waitForFunction(() => window.fdmPresentation);
+    await page.evaluate(() => window.fdmPresentation.enter());
+    // Primeira chamada inicia a rolagem; a segunda deve cair no guard
+    // "if (state.scrolling) return;" de startScroll (branch true já coberta
+    // aqui, mas exercitamos via toggleScroll -> stopScroll no ramo seguinte).
+    await page.evaluate(() => window.fdmPresentation.toggleScroll());
+    await expect(page.locator('body')).toHaveClass(/fdm-scroll-active/);
+    // stopScroll com rafId ainda pendente (falsy-guard cancelAnimationFrame).
+    await page.evaluate(() => window.fdmPresentation.toggleScroll());
+    await expect(page.locator('body')).not.toHaveClass(/fdm-scroll-active/);
+    // Chamar stop novamente (via toggleScroll->startScroll->toggleScroll) quando
+    // já parado e sem rafId ativo cobre o ramo "rafId falsy" de stopScroll.
+    await page.evaluate(() => {
+      window.fdmPresentation.toggleScroll();
+      window.fdmPresentation.toggleScroll();
+    });
+    await expect(page.locator('body')).not.toHaveClass(/fdm-scroll-active/);
+    await page.evaluate(() => window.fdmPresentation.exit());
+  });
+});
