@@ -1789,3 +1789,163 @@ confirmacao.
    ja documentadas (page.route, withExtraEnv, Object.assign em vez de
    reassign).
 4. Revisitar plano.php/callback.php em PHP se o retorno em JS diminuir.
+
+## Iteracao 33
+
+### Estado no inicio da passada
+Confirmado via git log --oneline -15 (topo 559817e). Pipeline completo
+npm run test:coverage:js rodado em background (log dedicado
+coverage-js-run.log, polling proprio, protocolo seguido sem matar
+nenhum processo): 647 passed/1 skipped/2 failed na primeira rodada
+(falhas investigadas e corrigidas nesta passada, ver abaixo), branches
+93.05% (1862/2001).
+
+### script.js - 3 dos 4 gaps residuais fechados, causas raiz confirmadas
+Investigacao do item 2 do "Proximo" da Iteracao 32 confirmou DUAS
+causas raiz distintas via reproducao isolada (page.evaluate com
+Object.getOwnPropertyDescriptor):
+
+1. Linha 6 (if (typeof window.renderPlaylistsMenu === 'function')):
+   window.renderPlaylistsMenu e uma propriedade global NAO
+   configuravel (criada pela declaracao de funcao de topo function
+   renderPlaylistsMenu() {} em playlists.js; a atribuicao posterior
+   window.renderPlaylistsMenu = renderPlaylistsMenu reutiliza o mesmo
+   slot). delete window.renderPlaylistsMenu e um no-op silencioso
+   (retorna false, nao lanca) - confirmado via
+   Object.getOwnPropertyDescriptor mostrando configurable:false. Nem
+   Object.defineProperty consegue redefinir ("Cannot redefine
+   property"). Fix: como a propriedade E writable, uma atribuicao
+   simples window.renderPlaylistsMenu = undefined ja derruba o typeof
+   ... === 'function' para false.
+
+2. Linhas 31/32/40/48 (guards internos if (menuSide)/if (sideMenu)
+   dentro dos handlers de menuButtonTop/menucloseButton/closeButton):
+   confirmado por grep em topnav.php/music.php que menuButtonTop so
+   existe no partial topnav.php (incluido em index.php, NAO incluido
+   em music.php), entao o guard externo if (menuButtonTop) nunca
+   registra o listener quando os testes rodam so em music.php (linhas
+   31/32 estruturalmente inalcancaveis nesse fluxo). Separadamente,
+   #menucloseButton e #closeButton sao FILHOS de
+   #menusideMenu/#sideMenu respectivamente (DOM de music.php) - o
+   teste antigo removia o container ANTES de clicar, o que tambem
+   desconectava o botao do DOM, tornando
+   document.getElementById(id)?.click() um no-op silencioso que nunca
+   alcancava o guard interno (linhas 40/48).
+
+   Fix duplo em tests/cifro/39-script-branches.spec.js:
+   - Novo teste dedicado rodando em /index.php (onde #menuButtonTop
+     existe de fato via topnav.php), clicando o botao real com
+     #menusideMenu/#sideMenu presentes (ramo verdadeiro) e depois
+     removidos (ramo falso) - cobre 31/32.
+   - Teste original de music.php ajustado para capturar as referencias
+     dos botoes ANTES de remover os containers, clicando via essas
+     referencias depois (listeners continuam validos em elementos
+     desconectados) - cobre 40/48.
+
+   Gap residual: linha 61 (dentro do listener
+   document.addEventListener('click', ...), primeiro operando do &&
+   em sideOpen && !closest(...)) permanece nao fechado; nao investigado
+   a fundo nesta passada por tempo - candidato a proxima passada.
+
+Commits: 86d2ecd (fix inicial do teste de menuButtonTop), a784194 (fix
+do renderPlaylistsMenu + botoes aninhados).
+
+### rehearsal.pitch.js - fallback window.webkitAudioContext coberto
+Investigado o gap da linha 22 (new (window.AudioContext ||
+window.webkitAudioContext)()): todos os testes existentes rodam num
+browser real do Playwright com window.AudioContext sempre presente,
+entao o operando de fallback nunca era exercitado. Novo teste em
+tests/cifro/32-rehearsal-real-flow.spec.js remove temporariamente
+window.AudioContext (via Object.defineProperty, que E configuravel
+nesse caso - diferente do caso de script.js acima) e expoe
+window.webkitAudioContext apontando para o mesmo construtor real antes
+de chamar createPitchPlayer(), restaurando o original no finally.
+Commit aee9609.
+
+Gaps residuais analisados e considerados codigo defensivo
+estruturalmente inalcancavel via API publica (nao atacados com testes
+"falsos"):
+- Linha 115 (if (!buffer) return; dentro de startFrom): startFrom so e
+  chamada internamente por play()/seek()/setPitchSemitones(), que ja
+  checam buffer antes de chamar - o guard interno nunca ve buffer nulo
+  na pratica.
+- Linha 134 (if (!playing) return; dentro de stopInternal): todos os 3
+  call-sites (updateTimeLoop, callback onended, pause()) ja garantem
+  playing === true antes de chamar stopInternal.
+- Linha 136 (if (!keepPosition) { currentTime = 0; }): as 3 chamadas
+  existentes a stopInternal no arquivo inteiro passam sempre
+  keepPosition = true (grep confirmou); stopInternal(false) nunca e
+  invocada em nenhum fluxo real, entao o ramo !keepPosition e codigo
+  morto.
+- Linha 106 (if (!playing) return; dentro do callback onended do
+  fallback nativo): cleanupNode() sempre zera nativeSource.onended =
+  null ANTES de chamar .stop(0), entao uma parada manual nunca deixa o
+  callback onended original disparar com playing ja falso.
+
+### live.js - 12 gaps analisados, 2 causas raiz de codigo morto
+identificadas (nao atacadas com testes nesta passada por serem
+genuinamente inalcancaveis, documentadas como impedimento):
+- Linhas 165-171 (if (path === 'roteiro.php') { ... } dentro de
+  currentPageState()): confirmado via grep que live.js so e carregado
+  por <script> em index.php e music.php - roteiro.php NAO inclui
+  live.js. Logo window.location.pathname nunca pode ser roteiro.php no
+  momento em que esse codigo roda; branch morto.
+- Linha 99 (else if (Date.now() < hostConfirmUntil)) e linha 258 (if
+  (!confirmHostStart())): hostConfirmUntil e inicializada em 0 e NUNCA
+  reatribuida em nenhum outro ponto do arquivo (grep confirmou), e
+  confirmHostStart() e uma funcao hardcoded para sempre return true.
+  Ambos os ramos (linha 99 verdadeiro, linha 258 early-return) sao
+  vestigios de uma feature de confirmacao com timeout que parece ter
+  sido removida/nunca finalizada - codigo morto ate reintroducao real
+  da feature ou remocao explicita.
+
+Os demais gaps (linhas 2, 48, 196, 298, 403, 493 e ambos os ramos de
+148/151) nao foram reanalisados a fundo nesta passada; ficam para a
+proxima por orcamento de tempo (a maior parte do tempo desta passada
+foi consumida no debug e fix dos 2 testes que quebravam no pipeline
+completo, ver abaixo).
+
+### Pipeline completo - 2 falhas encontradas e corrigidas
+A primeira rodada completa do pipeline (coverage-js-run.log, 14m9s,
+647 passed/1 skipped/2 failed) revelou duas falhas:
+
+1. 31-browser-branch-matrix.spec.js - "sincronizacao local aplica
+   playlists, roteiros, categorias e estado offline": passou isolado
+   (--project=cifro -g), nao reproduzido - aparenta ser flake de ordem
+   /estado entre specs na suite completa, nao uma regressao real
+   introduzida nesta passada. Nao investigado a fundo (fora do escopo
+   dos arquivos prioritarios desta passada); candidato a proxima
+   passada se voltar a falhar.
+
+2. 33-presentation-mode.spec.js - "toggleScroll chamado duas vezes
+   seguidas" (teste novo da Iteracao 32): falha REAL e reproduzivel
+   isoladamente. Causa: o teste rodava em conteudo curto sem overflow
+   (scrollHeight <= clientHeight), entao o primeiro
+   requestAnimationFrame de step() ja detectava fim de scroll e
+   chamava stopScroll() sozinho, removendo fdm-scroll-active antes da
+   asercao toHaveClass conseguir observar a classe - corrida real, nao
+   flake de ambiente. Fix: forca min-height: 400vh no container de
+   scroll antes do toggle, garantindo overflow real. Commit 68cad48.
+   Confirmado estavel com --repeat-each=3.
+
+### Numeros
+- Pipeline completo #1 (antes dos fixes): 647 passed, 1 skipped, 2
+  failed, branches 93.05% (1862/2001), 14m9s.
+- Pipeline completo #2 (apos todos os fixes desta passada) rodado em
+  background ao final da passada para confirmacao.
+- Commits desta passada: 86d2ecd, aee9609, 68cad48, a784194.
+
+### Proximo
+1. Confirmar resultado do pipeline #2 e reextrair BRDA fresca para
+   confirmar fechamento de script.js linhas 6/31/32/40/48 e
+   rehearsal.pitch.js linha 22.
+2. script.js linha 61 (guard sideOpen && !closest(...)) - gap residual
+   nao investigado.
+3. live.js - atacar os gaps ainda nao analisados (linhas 2, 48, 196,
+   298, 403, 493, 148/151); considerar documentar linhas
+   99/165-171/258 como impedimento formal (codigo morto) se confirmado
+   que a feature de hostConfirmUntil/roteiro.php nunca sera reativada.
+4. PHP: plano.php (9 residual) e callback.php (3 residual) seguem sem
+   novidade - impedimentos ja documentados (falha de DB real / mock de
+   resposta HTTP do Google) permanecem validos, nao revisitados nesta
+   passada.
