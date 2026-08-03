@@ -380,6 +380,32 @@ test('createPitchPlayer chamado diretamente sem callbacks/buffer cobre os guards
   expect(result[0].current).toBe(0);
 });
 
+test('createPitchPlayer sem window.AudioContext usa o fallback window.webkitAudioContext', async ({ page }) => {
+  // Cobre o operando `||` de fallback em `new (window.AudioContext ||
+  // window.webkitAudioContext)()` (linha 22): em todos os outros testes
+  // deste arquivo window.AudioContext está sempre presente (navegador real
+  // do Playwright), então esse ramo nunca era exercitado. Removemos
+  // AudioContext e expomos webkitAudioContext apontando para o mesmo
+  // construtor real antes de chamar createPitchPlayer.
+  await openMusicPreview(page);
+  await openRehearsalPanel(page);
+
+  const usedFallback = await page.evaluate(() => {
+    const RealCtx = window.AudioContext;
+    Object.defineProperty(window, 'AudioContext', { configurable: true, value: undefined });
+    Object.defineProperty(window, 'webkitAudioContext', { configurable: true, value: RealCtx });
+    let ok = false;
+    try {
+      const player = window.Rehearsal.pitch.createPitchPlayer();
+      ok = typeof player.play === 'function';
+    } finally {
+      Object.defineProperty(window, 'AudioContext', { configurable: true, value: RealCtx });
+    }
+    return ok;
+  });
+  expect(usedFallback).toBe(true);
+});
+
 test('reproduz o áudio até o fim naturalmente cobrindo o loop de atualização e o fim de faixa (SoundTouch)', async ({ page }) => {
   await openMusicPreview(page);
   await openRehearsalPanel(page);
