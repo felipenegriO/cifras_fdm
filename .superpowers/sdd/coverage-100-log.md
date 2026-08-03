@@ -1494,3 +1494,108 @@ de uma musica ser selecionada ou criada).
   editor.js (saveSong/deleteSong/initialiseEditor), depois seguir para
   fdm-presentation.js/live.js/rehearsal.pitch.js/script.js conforme
   planejado.
+
+## Iteracao 30 (autonoma) - fdm-sync.js validateSnapshot/applyMutation/reconcileOfflineBand + editor.js saveSong/deleteSong fdmToast
+
+### Confirmacao inicial (baseline desta passada)
+Pipeline JS completo rodado do zero (sem mudancas de codigo ainda):
+643 passed, 1 skipped, 0 failed, branches 92.18% (1793/1945) via
+check-js-branches.mjs. Nota de processo: um primeiro disparo do pipeline
+colidiu com um segundo processo `npm run test:coverage:js` iniciado
+acidentalmente em paralelo (dois PIDs node distintos rodando Playwright
+ao mesmo tempo), corrompendo test-results/ e causando 3 falhas +
+"7 did not run" nessa rodada contaminada. Descartada; rerun limpo (um
+unico processo, confirmado via Get-CimInstance Win32_Process antes de
+iniciar) confirmou 0 falhas. Licao reforcada: sempre checar processos
+node ativos antes de disparar o pipeline, mesmo dentro da mesma sessao.
+
+### fdm-sync.js (tests/cifro/26-offline-sync.spec.js)
+Gaps atacados (BRDA extraida de coverage/js/lcov.info no inicio da
+passada): 98(validateSnapshot condicoes), 104/105 (ternario de item de
+playlist objeto vs escalar), 87/88 (fallbacks `?? null` de plano/
+trial_expira_em em writeSnapshot), 277 (rename de categoria com
+`previous` encontrado em window.categorias), 369/121 (reconcileOfflineBand
+- nem sucesso nem acesso-negado).
+
+- "rejeita snapshot com playlists..." ganhou um caso `itens: ['abc']`
+  (item escalar, nao-objeto) cobrindo o ramo `:` do ternario
+  `typeof entry === 'object' && entry ? entry.id : entry` (linhas
+  104-105), que so era exercitado com itens como objetos ate entao.
+- Novo teste "snapshot valido sem plano/trial_expira_em usa os
+  fallbacks null de writeSnapshot": snapshot 100% valido (arrays vazios,
+  content_revision numerico) mas sem as chaves `plano`/`trial_expira_em`
+  -> cobre `json.plano ?? null` e `json.trial_expira_em ?? null`
+  (linhas 87-88), que nunca tinham sido omitidas propositalmente de um
+  snapshot aceito (so apareciam em snapshots ja rejeitados por outros
+  motivos).
+- "applyMutation cobre todos os caminhos..." ganhou o caso
+  `categoriaRenameComPrevio`: popula `window.categorias` com uma
+  categoria de id conhecido antes de chamar applyMutation com
+  `payload.id` igual e `response.categoria` com novo nome, cobrindo o
+  ramo verdadeiro de `previous ? items.map(...) : items` (linha 277) -
+  ate entao so o ramo falso (previous undefined) estava coberto.
+- Novo teste "reconcileOfflineBand com resposta ok mas sucesso false e
+  sem acesso negado nao recarrega nem redireciona": POST para
+  selecionar.php retorna 200 com `{ sucesso: false, mensagem: '...' }`
+  generica (sem "acesso negado", status != 403) - cobre o ramo em que
+  NEM `response.ok && json.sucesso` NEM
+  `response.status === 403 || /acesso negado/i.test(...)` sao
+  verdadeiros (linha 369, branch 121), veirificando que a pagina
+  permanece em index.php e o localStorage nao e limpo.
+
+### editor.js (tests/cifro/04-editor-musicas.spec.js)
+Gaps atacados: 354 (Object.assign com `data.id || saved.id` e
+`detectedKey(content)?.key || ''`), e os 4 ramos `if (window.fdmToast)`
+em saveSong (364/367) e deleteSong (406/408).
+
+- Novo teste "salvar musica existente sem id na resposta mantem o id
+  local, e sem acordes reconhecidos zera o tom": cria uma musica real
+  via API, seleciona no editor, troca o conteudo para texto sem acordes
+  reconheciveis, e estuba a resposta de save para retornar
+  `{ ok: true }` sem `id`. Cobre `data.id || saved.id` (usa o id local
+  ja existente) e `detectedKey(content)?.key || ''` (cai para '' porque
+  nao ha acorde detectavel).
+- Novo teste "sem window.fdmToast disponivel, salvar e excluir com
+  sucesso/erro nao lancam erro": remove `window.fdmToast` via
+  `delete window.fdmToast` (o toast global esta sempre presente em
+  producao via fdm-toast.js, entao o ramo falso de
+  `if (window.fdmToast)` nunca era exercitado) e percorre as 4
+  combinacoes save-sucesso/save-erro-de-rede/delete-erro-de-rede/
+  delete-sucesso, confirmando que a UI nao quebra sem o toast.
+  Ajuste de processo: apos a etapa de delete com falha o titulo
+  permanece preenchido (deleteSong nao limpa o formulario em erro), mas
+  foi necessario re-preencher `#titulo` explicitamente antes do ultimo
+  save da sequencia (a primeira versao do teste falhou com "Digite o
+  nome da musica" porque o campo estava vazio nesse ponto do fluxo).
+
+### Numeros finais da passada
+JS (rerun limpo, sem colisao de processos): 643 passed, 1 skipped, 0
+failed. Branches 92.80% (1805/1945) via check-js-branches.mjs (alta de
++12 sobre a Iteracao 29: 92.18%/1793/1945 -> 92.80%/1805/1945).
+PHP: nao reexecutado nesta passada (sem mudancas de codigo/teste PHP);
+mantido 94.24% (1834/1946) conforme ultima confirmacao (Iteracao 28).
+
+Commit desta passada: "test: expand fdm-sync.js and editor.js branch
+coverage (Iteracao 30)" (tests/cifro/26-offline-sync.spec.js +52 linhas,
+tests/cifro/04-editor-musicas.spec.js +88 linhas).
+
+### Impedimentos / pendencias
+- fdm-sync.js: gaps residuais ainda nao tentados nesta passada -
+  linhas 17/20/23 (fallback "anonymous", ja documentado inalcancavel
+  via fluxo autenticado real), 35 (createObjectStore so roda na
+  primeira criacao do DB/upgrade de versao - dificil de forcar sem
+  derrubar o IndexedDB entre testes), 135-138 (fallbacks `??` de
+  applySnapshot - possivelmente ja cobertos indiretamente, precisa
+  reverificar BRDA apos este commit), 157 (bloco load/sync), 204,
+  253 (optional chaining `response.categoria?.id` - candidato a teto
+  tecnico do V8/Monocart com decomposicao de branch unico), 369/119-120
+  (ramos restantes dentro do bloco reconcileOfflineBand).
+- editor.js: gaps residuais em 459-474 e 518-582 (paste handlers e
+  restante de initialiseEditor) - nao tentados nesta passada por tempo;
+  proximo passo natural apos revisitar fdm-sync.js remanescente.
+- Proximo: reextrair BRDA de coverage/js/lcov.info para fdm-sync.js e
+  editor.js apos este commit para confirmar quais gaps fecharam e quais
+  permanecem, depois seguir para fdm-presentation.js/live.js/
+  rehearsal.pitch.js/script.js (contagens desta passada: 15/12/9/6
+  gaps residuais respectivamente, nao tocados ainda) ou PHP
+  (plano.php/callback.php) se o retorno em JS diminuir.
