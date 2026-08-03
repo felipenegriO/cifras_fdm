@@ -172,6 +172,30 @@ test('bootstrap não faz nada quando a página não tem id de música', async ({
   await expect.poll(() => page.evaluate(() => window.bootstrapEntered === true)).toBe(true);
 });
 
+test('bootstrap retorna cedo quando um módulo de ensaio falha ao carregar (window.Rehearsal.audio ausente)', async ({ page }) => {
+  // Intercepta rehearsal.audio.js devolvendo um script vazio válido (onload dispara normalmente,
+  // mas window.Rehearsal.audio nunca é definido) para cobrir o ramo verdadeiro do guard
+  // "if (!stateModule || !youtubeModule || !pitchModule || !audioModule || !uiModule) return;"
+  await page.route('**/src/js/rehearsal/rehearsal.audio.js', route => route.fulfill({
+    contentType: 'application/javascript',
+    body: '// audio module intentionally empty for coverage',
+  }));
+  await openMusicPreview(page);
+  await page.locator('#menuButton').click();
+  await page.locator('#settingsTabTools').click();
+  await page.getByText('Ensaio com YouTube e áudio', { exact: true }).click();
+  await page.locator('#btnAtivarEnsaio').click();
+  await expect.poll(() => page.evaluate(() => window.bootstrapEntered === true)).toBe(true);
+  // O click no botão ainda alterna o painel (listener próprio inline em music.php, independente
+  // do bootstrap), mas uiModule.initUI() nunca roda porque o guard de módulo ausente retornou cedo.
+  // Por isso o botão "Vincular" nunca recebe o listener onBindYoutube: clicar nele não escreve
+  // nenhuma mensagem em #rehearsalMessage (continua vazio), diferente do fluxo normal.
+  await page.locator('#inputYoutubeUrl').fill('endereço inválido');
+  await page.locator('#btnVincularYoutube').click({ force: true });
+  await page.waitForTimeout(200);
+  await expect(page.locator('#rehearsalMessage')).toHaveText('');
+});
+
 test('fecha e reabre o painel de ensaio salvando o estado ao fechar', async ({ page }) => {
   await openMusicPreview(page);
   await openRehearsalPanel(page);
