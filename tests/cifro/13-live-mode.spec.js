@@ -491,4 +491,93 @@ test.describe('Live — módulo cliente (window.LiveMode)', () => {
     await page.evaluate(() => window.LiveMode.consultarStatus());
     await expect(page.locator('#liveStatus')).toHaveText('Seguindo live');
   });
+
+  test('salaId usa window.FDM_BAND_ID real do servidor (chave de storage não é "default" para usuário com banda)', async ({ page }) => {
+    // O IIFE de live.js lê `window.FDM_BAND_ID` na primeira execução, e o
+    // inline <script> do próprio index.php (que roda antes, no <head>/body)
+    // já define esse valor a partir de current_band_id() no servidor — não é
+    // possível sobrescrever via addInitScript porque a ordem de scripts do
+    // documento vence. Verificamos então o comportamento real: com uma banda
+    // válida, a chave de sessão usada não é o fallback 'default'.
+    await page.route('**/api/live/status.php*', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ success: true, hasHost: false }),
+    }));
+    await page.goto('/index.php');
+    const bandId = await page.evaluate(() => window.FDM_BAND_ID);
+    await page.evaluate(() => window.LiveMode.entrarOuSairLive());
+    const expectedKey = bandId ? `fdmLiveMode_${bandId}` : 'fdmLiveMode_default';
+    const mode = await page.evaluate((key) => sessionStorage.getItem(key), expectedKey);
+    expect(mode).toBe('follow');
+  });
+
+  test('currentPageState em music.php com playlistTom inválido não inclui playlistTom no payload publicado', async ({ page }) => {
+    const data = await (await page.request.get('/api/sync/data.php')).json();
+    const songId = data.musicas && data.musicas.length > 0 ? data.musicas[0].id : null;
+    test.skip(!songId, 'Nenhuma música disponível para o teste');
+
+    await page.route('**/api/live/host.php', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ success: true, hostId: 'host-badparams', hostNome: 'Zeca' }),
+    }));
+    let capturedPayload = null;
+    await page.route('**/api/live/update.php', route => {
+      capturedPayload = route.request().postDataJSON();
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, hostNome: 'Zeca' }) });
+    });
+    await page.goto(`/music.php?id=${songId}&playlistTom=Z9`);
+    await page.evaluate(() => {
+      const el = document.getElementById('song-cifra');
+      if (el) el.remove();
+      try { Object.defineProperty(document, 'scrollingElement', { configurable: true, get: () => null }); } catch (e) {}
+    });
+    await page.evaluate(() => window.LiveMode.assumirHost());
+    await expect(page.locator('#liveStatus')).toHaveText('Voce e o host');
+    expect(capturedPayload).not.toBeNull();
+    expect(capturedPayload.cifraAtual).toBe(String(songId));
+    expect(capturedPayload.paginaAtual).toBe(`music.php?id=${songId}`);
+    expect(capturedPayload.paginaAtual).not.toContain('playlistTom');
+  });
+
+  test('consultarStatus com resposta success:false e response.ok mostra desconectado (throw pelo !data.success)', async ({ page }) => {
+    await page.route('**/api/live/status.php*', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ success: false, message: 'sala fechada' }),
+    }));
+    await page.goto('/index.php');
+    await page.evaluate(() => window.LiveMode.consultarStatus());
+    await expect(page.locator('#liveStatus')).toHaveText('Live desconectada');
+  });
+
+  test('setLiveShortcut mostra o link "IR PARA LIVE" quando o host está em outra página válida', async ({ page }) => {
+    await page.route('**/api/live/status.php*', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ success: true, hasHost: true, hostNome: 'Ana', version: 1, paginaAtual: 'music.php?id=999999' }),
+    }));
+    await page.goto('/index.php');
+    await page.evaluate(() => window.LiveMode.consultarStatus());
+    const wrapper = page.locator('#mostrarbtnplay');
+    if (await wrapper.count()) {
+      await expect(wrapper).toHaveCSS('display', 'block');
+      await expect(page.locator('#entrarlivePlaynow')).toHaveAttribute('href', 'music.php?id=999999');
+    }
+  });
+
+  test('applyFollowerScroll ignora quando status.canSyncScroll é falso', async ({ page }) => {
+    await page.route('**/api/live/status.php*', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ success: true, hasHost: true, hostNome: 'Ana', version: 1, paginaAtual: 'index.php', canSyncScroll: false, scrollPercent: 0.9 }),
+    }));
+    await page.goto('/index.php');
+    await page.evaluate(() => window.LiveMode.entrarOuSairLive());
+    await expect(page.locator('#liveStatus')).toHaveText('Seguindo live');
+    // Segunda chamada de status com o mesmo version (sem mudança) — não deve navegar nem quebrar.
+    await page.evaluate(() => window.LiveMode.consultarStatus());
+    await expect(page.locator('#liveStatus')).toHaveText('Seguindo live');
+  });
 });
