@@ -295,6 +295,76 @@ test('sincronização usa snapshot offline preparado e reconciliação real de b
   await expect(page).toHaveURL(/select-banda\.php/);
 });
 
+test('reconciliação de banda offline bem-sucedida limpa a chave e recarrega a página', async ({ page }) => {
+  await page.goto('/config.php');
+  const bandId = await page.evaluate(() => String(window.FDM_BAND_ID));
+  await page.route('**/src/backend/bandas/selecionar.php', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ sucesso: true })
+  }));
+  await page.evaluate(bandId => {
+    const userId = String(window.FDM_USER_ID || 'anonymous');
+    localStorage.setItem(`fdmOfflineBandId:${userId}`, bandId);
+  }, bandId);
+
+  const [reloaded] = await Promise.all([
+    page.waitForEvent('load'),
+    page.evaluate(() => window.dispatchEvent(new Event('online'))),
+  ]);
+  expect(reloaded).toBeTruthy();
+  const remaining = await page.evaluate(() => {
+    const userId = String(window.FDM_USER_ID || 'anonymous');
+    return localStorage.getItem(`fdmOfflineBandId:${userId}`);
+  });
+  expect(remaining).toBeNull();
+  await page.unroute('**/src/backend/bandas/selecionar.php');
+});
+
+test('banner de plano expirado não aparece sem trial_expira_em, com plano pago ou trial ainda válido', async ({ page, context }) => {
+  await page.goto('/config.php');
+  const bandId = await page.evaluate(() => String(window.FDM_BAND_ID));
+
+  async function setMetaAndLoadOffline(meta) {
+    await context.setOffline(false);
+    await page.evaluate(async ({ bandId, meta }) => {
+      const userId = String(window.FDM_USER_ID || 'anonymous');
+      const key = `${userId}:${bandId}`;
+      const db = await new Promise((resolve, reject) => {
+        const req = indexedDB.open('cifro', 4);
+        req.onupgradeneeded = event => {
+          const upgradeDb = event.target.result;
+          ['fdm_musicas', 'fdm_playlists', 'fdm_roteiros', 'fdm_categorias', 'fdm_sync_meta', 'fdm_bandas'].forEach(name => {
+            if (!upgradeDb.objectStoreNames.contains(name)) upgradeDb.createObjectStore(name, { keyPath: 'banda_id' });
+          });
+        };
+        req.onsuccess = event => resolve(event.target.result);
+        req.onerror = event => reject(event.target.error);
+      });
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction(['fdm_musicas', 'fdm_categorias', 'fdm_sync_meta'], 'readwrite');
+        tx.objectStore('fdm_musicas').put({ banda_id: key, actual_band_id: bandId, data: [], content_revision: 1 });
+        tx.objectStore('fdm_categorias').put({ banda_id: key, actual_band_id: bandId, data: [], content_revision: 1 });
+        tx.objectStore('fdm_sync_meta').put({ banda_id: key, actual_band_id: bandId, content_revision: 1, ...meta });
+        tx.oncomplete = () => { db.close(); resolve(); };
+        tx.onerror = () => { db.close(); reject(tx.error); };
+      });
+      document.getElementById('_planExpiredBanner')?.remove();
+    }, { bandId, meta });
+    await context.setOffline(true);
+    await page.evaluate(bandId => window.fdmSync.load(bandId), bandId);
+    await page.waitForTimeout(150); // checkOfflinePlanBanner não é aguardado dentro de load()
+    const present = await page.locator('#_planExpiredBanner').count();
+    await context.setOffline(false);
+    return present > 0;
+  }
+
+  expect(await setMetaAndLoadOffline({ plano: 'trial', trial_expira_em: null })).toBe(false);
+  expect(await setMetaAndLoadOffline({ plano: 'pro', trial_expira_em: '2000-01-01' })).toBe(false);
+  expect(await setMetaAndLoadOffline({ plano: 'trial', trial_expira_em: '2999-01-01' })).toBe(false);
+  expect(await setMetaAndLoadOffline({ plano: 'trial', trial_expira_em: '2000-01-01' })).toBe(true);
+});
+
 test('sincronização local aplica playlists, roteiros, categorias e estado offline', async ({ page }) => {
   await page.goto('/index.php');
   const result = await page.evaluate(async () => {
