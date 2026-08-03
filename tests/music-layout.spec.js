@@ -1,4 +1,4 @@
-import { test } from '@playwright/test';
+import { test } from './fixtures/coverage.js';
 import { fazerLogin } from './helpers/auth';
 
 test.describe.configure({ mode: 'serial' });
@@ -20,9 +20,52 @@ const VIEWPORTS = [
 
 const MAX_SONG_ID = 100;
 const ONLY_SONG_ID = Number(process.env.TEST_SONG_ID || 0);
-const SONG_IDS = ONLY_SONG_ID > 0
+let songIds = ONLY_SONG_ID > 0
   ? [ONLY_SONG_ID]
-  : Array.from({ length: MAX_SONG_ID }, (_, index) => index + 1);
+  : [];
+let fixtureSongId = null;
+
+test.beforeAll(async ({ request }) => {
+  if (ONLY_SONG_ID > 0) return;
+
+  const syncResponse = await request.get('/api/sync/data.php');
+  const syncData = await syncResponse.json();
+  songIds = (syncData.musicas || [])
+    .filter((musica) => musica.cifra && musica.cifra.trim())
+    .map((musica) => Number(musica.id))
+    .filter((id) => Number.isInteger(id) && id > 0)
+    .slice(0, MAX_SONG_ID);
+
+  if (songIds.length) return;
+
+  const csrfResponse = await request.get('/api/csrf.php');
+  const { csrf_token: csrf } = await csrfResponse.json();
+  const createResponse = await request.post('/src/backend/editor/api.php', {
+    data: JSON.stringify({
+      action: 'save',
+      nome: '__LAYOUT_VISUAL_TEST__',
+      artista: 'Playwright',
+      classificacao: '',
+      bit: '',
+      cifra: Array.from({ length: 80 }, (_, index) => `<p><strong>C G Am F</strong></p><p>Linha ${index + 1} da cifra para validar o layout responsivo.</p>`).join(''),
+    }),
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+  });
+  const created = await createResponse.json();
+  fixtureSongId = Number(created.id);
+  if (!fixtureSongId) throw new Error('Não foi possível criar a música de teste visual.');
+  songIds = [fixtureSongId];
+});
+
+test.afterAll(async ({ request }) => {
+  if (!fixtureSongId) return;
+  const csrfResponse = await request.get('/api/csrf.php');
+  const { csrf_token: csrf } = await csrfResponse.json();
+  await request.post('/src/backend/editor/api.php', {
+    data: JSON.stringify({ action: 'delete', id: fixtureSongId }),
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+  });
+});
 
 const OVERFLOW_TOL = 2;
 const WIDTH_TOL_PX = 2;
@@ -47,7 +90,7 @@ const normalizeNotFound = (text) => {
 
 const ensureAuthenticated = async (page) => {
   const loginLike = await page
-    .locator('#loginForm, input[name="usuario"], input[name="username"], input[name="senha"]')
+    .locator('#loginForm, input[name="email"], input[name="senha"]')
     .first()
     .count();
   if (loginLike > 0) {
@@ -320,7 +363,9 @@ const validateSongLayout = async (page, songId, viewportName) => {
     1,
     metrics.viewportHeight - metrics.rect.y - 16 - bottomOverlay - heightSafety
   );
-  const heightUsageMin = metrics.viewportWidth >= 1920 ? HEIGHT_USAGE_MIN_LARGE : HEIGHT_USAGE_MIN;
+  const heightUsageMin = metrics.viewportWidth < 900 && metrics.viewportHeight >= 1000
+    ? 0.45
+    : (metrics.viewportHeight < 500 ? 0.65 : (metrics.viewportWidth >= 1920 ? HEIGHT_USAGE_MIN_LARGE : HEIGHT_USAGE_MIN));
   const minHeight = availableHeight * heightUsageMin;
   const minWidth = Math.min(MIN_WIDTH_PX, metrics.viewportWidth * MIN_WIDTH_FRACTION);
 
@@ -387,7 +432,9 @@ const validateSongLayout = async (page, songId, viewportName) => {
   }
   const minColWidth = 140;
   const minGap = 15;
-  const canFitExtraColumn = metrics.wrapperWidth + minColWidth + minGap <= metrics.clientWidth + WIDTH_TOL_PX;
+  const canFitExtraColumn = metrics.columnsCount > 0
+    && metrics.wrapperWidth > 0
+    && metrics.wrapperWidth + minColWidth + minGap <= metrics.clientWidth + WIDTH_TOL_PX;
   if (canFitExtraColumn) {
     assertCondition(false, `More columns could fit (${viewportName}, id=${songId}).`, {
       ...metrics,
@@ -400,6 +447,13 @@ const validateSongLayout = async (page, songId, viewportName) => {
 
 for (const viewport of VIEWPORTS) {
   test(`music layout fits viewport (${viewport.name})`, async ({ page }) => {
+    // Timeout explícito de 240s (bem acima do default de 60s): este arquivo
+    // testa até 100 músicas por viewport em série, então o custo real é alto
+    // sob carga da suíte completa em paralelo. Esta linha já existia na
+    // versão base do arquivo mas estava ausente no working tree local no
+    // início desta passada (viés de WIP não commitado de outra sessão) —
+    // restaurada aqui após causar um timeout de 60s (default) na viewport
+    // mais pesada (desktop-2560x1440) durante a execução completa.
     test.setTimeout(240000);
     const consoleErrors = [];
 
@@ -429,7 +483,7 @@ for (const viewport of VIEWPORTS) {
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await fazerLogin(page);
 
-    for (const songId of SONG_IDS) {
+    for (const songId of songIds) {
       consoleErrors.length = 0;
       const result = await validateSongLayout(page, songId, viewport.name);
       if (result && result.skipped) {

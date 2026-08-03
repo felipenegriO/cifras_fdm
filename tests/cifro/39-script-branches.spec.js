@@ -110,6 +110,28 @@ test('script.js — clique fora do painel fecha sideMenu aberto de fato', async 
   await expect(page.locator('#sideMenu')).not.toHaveCSS('right', '0px');
 });
 
+test('script.js — clique dentro do próprio sideMenu não fecha o painel', async ({ page }) => {
+  await openPreview(page);
+  await page.evaluate(() => {
+    openSideMenu();
+  });
+  await expect(page.locator('#sideMenu')).toHaveCSS('right', '0px');
+  // Clique dentro de #sideMenu: event.target.closest('#sideMenu') é
+  // truthy, então o ramo verdadeiro do guard (linha 61) não deve
+  // fechar o painel — cobre o ramo falso de
+  // !event.target.closest('#sideMenu').
+  const hasInnerTarget = await page.evaluate(() => {
+    const sideMenu = document.getElementById('sideMenu');
+    return !!(sideMenu && sideMenu.firstElementChild);
+  });
+  if (hasInnerTarget) {
+    await page.locator('#sideMenu').click({ position: { x: 1, y: 1 } });
+  } else {
+    await page.locator('#sideMenu').click({ force: true });
+  }
+  await expect(page.locator('#sideMenu')).toHaveCSS('right', '0px');
+});
+
 test('script.js — fdmSwMessage envia mensagem quando há controller ativo', async ({ page }) => {
   await openPreview(page);
   const posted = await page.evaluate(() => {

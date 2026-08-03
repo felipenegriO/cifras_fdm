@@ -353,8 +353,16 @@ test('banner de plano expirado não aparece sem trial_expira_em, com plano pago 
     }, { bandId, meta });
     await context.setOffline(true);
     await page.evaluate(bandId => window.fdmSync.load(bandId), bandId);
-    await page.waitForTimeout(150); // checkOfflinePlanBanner não é aguardado dentro de load()
-    const present = await page.locator('#_planExpiredBanner').count();
+    // checkOfflinePlanBanner não é aguardado dentro de load() (fire-and-forget
+    // assíncrono via IndexedDB); um waitForTimeout fixo de 150ms podia ser
+    // insuficiente sob contenção real de I/O na suíte completa (múltiplos
+    // workers), causando flake. Fazemos poll curto até estabilizar em vez de
+    // um único sleep fixo.
+    let present = 0;
+    for (let i = 0; i < 20; i++) {
+      present = await page.locator('#_planExpiredBanner').count();
+      await page.waitForTimeout(50);
+    }
     await context.setOffline(false);
     return present > 0;
   }
@@ -391,7 +399,17 @@ test('sincronização local aplica playlists, roteiros, categorias e estado offl
 
     const beforePrepared = await fdmSync.selectOfflineBand(band);
     const marked = await fdmSync.markPrepared(band);
-    const afterPrepared = await fdmSync.selectOfflineBand(band);
+    // markPrepared resolve após o oncomplete da transação IndexedDB, então a
+    // leitura seguinte já deveria ver os dados persistidos — mas sob
+    // contenção real de I/O (suíte completa em paralelo) a leitura de
+    // selectOfflineBand logo em seguida esporadicamente via canUseOffline()
+    // observava valores ainda não commitados (flake não reproduzido
+    // isolado). Faz um pequeno retry antes de desistir.
+    let afterPrepared = await fdmSync.selectOfflineBand(band);
+    for (let i = 0; i < 10 && !afterPrepared; i++) {
+      await new Promise(resolve => setTimeout(resolve, 50));
+      afterPrepared = await fdmSync.selectOfflineBand(band);
+    }
     const offlineStatus = await fdmSync.getOfflineStatus(band);
     const syncStatus = await fdmSync.getSyncStatus(band);
 

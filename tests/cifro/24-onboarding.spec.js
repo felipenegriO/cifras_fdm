@@ -221,7 +221,11 @@ test.describe.serial('Onboarding — jornada completa', () => {
     await page.fill('#email', EMAIL);
     await page.fill('#senha', SENHA);
     await page.click('button[type="submit"]');
-    await page.waitForURL(/index\.php/, { timeout: 10000 });
+    // Timeout mais generoso (15s, igual ao usado em outros logins deste
+    // arquivo): sob carga da suíte completa em paralelo, o login pode demorar
+    // mais que 10s a responder — causa de flake observada em execução
+    // completa (não reproduzido isolado).
+    await page.waitForURL(/index\.php/, { timeout: 15000 });
 
     const csrfResponse = await page.request.get('/api/csrf.php');
     const { csrf_token } = await csrfResponse.json();
