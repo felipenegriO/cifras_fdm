@@ -164,6 +164,7 @@ test('rejeita snapshot com playlists, roteiros ou categorias fora do contrato', 
     { ...base, roteiros: [{ id: 'abc', titulo: 'X' }] }, // id não finito
     { ...base, categorias: [{ id: 1 }] }, // nome ausente
     { ...base, musicas: [{ id: 1, nome: 'X', cifra: 42 }] }, // cifra não-string e não-null
+    { ...base, playlists: [{ nome: 'X', itens: ['abc'] }] }, // item escalar (não objeto) com id não numérico
   ];
 
   for (const body of cases) {
@@ -175,6 +176,22 @@ test('rejeita snapshot com playlists, roteiros ou categorias fora do contrato', 
     expect(await page.evaluate(() => fdmSync.sync(window.FDM_BAND_ID, { force: true }))).toBeFalsy();
     await page.unroute('/api/sync/data.php');
   }
+});
+
+test('snapshot válido sem plano/trial_expira_em usa os fallbacks null de writeSnapshot', async ({ page }) => {
+  // Linhas 87-88: `plano: json.plano ?? null` e `trial_expira_em: json.trial_expira_em ?? null`
+  // só assumem o ramo `?? null` quando o snapshot remoto não envia essas chaves
+  // (validateSnapshot não as exige, ao contrário de musicas/playlists/roteiros/categorias).
+  await page.goto('/index.php');
+  await page.evaluate(() => fdmSync.sync(window.FDM_BAND_ID, { force: true }));
+  const bandId = await page.evaluate(() => window.FDM_BAND_ID);
+  await page.route('/api/sync/data.php', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ banda_id: bandId, content_revision: 998, musicas: [], playlists: [], roteiros: [], categorias: [] }),
+  }));
+  expect(await page.evaluate(() => fdmSync.sync(window.FDM_BAND_ID, { force: true }))).toBeTruthy();
+  await page.unroute('/api/sync/data.php');
 });
 
 test('applyMutation cobre todos os caminhos de mutação local (músicas, playlists, roteiros, categorias)', async ({ page }) => {
@@ -211,6 +228,17 @@ test('applyMutation cobre todos os caminhos de mutação local (músicas, playli
     out.categoriaRenameSemPrevio = await fdmSync.applyMutation('/src/backend/categorias/api.php', { id: -993, action: 'save' }, { content_revision: 1011, categoria: { id: -993, nome: 'Cat Renomeada' } }, bandaId);
     // categorias/api.php: upsert sem response.categoria (filter(Boolean) remove item nulo)
     out.categoriaSemResposta = await fdmSync.applyMutation('/src/backend/categorias/api.php', { action: 'save' }, { content_revision: 1012 }, bandaId);
+    // categorias/api.php: upsert com payload.id e categoria anterior encontrada em window.categorias ->
+    // renomeia classificacao das músicas que apontavam para o nome antigo (ramo verdadeiro de "previous ? ... : items")
+    const previousCategoriaId = -992;
+    window.categorias = Array.isArray(window.categorias) ? window.categorias : [];
+    window.categorias.push({ id: previousCategoriaId, nome: 'Cat Antiga' });
+    out.categoriaRenameComPrevio = await fdmSync.applyMutation(
+      '/src/backend/categorias/api.php',
+      { id: previousCategoriaId, action: 'save' },
+      { content_revision: 1014, categoria: { id: previousCategoriaId, nome: 'Cat Nova' } },
+      bandaId
+    );
 
     // caminho desconhecido -> false
     out.unknownPath = await fdmSync.applyMutation('/src/backend/desconhecido.php', {}, { content_revision: 1013 }, bandaId);
@@ -230,6 +258,7 @@ test('applyMutation cobre todos os caminhos de mutação local (músicas, playli
   expect(results.categoriaUpsertNoId).toBe(true);
   expect(results.categoriaRenameSemPrevio).toBe(true);
   expect(results.categoriaSemResposta).toBe(true);
+  expect(results.categoriaRenameComPrevio).toBe(true);
   expect(results.unknownPath).toBe(false);
 });
 
@@ -282,6 +311,29 @@ test('reconcileOfflineBand (via evento online) recarrega em sucesso e invalida/r
   ]);
   await expect(page).toHaveURL(/select-banda\.php/);
   await page.unroute('**/src/backend/bandas/selecionar.php');
+});
+
+test('reconcileOfflineBand com resposta ok mas sucesso false e sem acesso negado não recarrega nem redireciona', async ({ page }) => {
+  // Cobre o ramo em que nem `response.ok && json.sucesso` nem
+  // `response.status === 403 || /acesso negado/i.test(json.mensagem)` são verdadeiros:
+  // resposta 200 com sucesso:false e mensagem genérica (sem "acesso negado" e sem status 403).
+  await page.goto('/index.php');
+  await page.evaluate(() => fdmSync.sync(window.FDM_BAND_ID, { force: true }));
+  const bandId = await page.evaluate(() => window.FDM_BAND_ID);
+  const userKey = await page.evaluate(() => 'fdmOfflineBandId:' + (window.FDM_USER_ID || 'anonymous'));
+  await page.evaluate(({ key, id }) => localStorage.setItem(key, id), { key: userKey, id: bandId });
+  let reconcileCalls = 0;
+  await page.route('**/src/backend/bandas/selecionar.php', route => {
+    reconcileCalls += 1;
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ sucesso: false, mensagem: 'Banda temporariamente indisponível' }) });
+  });
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  await expect.poll(() => reconcileCalls).toBeGreaterThan(0);
+  await page.waitForTimeout(300);
+  await expect(page).toHaveURL(/index\.php/);
+  expect(await page.evaluate(key => localStorage.getItem(key), userKey)).toBe(bandId);
+  await page.unroute('**/src/backend/bandas/selecionar.php');
+  await page.evaluate(key => localStorage.removeItem(key), userKey);
 });
 
 test('reconcileOfflineBand ignora erro de rede silenciosamente (catch)', async ({ page }) => {

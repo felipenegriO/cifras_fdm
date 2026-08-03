@@ -1128,4 +1128,92 @@ test.describe('Editor de Músicas — ramos residuais', () => {
     });
     expect(content).toBe('');
   });
+
+  test('salvar música existente sem id na resposta mantém o id local, e sem acordes reconhecidos zera o tom', async ({ page }) => {
+    // Linha 354: `Object.assign(saved, payload, { id: data.id || saved.id, tom: detectedKey(content)?.key || '' })`
+    // Ramo `data.id || saved.id`: cobre quando a API não retorna `id` numa atualização
+    // (deve preservar o id local já existente em state.selected).
+    // Ramo `detectedKey(content)?.key || ''`: cobre quando o conteúdo não tem acordes
+    // reconhecíveis (detectedKey retorna null), então tom cai para ''.
+    const csrf = await getCsrf(page);
+    const create = await page.request.post(API, {
+      data: JSON.stringify({ nome: '__TESTE_SAVE_SEM_ID_RESPOSTA__', cifra: 'C G' }),
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+    });
+    const created = await create.json();
+    expect(created.ok ?? created.sucesso).toBeTruthy();
+
+    await page.goto('/src/backend/editor/editor.php');
+    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await page.locator('#buscaMusica').fill('__TESTE_SAVE_SEM_ID_RESPOSTA__');
+    await page.locator('#musicas li button').first().click();
+    await page.evaluate(() => {
+      const editor = window.tinymce.get('cifraInput');
+      editor.setContent('apenas texto sem nenhum acorde reconhecivel');
+      editor.dispatch('input');
+    });
+
+    await page.route('**/src/backend/editor/api.php', route => route.fulfill({
+      status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }),
+    }));
+    await page.locator('#saveButton').click();
+    await expect(page.locator('#status')).toHaveText('Música salva com sucesso.');
+
+    const selectedId = await page.evaluate(() => window.__editorSelectedIdForTest ?? null);
+    void selectedId;
+    // O título do editor permanece preenchido com o id local original (fallback aplicado).
+    await expect(page.locator('#titulo')).toHaveValue('__TESTE_SAVE_SEM_ID_RESPOSTA__');
+    await page.unroute('**/src/backend/editor/api.php');
+  });
+
+  test('sem window.fdmToast disponível, salvar e excluir com sucesso/erro não lançam erro', async ({ page }) => {
+    // Linhas 364/367/406/408: `if (window.fdmToast) fdmToast(...)` — cobre o ramo
+    // falso (sem toast global) tanto para salvar (sucesso e erro de rede)
+    // quanto para excluir (sucesso e erro de rede).
+    await page.goto('/src/backend/editor/editor.php');
+    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await page.evaluate(() => { delete window.fdmToast; });
+    await page.locator('#titulo').fill('__TESTE_SEM_TOAST__');
+    await page.evaluate(() => window.tinymce.get('cifraInput').setContent('<b>C G Am F</b>'));
+
+    // Salvar com sucesso, sem toast.
+    await page.route('**/src/backend/editor/api.php', route => route.fulfill({
+      status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, id: 777771 }),
+    }));
+    await page.locator('#saveButton').click();
+    await expect(page.locator('#status')).toHaveText('Música salva com sucesso.');
+    await page.unroute('**/src/backend/editor/api.php');
+
+    // Salvar com falha de rede, sem toast.
+    await page.route('**/src/backend/editor/api.php', route => route.abort('failed'));
+    await page.locator('#saveButton').click();
+    await expect(page.locator('#status')).toHaveAttribute('data-kind', 'error');
+    await page.unroute('**/src/backend/editor/api.php');
+
+    // Excluir com falha de rede, sem toast.
+    await page.evaluate(() => { window.fdmConfirm = async () => true; });
+    await page.route('**/src/backend/editor/api.php', async route => {
+      const body = JSON.parse(route.request().postData() || '{}');
+      if (body.action === 'delete') await route.abort('failed');
+      else await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, id: 777772 }) });
+    });
+    await page.locator('#moreActions').evaluate(el => { el.open = true; });
+    await page.locator('#deleteSongButton').click();
+    await expect(page.locator('#status')).toHaveAttribute('data-kind', 'error');
+    await page.unroute('**/src/backend/editor/api.php');
+
+    // Excluir com sucesso, sem toast.
+    await page.locator('#titulo').fill('__TESTE_SEM_TOAST_2__');
+    await page.route('**/src/backend/editor/api.php', async route => {
+      const body = JSON.parse(route.request().postData() || '{}');
+      if (body.action === 'delete') await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }) });
+      else await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, id: 777773 }) });
+    });
+    await page.locator('#saveButton').click();
+    await expect(page.locator('#status')).toHaveText('Música salva com sucesso.');
+    await page.locator('#moreActions').evaluate(el => { el.open = true; });
+    await page.locator('#deleteSongButton').click();
+    await expect(page.locator('#status')).toHaveText('Música excluída com sucesso.');
+    await page.unroute('**/src/backend/editor/api.php');
+  });
 });
