@@ -580,4 +580,140 @@ test.describe('Live — módulo cliente (window.LiveMode)', () => {
     await page.evaluate(() => window.LiveMode.consultarStatus());
     await expect(page.locator('#liveStatus')).toHaveText('Seguindo live');
   });
+
+  test('applyFollowerScroll com canSyncScroll true mas conteúdo não rolável usa fallback scrollTop', async ({ page }) => {
+    // Container sem overflow (max <= 0) força o ramo "else" do ternário de
+    // `top` em applyFollowerScroll (linha 201: `Number(status.scrollTop || 0)`),
+    // nunca exercitado porque os testes anteriores sempre tinham conteúdo
+    // rolável quando canSyncScroll era true.
+    await page.route('**/api/live/status.php*', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        success: true, hasHost: true, hostNome: 'Ana', version: 1, paginaAtual: 'index.php',
+        canSyncScroll: true, scrollPercent: 0.5, scrollTop: 0,
+      }),
+    }));
+    await page.goto('/index.php');
+    await page.evaluate(() => {
+      // Remove qualquer conteúdo que permita overflow, forçando max <= 0.
+      document.documentElement.style.overflow = 'hidden';
+      document.body.style.overflow = 'hidden';
+      document.body.style.height = '10px';
+    });
+    await page.evaluate(() => window.LiveMode.entrarOuSairLive());
+    await expect(page.locator('#liveStatus')).toHaveText('Seguindo live');
+    // Não deve lançar erro; o ramo de fallback foi exercitado sem quebrar o fluxo.
+  });
+
+  test('currentPageState em music.php com id e playlistTom válidos inclui playlistTom no payload', async ({ page }) => {
+    const data = await (await page.request.get('/api/sync/data.php')).json();
+    const songId = data.musicas && data.musicas.length > 0 ? data.musicas[0].id : null;
+    test.skip(!songId, 'Nenhuma música disponível para o teste');
+
+    await page.route('**/api/live/host.php', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ success: true, hostId: 'host-validtom', hostNome: 'Rita' }),
+    }));
+    let capturedPayload = null;
+    await page.route('**/api/live/update.php', route => {
+      capturedPayload = route.request().postDataJSON();
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, hostNome: 'Rita' }) });
+    });
+    await page.goto(`/music.php?id=${songId}&playlistTom=C`);
+    await page.evaluate(() => window.LiveMode.assumirHost());
+    await expect(page.locator('#liveStatus')).toHaveText('Voce e o host');
+    expect(capturedPayload).not.toBeNull();
+    expect(capturedPayload.paginaAtual).toBe(`music.php?id=${songId}&playlistTom=C`);
+  });
+
+  test('currentPageState em music.php sem id no query string retorna cifraAtual vazio', async ({ page }) => {
+    await page.route('**/api/live/host.php', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ success: true, hostId: 'host-noid', hostNome: 'Léa' }),
+    }));
+    let capturedPayload = null;
+    await page.route('**/api/live/update.php', route => {
+      capturedPayload = route.request().postDataJSON();
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, hostNome: 'Léa' }) });
+    });
+    // music.php com id não-numérico: params.get('id') é truthy ("abc") mas o
+    // regex de validId falha, então cifraAtual/paginaAtual ficam vazios e
+    // podePublicar fica false — cobre o ramo `keepAlive: !!keepAlive ||
+    // !state.podePublicar` (idx0 do OR, antes só testado via keepAlive=true).
+    // Nota: música inexistente faz music.php redirecionar assincronamente
+    // após o carregamento, então verificamos o payload capturado em vez do
+    // texto de #liveStatus (que pode já ter sido desmontado pelo redirect).
+    await page.goto('/music.php?id=abc');
+    await page.evaluate(() => window.LiveMode.assumirHost());
+    await expect.poll(() => capturedPayload).not.toBeNull();
+    expect(capturedPayload.cifraAtual).toBeUndefined();
+    expect(capturedPayload.paginaAtual).toBeUndefined();
+    expect(capturedPayload.keepAlive).toBe(true);
+  });
+
+  test('publishScrollIfChanged em página sem overflow publica assinatura "none" e ignora repetição', async ({ page }) => {
+    await page.route('**/api/live/host.php', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ success: true, hostId: 'host-scroll', hostNome: 'Tom' }),
+    }));
+    let updateCalls = 0;
+    await page.route('**/api/live/update.php', route => {
+      updateCalls++;
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, hostNome: 'Tom' }) });
+    });
+    await page.goto('/index.php');
+    await page.evaluate(() => {
+      document.documentElement.style.overflow = 'hidden';
+      document.body.style.overflow = 'hidden';
+      document.body.style.height = '10px';
+    });
+    await page.evaluate(() => window.LiveMode.assumirHost());
+    await expect(page.locator('#liveStatus')).toHaveText('Voce e o host');
+    const before = updateCalls;
+    // Dispara scroll duas vezes seguidas sem mudança real de conteúdo: a
+    // assinatura calculada (`scroll.canSync ? ... : 'none'`) fica igual nas
+    // duas vezes, cobrindo tanto o ramo "none" quanto o early-return por
+    // assinatura repetida (linha 448).
+    await page.evaluate(() => window.dispatchEvent(new Event('scroll')));
+    await page.waitForTimeout(450);
+    const afterFirst = updateCalls;
+    expect(afterFirst).toBeGreaterThan(before);
+    await page.evaluate(() => window.dispatchEvent(new Event('scroll')));
+    await page.waitForTimeout(450);
+    expect(updateCalls).toBe(afterFirst);
+  });
+
+  test('assumirHostComConfirmacao cancelado via fdmConfirm não chama assumirHost', async ({ page }) => {
+    let hostCalled = false;
+    await page.route('**/api/live/host.php', route => { hostCalled = true; route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, hostId: 'x' }) }); });
+    await page.goto('/index.php');
+    await page.evaluate(() => {
+      window.fdmConfirm = () => Promise.resolve(false);
+    });
+    await page.evaluate(() => {
+      const btn = document.getElementById('livePlay') || document.getElementById('liveHostButton');
+      btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    });
+    await page.waitForTimeout(200);
+    expect(hostCalled).toBe(false);
+  });
+
+  test('document.readyState "complete" na carga do script chama bind() diretamente', async ({ page }) => {
+    // Recarrega o módulo live.js manualmente após o carregamento completo da
+    // página (via injeção dinâmica de <script>), forçando o ramo else de
+    // `document.readyState === 'loading'` (linha 527) — no carregamento normal
+    // do <script> estático em index.php, o documento ainda está "loading"
+    // nesse ponto, então só o ramo addEventListener era exercitado.
+    await page.goto('/index.php');
+    await page.waitForLoadState('domcontentloaded');
+    const readyState = await page.evaluate(() => document.readyState);
+    expect(readyState).not.toBe('loading');
+    await page.addScriptTag({ url: '/src/js/live.js' });
+    const hasLiveMode = await page.evaluate(() => typeof window.LiveMode === 'object');
+    expect(hasLiveMode).toBe(true);
+  });
 });

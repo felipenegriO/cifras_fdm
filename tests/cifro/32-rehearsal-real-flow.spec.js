@@ -469,6 +469,86 @@ test('com window.soundtouch (terceiro operando dos ORs em resolveSoundTouch) usa
   await expect(page.locator('#btnPlayPause')).toHaveText('Play');
 });
 
+test('buildSoundTouchNode retorna null quando getWebAudioNode falha (processor falsy)', async ({ page }) => {
+  // Stub de soundtouch com todas as 4 funções presentes (evita o fallback via
+  // stLib incompleto), mas getWebAudioNode retorna null — cobre o guard
+  // `if (!processor) return null;` (linha 92), que faz startFrom() cair no
+  // buildFallbackNode mesmo com a lib "disponível".
+  await page.route('**/src/vendor/soundtouch/soundtouch.min.js*', route => route.fulfill({
+    status: 200,
+    contentType: 'application/javascript',
+    body: `
+      window.soundtouchjs = {
+        SoundTouch: function (sampleRate) { this.sampleRate = sampleRate; this.pitch = 1; },
+        SimpleFilter: function (source, st) { this.source = source; this.st = st; },
+        BufferSource: function (buffer) { this.buffer = buffer; this.position = 0; },
+        getWebAudioNode: function () { return null; },
+      };
+    `,
+  }));
+
+  await openMusicPreview(page);
+  await openRehearsalPanel(page);
+  await page.locator('#inputAudio').setInputFiles(wavTone());
+  await expect(page.locator('#audioFileName')).toContainText('tom.wav');
+
+  await page.locator('#btnPlayPause').click();
+  await expect(page.locator('#btnPlayPause')).toHaveText('Pause');
+  // Sem um processor SoundTouch válido, cai no fallback nativo, que ainda
+  // toca e termina normalmente.
+  await expect(page.locator('#btnPlayPause')).toHaveText('Play', { timeout: 8000 });
+});
+
+test('play() chamado duas vezes seguidas com áudio carregado não reinicia a reprodução (guard playing)', async ({ page }) => {
+  await openMusicPreview(page);
+  await openRehearsalPanel(page);
+
+  const result = await page.evaluate(async () => {
+    const player = window.Rehearsal.pitch.createPitchPlayer();
+    // Gera um WAV curto sintético em memória (mesmo formato de wavTone) para
+    // carregar via loadFile diretamente pela API do player, sem passar pela UI.
+    const sampleRate = 44100;
+    const durationSeconds = 1;
+    const numSamples = sampleRate * durationSeconds;
+    const buffer = new ArrayBuffer(44 + numSamples * 2);
+    const view = new DataView(buffer);
+    function writeString(offset, str) { for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i)); }
+    writeString(0, 'RIFF'); view.setUint32(4, 36 + numSamples * 2, true); writeString(8, 'WAVE');
+    writeString(12, 'fmt '); view.setUint32(16, 16, true); view.setUint16(20, 1, true);
+    view.setUint16(22, 1, true); view.setUint32(24, sampleRate, true); view.setUint32(28, sampleRate * 2, true);
+    view.setUint16(32, 2, true); view.setUint16(34, 16, true);
+    writeString(36, 'data'); view.setUint32(40, numSamples * 2, true);
+    for (let i = 0; i < numSamples; i++) view.setInt16(44 + i * 2, Math.sin(i * 0.05) * 8000, true);
+    const blob = new Blob([buffer], { type: 'audio/wav' });
+
+    await player.loadFile(blob);
+    player.play();
+    const playingAfterFirst = player.isPlaying();
+    const timeAfterFirst = player.getCurrentTime();
+    player.play(); // segunda chamada: deve ser noop (guard `if (playing) return;`)
+    const playingAfterSecond = player.isPlaying();
+    player.pause();
+    return { playingAfterFirst, playingAfterSecond, timeAfterFirst };
+  });
+
+  expect(result.playingAfterFirst).toBe(true);
+  expect(result.playingAfterSecond).toBe(true);
+});
+
+test('carregar rehearsal.pitch.js uma segunda vez reutiliza window.Rehearsal existente', async ({ page }) => {
+  // Cobre o ramo `window.Rehearsal || {}` (linha 220) quando window.Rehearsal
+  // já existe (definido por outro módulo carregado antes, ex. rehearsal.audio.js).
+  await openMusicPreview(page);
+  await openRehearsalPanel(page);
+  const before = await page.evaluate(() => typeof window.Rehearsal.pitch.createPitchPlayer);
+  expect(before).toBe('function');
+  await page.addScriptTag({ url: '/src/js/rehearsal/rehearsal.pitch.js' });
+  const after = await page.evaluate(() => typeof window.Rehearsal.pitch.createPitchPlayer);
+  expect(after).toBe('function');
+  const audioStillThere = await page.evaluate(() => typeof window.Rehearsal.audio);
+  expect(audioStillThere).not.toBe('undefined');
+});
+
 test('handleOpenYoutube usa título de fallback "song" quando #song-title não existe', async ({ page }) => {
   await openMusicPreview(page);
   await openRehearsalPanel(page);

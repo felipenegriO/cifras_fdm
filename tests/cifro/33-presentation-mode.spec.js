@@ -345,6 +345,29 @@ test.describe('Modo Apresentação — ramos residuais de cobertura', () => {
     expect(page.url()).not.toContain('playlistTom');
   });
 
+  test('navegar para item de setlist com tom inclui playlistTom na URL', async ({ page }) => {
+    // Todos os testes anteriores de navegação avançavam para um item SEM tom
+    // (branch `if (next.tom)` falso). Aqui o item de destino tem tom definido,
+    // cobrindo o branch verdadeiro (linha 52).
+    const song = await gotoFirstSong(page);
+    await page.evaluate((id) => {
+      sessionStorage.setItem('fdmSetlist', JSON.stringify({
+        name: 'Setlist Com Tom no Próximo',
+        items: [{ id }, { id: 777777, tom: 'G' }],
+        currentIndex: 0,
+      }));
+    }, song.id);
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => window.fdmPresentation);
+    await page.evaluate(() => window.fdmPresentation.enter());
+    await Promise.all([
+      page.waitForURL(/id=777777/),
+      page.keyboard.press('ArrowRight'),
+    ]);
+    expect(page.url()).toContain('id=777777');
+    expect(page.url()).toContain('playlistTom=G');
+  });
+
   test('enter sem suporte a requestFullscreen não quebra (guard ausência da API)', async ({ page }) => {
     await gotoFirstSong(page);
     await page.waitForFunction(() => window.fdmPresentation);
