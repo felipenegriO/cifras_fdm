@@ -393,17 +393,11 @@ test('reproduz o áudio até o fim naturalmente cobrindo o loop de atualização
   await expect(page.locator('#btnPlayPause')).toHaveText('Play', { timeout: 8000 });
 });
 
-// NOTA: tentamos forçar o fallback de áudio nativo (sem SoundTouch) e o terceiro operando de
-// resolveSoundTouch() (window.soundtouch em vez de window.soundtouchjs) sobrescrevendo/deletando
-// window.soundtouchjs.getWebAudioNode e window.soundtouchjs em si via page.evaluate. Ambos falham
-// silenciosamente: o bundle soundtouch.min.js exporta esse namespace com propriedades definidas via
-// Object.defineProperty (getters, sem setter, non-configurable) - confirmado via debug isolado
-// (Object.defineProperty lança "Cannot redefine property: getWebAudioNode" e `delete
-// window.soundtouchjs` retorna false silenciosamente). Como a biblioteca real sempre está disponível
-// nesse ambiente de teste, os branches de fallback (buildFallbackNode, linhas 99-112) e o terceiro
-// operando de cada OR em resolveSoundTouch (linhas 6-9, idx4) são estruturalmente inalcançáveis sem
-// truques adicionais (ex.: servir uma build alternativa da lib só para o teste), não tentado por
-// orçamento de tempo. Documentado como impedimento.
+// NOTA: uma tentativa anterior de forçar esses ramos sobrescrevendo/deletando
+// window.soundtouchjs via page.evaluate falhou silenciosamente (o bundle exporta esse
+// namespace com propriedades via Object.defineProperty, getters sem setter,
+// non-configurable). A técnica que funcionou (abaixo) é interceptar o próprio request
+// HTTP do bundle via page.route e servir um stub, antes que o script real rode.
 
 test('seek durante reprodução ativa reinicia o startFrom com pitch alterado', async ({ page }) => {
   await openMusicPreview(page);
@@ -418,6 +412,59 @@ test('seek durante reprodução ativa reinicia o startFrom com pitch alterado', 
   // setPitchSemitones com playing=true cobre o ramo startFrom(currentTime) dentro de setPitchSemitones().
   await page.locator('#btnPitchUp').click();
   await expect(page.locator('#pitchLabel')).toContainText('+1');
+  await page.locator('#btnPlayPause').click();
+  await expect(page.locator('#btnPlayPause')).toHaveText('Play');
+});
+
+test('sem lib SoundTouch disponível, usa o fallback de áudio nativo (buildFallbackNode + onended)', async ({ page }) => {
+  // Intercepta o request do bundle soundtouch.min.js e serve um script vazio válido,
+  // de modo que window.soundtouchjs/window.SoundTouch nunca são definidos e
+  // resolveSoundTouch() retorna tudo undefined -> buildSoundTouchNode() retorna null
+  // -> startFrom() cai no buildFallbackNode() (native AudioBufferSourceNode).
+  await page.route('**/src/vendor/soundtouch/soundtouch.min.js*', route => route.fulfill({
+    status: 200,
+    contentType: 'application/javascript',
+    body: '// soundtouch intentionally stubbed out for fallback coverage',
+  }));
+
+  await openMusicPreview(page);
+  await openRehearsalPanel(page);
+  await page.locator('#inputAudio').setInputFiles(wavTone());
+  await expect(page.locator('#audioFileName')).toContainText('tom.wav');
+
+  await page.locator('#btnPlayPause').click();
+  await expect(page.locator('#btnPlayPause')).toHaveText('Pause');
+  // O tom de 2s toca via fonte nativa (onended real do AudioBufferSourceNode)
+  // e volta para "Play" quando stopInternal(true) + onEnded() disparam.
+  await expect(page.locator('#btnPlayPause')).toHaveText('Play', { timeout: 8000 });
+});
+
+test('com window.soundtouch (terceiro operando dos ORs em resolveSoundTouch) usa o caminho avançado', async ({ page }) => {
+  // Serve um stub que define window.soundtouch (minúsculo) em vez de window.soundtouchjs,
+  // cobrindo o terceiro operando de cada `||` em resolveSoundTouch (linhas 6-9, idx4) e
+  // permitindo que buildSoundTouchNode() complete com sucesso via um getWebAudioNode falso.
+  await page.route('**/src/vendor/soundtouch/soundtouch.min.js*', route => route.fulfill({
+    status: 200,
+    contentType: 'application/javascript',
+    body: `
+      window.soundtouch = {
+        SoundTouch: function (sampleRate) { this.sampleRate = sampleRate; this.pitch = 1; },
+        SimpleFilter: function (source, st) { this.source = source; this.st = st; },
+        BufferSource: function (buffer) { this.buffer = buffer; this.position = 0; },
+        getWebAudioNode: function (ctx, filter) {
+          return { connect: function () {}, disconnect: function () {} };
+        },
+      };
+    `,
+  }));
+
+  await openMusicPreview(page);
+  await openRehearsalPanel(page);
+  await page.locator('#inputAudio').setInputFiles(wavTone());
+  await expect(page.locator('#audioFileName')).toContainText('tom.wav');
+
+  await page.locator('#btnPlayPause').click();
+  await expect(page.locator('#btnPlayPause')).toHaveText('Pause');
   await page.locator('#btnPlayPause').click();
   await expect(page.locator('#btnPlayPause')).toHaveText('Play');
 });
