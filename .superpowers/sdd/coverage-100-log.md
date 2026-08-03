@@ -2089,3 +2089,74 @@ plano.php (9 residual) e callback.php (3 residual) nao revisitados.
    qualquer analise de gaps, e corrigir flakes de bloqueio primeiro.
 5. PHP: plano.php/callback.php seguem pendentes de nova tentativa com
    withExtraEnv()/page.route (nao tentado ha muitas passadas).
+
+## Iteracao 35 - novo bug de infra descoberto (Start-Process detached morre
+silenciosamente) + primeiro teste real em service-worker.js
+
+### Achado de infraestrutura: `Start-Process -WindowStyle Hidden` para rodar o
+pipeline em background morreu silenciosamente aos ~4min (parou de escrever no
+log em 07:21, sem gerar `PIPELINE_DONE_EXIT_*`, sem processo `node` vivo
+depois, sem qualquer erro capturado) - mesma categoria de bug que a suspeita
+de dados obsoletos da Iteracao 34, mas na camada de orquestração do proprio
+agente, nao no script. `Start-Process` desanexado nao é supervisionado pelo
+harness e pode ser morto por limpeza de processo/sandbox sem deixar rastro.
+Corrigido usando o mecanismo de background nativo do harness (Bash
+`run_in_background: true`) em vez de `Start-Process` do PowerShell - esse
+sim é supervisionado e garante notificacao real de conclusao. Registrando
+para as proximas passadas: NUNCA usar `Start-Process -WindowStyle Hidden`
+para o pipeline longo; sempre usar o mecanismo de background do proprio
+harness.
+
+### Trabalho feito nesta passada
+Em vez de esperar os ~14min do pipeline completo parado, foram escritos e
+verificados (rodando o spec isoladamente com `npx playwright test
+tests/cifro/30-service-worker-coverage.spec.js --project=pwa`, sem tocar no
+coverage/js compartilhado com o pipeline completo rodando em paralelo) dois
+novos casos de cobertura em `tests/cifro/30-service-worker-coverage.spec.js`
+para `public/service-worker.js`:
+- linha 55 (`populateStatic` lança `Asset inválido:` quando um asset estático
+  buscado durante a instalação vem com content-type que não bate com o
+  esperado) - monkey-patch temporário de `self.fetch` dentro do sandbox do
+  Runtime.evaluate do proprio service worker para forçar content-type
+  inválido, chamando `populateStatic` diretamente.
+- linha 65 (`preparePages` lança `Página inválida:` quando uma stage page
+  buscada não passa em `validStagePage`, ramo distinto do guard de userId
+  ausente já coberto por um teste anterior) - mesmo mecanismo de
+  monkey-patch, forçando um HTML sem os marcadores esperados.
+
+Ambos os testes passaram isolados (2 passed, 12.0s) após corrigir um erro de
+indexação no array `checks` (havia 3 chamadas de `getContext()` entre o
+array literal original e o ponto de inserção que eu não tinha contado -
+`helperChecks[10]`/`[11]` retornavam `null`; corrigido para `[13]`/`[14]`).
+
+Commit: 9e66aed.
+
+### Estado do pipeline completo no fim desta passada
+Pipeline completo relançado corretamente via `run_in_background` do harness,
+ainda em execução no momento em que esta entrada foi escrita (progredindo
+normalmente pelos testes numerados, sem falhas até onde foi observado). O
+ranking fresco de gaps por arquivo desta iteração ainda não foi extraído -
+fica para a próxima passada assim que o pipeline (ou uma nova tentativa)
+terminar com exit 0 e regenerar `coverage/js/lcov.info`.
+
+### Próximo
+1. Assim que o pipeline (relançado nesta passada) terminar, confirmar exit 0
+   e extrair BRDA fresca de `coverage/js/lcov.info` antes de continuar
+   atacando service-worker.js/editor.js/fdm-sync.js - a lista de linhas da
+   Iteracao 34 (23/22/21 gaps respectivamente) é a melhor referência
+   disponível mas ainda não foi reconfirmada após o teste desta passada.
+2. editor.js: revisado brevemente `tests/cifro/04-editor-musicas.spec.js`
+   (1268 linhas) - grande parte dos gaps listados na Iteracao 34
+   (confirmDiscard true/false, clique na mesma música, fdmToast
+   ausente/erro) já parecem exercitados por testes existentes; suspeita-se
+   que os gaps residuais sejam sub-branches específicos (operandos
+   individuais de && / ||, ou os guards defensivos de `songs()`/
+   `renderCategories()` já documentados como inalcançáveis em comentário na
+   linha ~592 do spec) - precisa de BRDA fresca para confirmar em vez de
+   adivinhar.
+3. fdm-sync.js: lido a fonte completa; não houve tempo nesta passada para
+   escrever testes novos - candidato prioritário na próxima passada,
+   também precisa de BRDA fresca antes de escrever testes cegos.
+4. SEMPRE usar `run_in_background` do harness (nunca `Start-Process`
+   PowerShell desanexado) para o pipeline completo - ver achado de
+   infraestrutura acima.
