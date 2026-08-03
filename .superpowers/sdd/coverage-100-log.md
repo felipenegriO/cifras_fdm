@@ -1692,3 +1692,100 @@ plano.php/callback.php em PHP se o retorno em JS diminuir. Reforcar o
 protocolo de disparo do pipeline em background (arquivo de log +
 polling direto do marcador EXITCODE, sem jamais usar Stop-Process sem
 antes confirmar via Get-CimInstance qual comando cada PID representa).
+
+## Iteracao 32
+
+### Estado no inicio da passada
+Confirmado via `git log --oneline -15` (topo f5f5ab5) e BRDA fresca apos
+rodar o pipeline completo `npm run test:coverage:js` em background com
+log dedicado (protocolo do prompt seguido: `npm run test:coverage:js >
+coverage-js-run.log 2>&1 &`, polling proprio via `tail`/`grep -q
+"^EXITCODE:"` a cada ~50s dentro de chamadas Bash, sem matar nenhum
+processo node). Resultado: 647 testes, 646 passed, 1 skipped, 0
+failed, branches 92.95% (1808/1945) - identico ao estado reportado no
+inicio da passada, confirmando estabilidade.
+
+### fdm-presentation.js (tests/cifro/33-presentation-mode.spec.js)
+BRDA fresca reconfirmou 15 branches residuais. Ao investigar a linha
+204 (`if (document.documentElement.requestFullscreen) { ... }`),
+descoberto que o teste ja existente "enter sem suporte a
+requestFullscreen nao quebra" (commit 631e050, linha 371) usa `delete
+document.documentElement.requestFullscreen` - isso NAO tem efeito
+porque `requestFullscreen` e um metodo herdado do prototype
+(`Element.prototype`/`HTMLElement.prototype`), nao uma own-property do
+elemento; `delete` em uma own-property inexistente e um no-op, entao o
+guard permanece sempre truthy nesse teste e o ramo falso nunca era de
+fato exercitado (explica por que o BRDA continuava mostrando
+204,39,1,0 mesmo com aquele teste presente havia varias passadas).
+
+Corrigido adicionando um novo teste que usa
+`Object.defineProperty(document.documentElement, 'requestFullscreen',
+{configurable: true, value: undefined})` para criar uma own-property
+que de fato sobrepõe o metodo herdado, forçando o guard a avaliar
+falso corretamente. Teste roda `enter()` e confirma que `body` recebe
+a classe `fdm-presenting` sem lançar erro.
+
+Tambem adicionado um teste exercitando `toggleScroll()` chamado em
+sequencia rapida (start -> stop -> start -> stop) para tentar cobrir
+os guards de reentrada em `startScroll` (linha 132, `if
+(state.scrolling) return`) e `stopScroll` (linha 150, `if
+(state.rafId) cancelAnimationFrame`) em ambos os ramos, aproveitando
+que com conteudo curto (sem overflow) o auto-stop interno de `step()`
+já zera `state.rafId` antes da chamada manual seguinte.
+
+Ambos os testes novos passam isoladamente (`npx playwright test
+tests/cifro/33-presentation-mode.spec.js --project=cifro`: 31 passed).
+Reconfirmacao via BRDA completa nao foi refeita nesta passada (exigiria
+novo pipeline completo de ~14min); recomendado reextrair no inicio da
+proxima passada para confirmar quais dos ramos remanescentes de
+fdm-presentation.js (~13 aproximadamente apos esta correcao) fecharam.
+
+Commit desta passada: "test: fix ineffective requestFullscreen guard
+test + cover startScroll/stopScroll re-entry branches (Iteracao 32)".
+
+### live.js / rehearsal.pitch.js / script.js
+BRDA fresca extraida e registrada para as tres:
+- live.js: 12 branches residuais confirmados (linhas 2, 48, 99, 165,
+  196, 258, 298, 403, 493 e ambos os ramos das linhas 148/151).
+- rehearsal.pitch.js: 8 branches residuais confirmados (linhas 22, 60,
+  65, 106 [ambos ramos], 115, 134, 136, 220).
+- script.js: 6 branches residuais confirmados (linhas 6, 31, 32, 40,
+  48, 61). Ao investigar a linha 6 (`if (typeof
+  window.renderPlaylistsMenu === 'function')`), notado que o teste
+  existente em tests/cifro/39-script-branches.spec.js chama `delete
+  window.renderPlaylistsMenu` antes de `openSideMenu()` e deveria
+  cobrir o ramo falso - possivel suspeita de outra reatribuicao
+  assincrona sobrescrevendo antes da chamada, ou uma peculiaridade
+  na fusao de cobertura V8 entre specs; nao investigado a fundo por
+  tempo. As linhas 31/32/40/48 (guards de elemento ausente em
+  menuButtonTop/menucloseButton/closeButton) tambem nao fecharam com
+  o teste existente que faz `.remove()` dos elementos e depois clica
+  via `document.getElementById(id)?.click()` - suspeita de que esses
+  ids podem nao existir na pagina music.php usada no teste
+  (`openPreview` -> `/music.php?...`), fazendo o optional-chaining
+  descartar o clique silenciosamente; precisa confirmar no markup
+  (public/src/Views/partials/topnav.php e music.php) na proxima
+  passada.
+
+Essas tres nao foram atacadas com novos testes nesta passada - o
+tempo foi consumido no pipeline completo (14min) + investigacao de
+fdm-presentation.js. Prioridade para a proxima passada.
+
+### PHP (plano.php / callback.php)
+Nao revisitado nesta passada por tempo; PHP permanece estavel em
+645 passed, 2 skipped, 94.24% branches (1834/1946) conforme ultima
+confirmacao.
+
+### Proximo
+1. Reextrair BRDA fresca de fdm-presentation.js apos o commit desta
+   passada para confirmar fechamento das linhas 132/150/204.
+2. Investigar por que os testes existentes de script.js (linha 6 e
+   31/32/40/48) nao fecham os ramos correspondentes - conferir se os
+   ids menuButtonTop/menucloseButton/closeButton existem de fato no
+   DOM renderizado por music.php, e se ha alguma reatribuicao
+   assincrona de window.renderPlaylistsMenu antes da chamada de
+   openSideMenu no teste.
+3. Atacar live.js (12 gaps) e rehearsal.pitch.js (8 gaps) com tecnicas
+   ja documentadas (page.route, withExtraEnv, Object.assign em vez de
+   reassign).
+4. Revisitar plano.php/callback.php em PHP se o retorno em JS diminuir.
