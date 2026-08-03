@@ -597,6 +597,15 @@ test.describe('Editor de Músicas — Tela', () => {
     await expect(page.locator('#status')).toHaveText('Editor visual indisponível. Usando edição em texto.');
     await page.locator('#cifraInput').fill('C G Am F texto simples');
     await expect(page.locator('#dirtyIndicator')).toBeVisible();
+
+    // Linhas 57-58: setContent() com state.editor nulo (TinyMCE indisponível)
+    // cai no ramo `else elements.textarea.value = value || ''`. Clicar em
+    // "Nova música" chama newSong() -> setContent(''), exercitando esse
+    // ramo diretamente (o boot inicial da página não chama setContent()).
+    await page.evaluate(() => { window.fdmConfirm = async () => true; });
+    await page.locator('#newSongButton').click();
+    await expect(page.locator('#cifraInput')).toHaveValue('');
+
     await page.unroute('**/tinymce.min.js*');
   });
 

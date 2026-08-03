@@ -510,3 +510,30 @@ test('FDM_BAND_ID assume pendingBand quando só existe pendingBandStorageKey (se
   await expect(page.locator('body')).not.toContainText('Fatal error');
   await page.evaluate(id => localStorage.removeItem('fdmPendingBandId:' + id), realUserId);
 });
+
+test('window.songs/playlistsSalvas/roteirosSalvos/categorias já em array no boot preservam a mesma referência (ramo verdadeiro do Array.isArray)', async ({ page }) => {
+  // Cobre o ramo verdadeiro (não documentado ainda) de
+  // `Array.isArray(window.songs) ? window.songs : []` e equivalentes em
+  // fdm-sync.js linhas 12-15: quando o backend já preenche essas globais
+  // como arrays antes de fdm-sync.js rodar (cenário normal em produção,
+  // via <script> inline do PHP antes de fdm-sync.js), o módulo deve
+  // preservar a mesma referência de array em vez de substituí-la.
+  await page.addInitScript(() => {
+    window.songs = [{ id: '__preset_song__', nome: 'Preset' }];
+    window.playlistsSalvas = [{ id: '__preset_playlist__' }];
+    window.roteirosSalvos = [{ id: '__preset_roteiro__' }];
+    window.categorias = [{ id: '__preset_categoria__' }];
+  });
+  await page.goto('/index.php');
+  const state = await page.evaluate(() => ({
+    songsHasPreset: window.songs.some(s => s.id === '__preset_song__'),
+    playlistsHasPreset: window.playlistsSalvas.some(p => p.id === '__preset_playlist__'),
+    roteirosHasPreset: window.roteirosSalvos.some(r => r.id === '__preset_roteiro__'),
+    categoriasHasPreset: window.categorias.some(c => c.id === '__preset_categoria__'),
+  }));
+  expect(state.songsHasPreset).toBe(true);
+  expect(state.playlistsHasPreset).toBe(true);
+  expect(state.roteirosHasPreset).toBe(true);
+  expect(state.categoriasHasPreset).toBe(true);
+});
+
