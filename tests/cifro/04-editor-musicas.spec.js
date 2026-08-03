@@ -1216,4 +1216,53 @@ test.describe('Editor de Músicas — ramos residuais', () => {
     await expect(page.locator('#status')).toHaveText('Música excluída com sucesso.');
     await page.unroute('**/src/backend/editor/api.php');
   });
+
+  test('colar apenas <script> resulta em innerHTML vazio e cai no fallback de preserveSpaces', async ({ page }) => {
+    // Linha 459: `wrap.innerHTML = String(html || '')` dentro de preserveSpaces.
+    // Colar conteúdo que contém só um <script> (removido por
+    // cleanImportedHtml antes de chamar preserveSpaces) resulta em
+    // root.innerHTML === '' após a remoção, exercitando o ramo falsy de
+    // `html || ''`.
+    await page.goto('/src/backend/editor/editor.php');
+    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    const content = await page.evaluate(() => {
+      const editor = window.tinymce.get('cifraInput');
+      const event = editor.dispatch('PastePreProcess', { content: '<script>alert(1)</script>' });
+      return event.content;
+    });
+    expect(content).toBe('');
+  });
+
+  test('colar <pre></pre> vazio cai no fallback de innerHTML vazio', async ({ page }) => {
+    // Linha 474: `(pre.innerHTML || '')` — cobre o ramo em que a tag <pre>
+    // colada não tem conteúdo algum.
+    await page.goto('/src/backend/editor/editor.php');
+    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    const content = await page.evaluate(() => {
+      const editor = window.tinymce.get('cifraInput');
+      const event = editor.dispatch('PastePreProcess', { content: '<pre></pre>' });
+      return event.content;
+    });
+    expect(content).toBe('');
+  });
+
+  test('sem window.fdmTheme, TinyMCE inicializa com skin escura padrão', async ({ page }) => {
+    // Linha 518: `(window.fdmTheme ? window.fdmTheme.get() : 'dark') !== 'light'`
+    // Remove window.fdmTheme antes do boot para exercitar o ramo `: 'dark'`
+    // do ternário (skin oxide-dark aplicada por padrão sem o helper de tema).
+    await page.addInitScript(() => {
+      Object.defineProperty(window, 'fdmTheme', {
+        configurable: true,
+        get() { return undefined; },
+        set() { /* ignora tentativas de setar, mantendo o guard sempre falsy */ },
+      });
+    });
+    await page.goto('/src/backend/editor/editor.php');
+    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    const skin = await page.evaluate(() => {
+      const link = document.querySelector('link[href*="skin.min.css"]');
+      return link ? link.getAttribute('href') : null;
+    });
+    expect(skin).toContain('oxide-dark');
+  });
 });
