@@ -26,9 +26,9 @@ async function openRehearsalPanel(page) {
   await expect(page.locator('#modo-ensaio')).toHaveAttribute('aria-hidden', 'false');
 }
 
-function wavTone() {
+function wavTone(durationSeconds = 2) {
   const sampleRate = 8000;
-  const samples = sampleRate * 2;
+  const samples = sampleRate * durationSeconds;
   const dataSize = samples * 2;
   const buffer = Buffer.alloc(44 + dataSize);
   buffer.write('RIFF', 0);
@@ -467,4 +467,146 @@ test('com window.soundtouch (terceiro operando dos ORs em resolveSoundTouch) usa
   await expect(page.locator('#btnPlayPause')).toHaveText('Pause');
   await page.locator('#btnPlayPause').click();
   await expect(page.locator('#btnPlayPause')).toHaveText('Play');
+});
+
+test('handleOpenYoutube usa título de fallback "song" quando #song-title não existe', async ({ page }) => {
+  await openMusicPreview(page);
+  await openRehearsalPanel(page);
+
+  // Remove o elemento de título para exercitar o operando de fallback em handleOpenYoutube:
+  // `const defaultTitle = title ? title.textContent : "song";` (rehearsal.bootstrap.js linha 52).
+  await page.evaluate(() => document.getElementById('song-title')?.remove());
+
+  const search = page.waitForEvent('popup');
+  await page.locator('#btnAbrirYoutube').click();
+  const searchPage = await search;
+  await expect(searchPage).toHaveURL(/youtube\.com\/results.*song/);
+  await searchPage.close();
+});
+
+test('handleBindYoutube usa fallback de thumbnail quando meta.thumbnailUrl está ausente', async ({ page }) => {
+  // oEmbed sem thumbnail_url -> meta.thumbnailUrl fica undefined, cobrindo o fallback
+  // `meta.thumbnailUrl || youtubeModule.getThumbnailUrl(videoId)` (rehearsal.bootstrap.js linha 81).
+  await page.route('**/oembed**', route => route.fulfill({
+    contentType: 'application/json',
+    headers: { 'access-control-allow-origin': '*' },
+    body: JSON.stringify({ title: 'Sem thumbnail nos metadados' }),
+  }));
+  await page.route('**/src/backend/download-yt-audio.php', route => route.fulfill({
+    contentType: 'application/json',
+    body: JSON.stringify({ error: 'indisponível' }),
+  }));
+  await openMusicPreview(page);
+  await openRehearsalPanel(page);
+  await page.locator('#inputYoutubeUrl').fill('dQw4w9WgXcQ');
+  await page.locator('#btnVincularYoutube').click();
+  await expect(page.locator('#ytTitle')).toHaveText('Sem thumbnail nos metadados');
+  await expect(page.locator('#ytThumb')).toHaveAttribute('src', /dQw4w9WgXcQ/);
+});
+
+test('trocar o input de áudio sem selecionar arquivo não quebra (handleAudioFile(null))', async ({ page }) => {
+  await openMusicPreview(page);
+  await openRehearsalPanel(page);
+
+  // Dispara o evento "change" do <input type=file> sem arquivos selecionados, cobrindo o guard
+  // "if (!file) return;" em handleAudioFile (rehearsal.bootstrap.js linha 127).
+  await page.evaluate(() => {
+    document.getElementById('inputAudio').dispatchEvent(new Event('change'));
+  });
+  await page.waitForTimeout(150);
+  await expect(page.locator('#audioFileName')).toHaveText('');
+});
+
+test('handleStart e handleBack1 com player já carregado avançam/retrocedem a posição real', async ({ page }) => {
+  await openMusicPreview(page);
+  await openRehearsalPanel(page);
+  await page.locator('#inputAudio').setInputFiles(wavTone());
+  await expect(page.locator('#audioFileName')).toContainText('tom.wav');
+
+  // Avança a posição para poder testar handleBack1 com um valor > 0 (Math.max(0, t-1)).
+  await page.locator('#btnPlayPause').click();
+  await page.waitForTimeout(600);
+  await page.locator('#btnPlayPause').click();
+
+  // handleStart com player presente: seek(0) real (rehearsal.bootstrap.js linha 165-166).
+  await page.locator('#btnInicio').click();
+  // handleBack1 com player presente: seek(max(0, currentTime-1)) real (linha 169-172).
+  await page.locator('#btnMinus1').click();
+
+  await expect(page.locator('#btnPlayPause')).toHaveText('Play');
+});
+
+test('autoSaveInterval salva a posição quando a diferença ultrapassa 0.1s durante a reprodução', async ({ page }) => {
+  await openMusicPreview(page);
+  await openRehearsalPanel(page);
+  // updateAutoSave() (chamado a cada onTimeUpdate/frame durante a reprodução) já mantém
+  // state.lastPositionSeconds sincronizado continuamente, então o diff checado pelo próprio
+  // setInterval de 2s nunca ultrapassa 0.1s em reprodução normal (é um checkpoint defensivo
+  // redundante). Para exercitar o branch verdadeiro do guard `Math.abs(currentTime -
+  // state.lastPositionSeconds) > 0.1` (rehearsal.bootstrap.js linhas 321-327), interceptamos
+  // pitchModule.createPitchPlayer e removemos o callback onTimeUpdate antes de repassar às
+  // opções reais: o player real continua avançando currentTime normalmente, mas o bootstrap
+  // nunca mais sincroniza state.lastPositionSeconds via updateAutoSave, deixando o valor
+  // defasado até o setInterval "pegar" a diferença sozinho.
+  await page.evaluate(() => {
+    const orig = window.Rehearsal.pitch.createPitchPlayer;
+    window.Rehearsal.pitch.createPitchPlayer = function (opts) {
+      return orig(Object.assign({}, opts, { onTimeUpdate: function () {} }));
+    };
+  });
+
+  await page.locator('#inputAudio').setInputFiles(wavTone(6));
+  await expect(page.locator('#audioFileName')).toContainText('tom.wav');
+
+  await page.locator('#btnPlayPause').click();
+  await expect(page.locator('#btnPlayPause')).toHaveText('Pause');
+
+  const musicId = await page.evaluate(() => new URLSearchParams(window.location.search).get('id'));
+  await expect.poll(async () => {
+    const saved = await page.evaluate(
+      (id) => JSON.parse(localStorage.getItem('rehearsal:' + id) || 'null'),
+      musicId
+    );
+    return saved && saved.lastPositionSeconds;
+  }, { timeout: 6000, intervals: [500] }).toBeGreaterThan(0);
+
+  await page.locator('#btnPlayPause').click();
+});
+
+test('sem WaveSurfer disponível, waveform fica nulo e os guards dependentes de waveform são pulados', async ({ page }) => {
+  // Serve um script vazio para o bundle do WaveSurfer: window.WaveSurfer nunca é definido,
+  // createWaveform() retorna null (rehearsal.audio.js linha 10-13), e `waveform` permanece null
+  // durante todo o bootstrap. Isso cobre os ramos "falso"/early-return dependentes de waveform:
+  // updateRegionFromAB linha 36 (!waveform -> return), handleAudioFile linha 155 (if (waveform) pulado),
+  // handleClearAB linha 213 (if (waveform) pulado) e onTimeUpdate linha 133 (waveform && wavesurfer falso).
+  await page.route('**/src/vendor/wavesurfer/wavesurfer.min.js*', route => route.fulfill({
+    status: 200,
+    contentType: 'application/javascript',
+    body: '// wavesurfer intentionally stubbed out for coverage (window.WaveSurfer undefined)',
+  }));
+
+  await openMusicPreview(page);
+  await openRehearsalPanel(page);
+  await expect(page.evaluate(() => window.WaveSurfer)).resolves.toBeUndefined();
+
+  await page.locator('#inputAudio').setInputFiles(wavTone());
+  await expect(page.locator('#audioFileName')).toContainText('tom.wav');
+
+  // Marca A e depois B com A já setado (B > A) -> chama updateRegionFromAB internamente,
+  // que retorna cedo por !waveform (linha 36, idx0) sem lançar erro.
+  await page.locator('#btnSetA').click();
+  await page.locator('#btnPlus1').click();
+  await page.locator('#btnSetB').click();
+
+  // handleClearAB com waveform nulo: pula waveform.clearRegion() (linha 213, idx1).
+  await page.locator('#btnClearAB').click();
+
+  // Toca por um instante para que onTimeUpdate rode com waveform nulo (linha 133, idx1).
+  await page.locator('#btnPlayPause').click();
+  await page.waitForTimeout(500);
+  await page.locator('#btnPlayPause').click();
+
+  // Segundo upload com waveform ainda nulo: pula updateRegionFromAB via "if (waveform)" (linha 155, idx1).
+  await page.locator('#inputAudio').setInputFiles({ ...wavTone(), name: 'segundo.wav' });
+  await expect(page.locator('#audioFileName')).toContainText('segundo.wav');
 });
