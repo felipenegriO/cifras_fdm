@@ -1961,3 +1961,131 @@ A primeira rodada completa do pipeline (coverage-js-run.log, 14m9s,
    novidade - impedimentos ja documentados (falha de DB real / mock de
    resposta HTTP do Google) permanecem validos, nao revisitados nesta
    passada.
+
+## Iteracao 34 - pipeline JS bloqueado corrigido + ranking fresco corrige lista prioritaria estagnada
+
+### Achado principal: run-js.ps1 so gera lcov.info/roda o gate de branches se TODOS os
+testes passarem
+`scripts/coverage/run-js.ps1` executa `npx playwright test ...` e faz
+`if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }` ANTES de chamar
+`check-js-branches.mjs`. Ou seja: sempre que a suite completa tem
+qualquer teste falho (mesmo 1 de 652, mesmo flake nao relacionado ao
+codigo de producao), nao existe report/lcov.info novo e nenhum gate de
+cobertura roda - o pipeline simplesmente sai com erro sem gerar dados.
+Isso significa que toda vez que uma das passadas anteriores encontrou
+"1 falha" no pipeline completo e nao a corrigiu antes de tentar ler
+coverage/js/lcov.info, qualquer BRDA lido veio de uma rodada MAIS
+ANTIGA (potencialmente de varias iteracoes atras) - explicando por que
+a lista de arquivos prioritarios (script.js, rehearsal.pitch.js,
+live.js, plano.php, callback.php) ficou estagnada por ~10 passadas: as
+rodadas fresh provavelmente nunca chegaram a rodar o gate porque havia
+sempre 1-2 falhas nao corrigidas primeiro.
+
+### 3 flakes corrigidos (nenhum bug real de producao - todos passam 100%
+isolado/repetido, falham so sob carga real da suite completa em paralelo)
+1. `tests/cifro/31-browser-branch-matrix.spec.js` - "banner de plano
+   expirado nao aparece..." (linha ~365): `waitForTimeout(150)` fixo
+   apos `fdmSync.load()` (que dispara `checkOfflinePlanBanner`
+   assincronamente, fire-and-forget) nao era suficiente sob contencao
+   real de I/O do IndexedDB. Trocado por um loop curto de poll.
+2. `tests/cifro/31-browser-branch-matrix.spec.js` - "sincronizacao
+   local aplica playlists, roteiros, categorias e estado offline"
+   (linha ~376): `selectOfflineBand()` chamado logo apos
+   `markPrepared()` esporadicamente ainda via `canUseOffline()` == false
+   sob carga (a transacao IndexedDB de `markPrepared` ja resolveu via
+   `oncomplete`, mas a leitura seguinte via outra conexao ocasionalmente
+   nao via os dados ainda). Adicionado retry curto (ate 10x50ms).
+3. `tests/cifro/24-onboarding.spec.js` - "plano gratuito permite
+   somente um setlist": `waitForURL(/index\.php/, {timeout: 10000})`
+   apos login estourava sob carga da suite completa (outros testes do
+   mesmo arquivo ja usam 15000ms) - alinhado para 15000ms.
+4. `tests/music-layout.spec.js` - viewport `desktop-2560x1440` (a mais
+   pesada, 100 musicas x layout grande) estourava o timeout default de
+   60s. Investigando o diff, achamos que a base do arquivo ja tinha
+   `test.setTimeout(240000)` explicito, mas essa linha estava ausente
+   no working tree local no inicio desta passada (efeito colateral de
+   WIP nao commitado de sessao anterior, nao relacionado a cobertura;
+   o restante desse WIP - criacao de fixture de musica via API,
+   selector de login atualizado - parece legitimo e foi preservado).
+   Restaurada a linha original de 240000ms.
+
+Commit: 1c3423c.
+
+### Ranking fresco de gaps JS (BRDA de coverage/js/lcov.info, pipeline
+100% verde: 651 passed, 1 skipped, 0 failed, 14m25s) - branches
+93.45% (1870/2001), statements 97.13%, functions 92.58%, lines 94.54%.
+
+Este ranking é MUITO diferente da lista priorizada usada nas ultimas
+~10 passadas (que so olhava script.js/rehearsal.pitch.js/live.js) -
+confirma a suspeita do usuario de que a lista estava obsoleta:
+
+| Arquivo | Gaps residuais | Linhas |
+|---|---|---|
+| public/service-worker.js | 23 | 24,26,30,37,43,54,55,61,65,82,83,84,85,101,102,103,112,114,117,126,129 |
+| public/src/js/editor.js | 22 | 37,43,67,164,168,170,219,223,272,277,290,314,357,366,367,382,401,408,464,470,575,582 |
+| public/src/js/fdm-sync.js | 21 | 17,20,23,35,77,78,79,80,98,135,136,137,138,157,204,253,277,369,410 |
+| public/src/js/live.js | 12 | 2,48,99,148,151,165,196,247,258,298,403,493 |
+| public/src/js/rehearsal/rehearsal.bootstrap.js | 12 | 45,81,196,275,298,303,307,322,323,332 |
+| public/src/js/fdm-presentation.js | 11 | 41,94,98,124,127,132,150,238,271,325,341 |
+| public/src/js/rehearsal/rehearsal.pitch.js | 8 | 60,65,106,115,134,136,220 |
+| public/src/js/categorias.js | 4 | 74,92,94,107 |
+| public/src/js/rehearsal/rehearsal.audio.js | 4 | 51,68,81,82 |
+| public/src/js/chords.js | 2 | 197,257 |
+| public/src/js/fdm-theme.js | 2 | 25,37 |
+| public/src/js/music-view.js | 2 | 39,93 |
+| public/src/js/offline-tools.js | 2 | 24,29 |
+| public/src/js/roteiros.js | 2 | 70,89 |
+| public/src/js/fdm-sanitize.js | 1 | 15 |
+| public/src/js/rehearsal/rehearsal.ui.js | 1 | 39 |
+| public/src/js/rehearsal/rehearsal.youtube.js | 1 | 25 |
+| public/src/js/script.js | 1 | 61 |
+
+Nao foram escritos testes novos de cobertura nesta passada (o tempo foi
+consumido diagnosticando/corrigindo os 3 flakes que bloqueavam
+completamente a geracao de dados frescos - sem isso nenhum ranking
+novo seria possivel). live.js e script.js foram reexaminados
+brevemente: `tests/cifro/13-live-mode.spec.js` e
+`tests/cifro/39-script-branches.spec.js` ja parecem cobrir a maioria
+das linhas antigamente listadas como "residuais nao investigados" (2,
+48, 148/151, 196, 298, 403, 493 em live.js; 61 em script.js via teste
+"clique dentro do proprio sideMenu" ja presente no working tree) -
+mas o BRDA fresco mostra que live.js ainda tem 12 gaps abertos e
+script.js 1, entao ha sub-branches especificas (provavelmente operandos
+individuais de cadeias &&/|| longas, ou branches de erro dentro de
+try/catch) ainda nao cobertas - precisa de inspecao linha-a-linha na
+proxima passada usando os numeros de linha exatos acima.
+
+rehearsal.pitch.js: BRDA fresco mostra 8 residuais (linhas 60, 65, 106,
+115, 134, 136, 220) - a lista de "4 defensivos inalcancaveis"
+documentada ha varias passadas (linhas 106, 115, 134, 136 - stopInternal
+guards) bate parcialmente com o fresco (106,115,134,136 aparecem sim),
+mas ha 3 novos (60, 65, 220) nao documentados antes - precisam de
+investigacao na proxima passada.
+
+### PHP
+Nao tocado nesta passada (orcamento de tempo consumido inteiramente no
+lado JS, que estava com o pipeline quebrado - prioridade maior por
+bloquear qualquer medicao). Numeros da ultima passada conhecida
+permanecem a referencia: branches 94.24% (1834/1946), estavel.
+plano.php (9 residual) e callback.php (3 residual) nao revisitados.
+
+### Proximo
+1. **Maior prioridade real (corrigindo a lista obsoleta)**: atacar
+   service-worker.js (23 gaps), editor.js (22 gaps) e fdm-sync.js (21
+   gaps) - juntos são 66 dos 131 gaps totais (~50%), nunca antes
+   sistematicamente atacados nas ~10 passadas anteriores porque a
+   lista de prioridades ficou presa em script.js/rehearsal.pitch.js/
+   live.js.
+2. live.js e script.js: usar os numeros de linha exatos do ranking
+   fresco acima para achar os operandos especificos de && / || ainda
+   nao exercitados (os arquivos de teste existentes cobrem a maior
+   parte mas nao 100%).
+3. rehearsal.bootstrap.js (12), fdm-presentation.js (11): nunca antes
+   rankeados nesta lista - precisam de primeira analise.
+4. Sempre verificar `coverage/js/lcov.info` foi realmente regenerado
+   (timestamp) antes de confiar em qualquer numero - o pipeline so
+   gera dados frescos se 100% dos testes passarem (ver achado
+   principal acima). Rodar o pipeline completo ANTES de comecar
+   qualquer analise de gaps, e corrigir flakes de bloqueio primeiro.
+5. PHP: plano.php/callback.php seguem pendentes de nova tentativa com
+   withExtraEnv()/page.route (nao tentado ha muitas passadas).
