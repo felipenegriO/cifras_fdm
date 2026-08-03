@@ -30,21 +30,57 @@ test('script.js — guards de elementos ausentes, clique fora fechando o menu e 
     try { openSideMenu(); } catch (e) { threw = true; }
 
     // Remove menusideMenu e sideMenu para exercitar os guards "elemento
-    // ausente" dentro dos handlers de menuButton/menuButtonTop/
-    // menucloseButton/closeButton, e depois disparamos os cliques via
-    // clonagem dos botões reais (os listeners já registrados no
-    // DOMContentLoaded seguem válidos mesmo com os alvos removidos).
+    // ausente" dentro dos handlers de menuButton/menucloseButton/closeButton
+    // (menuButtonTop não existe em music.php — ver teste dedicado em
+    // index.php abaixo), e depois disparamos os cliques via
+    // getElementById (os listeners já registrados no DOMContentLoaded
+    // seguem válidos mesmo com os alvos removidos).
     const menuSide = document.getElementById('menusideMenu');
     const sideMenu = document.getElementById('sideMenu');
     if (menuSide) menuSide.remove();
     if (sideMenu) sideMenu.remove();
 
-    ['menuButton', 'menuButtonTop', 'menucloseButton', 'closeButton'].forEach((id) => {
+    ['menuButton', 'menucloseButton', 'closeButton'].forEach((id) => {
       document.getElementById(id)?.click();
     });
 
     return { threw };
   });
+  expect(result.threw).toBe(false);
+  await expect(page.locator('body')).not.toContainText('Fatal error');
+});
+
+test('script.js — guards de elementos ausentes via menuButtonTop (index.php, herdado do topnav)', async ({ page }) => {
+  // music.php não renderiza o botão #menuButtonTop (esse id só existe no
+  // partial topnav.php, incluído em index.php e outras páginas, mas não em
+  // music.php). Por isso o guard `if (menuButtonTop)` da linha 26/27 do
+  // script.js nunca chega a registrar o listener quando os testes rodam
+  // apenas em music.php, deixando as linhas 31/32 (dentro do handler)
+  // estruturalmente inalcançáveis nessa página. Este teste roda em
+  // index.php, onde o botão existe de fato, para cobrir o ramo
+  // verdadeiro do guard externo e ambos os ramos do guard interno
+  // (menuSide/sideMenu presentes vs. removidos).
+  await page.goto('/index.php');
+  await expect(page.locator('#menuButtonTop')).toHaveCount(1);
+
+  const result = await page.evaluate(() => {
+    // Primeiro clique: menusideMenu/sideMenu presentes (ramo verdadeiro
+    // do guard interno).
+    document.getElementById('menuButtonTop')?.click();
+    const rightAfterFirstClick = document.getElementById('menusideMenu')?.style.right;
+
+    // Remove os alvos para exercitar o ramo falso do guard interno.
+    document.getElementById('menusideMenu')?.remove();
+    document.getElementById('sideMenu')?.remove();
+    let threw = false;
+    try {
+      document.getElementById('menuButtonTop')?.click();
+    } catch (e) {
+      threw = true;
+    }
+    return { rightAfterFirstClick, threw };
+  });
+  expect(['0', '0px']).toContain(result.rightAfterFirstClick);
   expect(result.threw).toBe(false);
   await expect(page.locator('body')).not.toContainText('Fatal error');
 });
