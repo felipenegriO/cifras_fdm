@@ -1265,4 +1265,59 @@ test.describe('Editor de Músicas — ramos residuais', () => {
     });
     expect(skin).toContain('oxide-dark');
   });
+
+  test('selecionar uma música diferente enquanto outra está ativa troca a seleção e aplica fallback de classificação vazia', async ({ page }) => {
+    // Linhas 219/223: `if (state.selected && String(state.selected.id) === String(song.id)) return;`
+    // (ramo verdadeiro com IDs diferentes, distinto do early-return de
+    // clique duplo na mesma música já coberto em outro teste) e
+    // `elements.classification.value = song.classificacao || '';` quando a
+    // segunda música não tem classificação.
+    await page.goto('/src/backend/editor/editor.php');
+    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await page.evaluate(() => {
+      window.songs.push(
+        { id: '__song_a_troca__', nome: '__MUSICA_A_TROCA__', artista: 'Artista A', classificacao: 'Louvor', cifra: 'A' },
+        { id: '__song_b_troca__', nome: '__MUSICA_B_TROCA__', artista: 'Artista B', classificacao: '', cifra: 'B' },
+      );
+    });
+    await page.locator('#buscaMusica').fill('__MUSICA_');
+    await page.evaluate(() => document.getElementById('buscaMusica').dispatchEvent(new Event('input')));
+
+    await page.locator('#musicas li button[data-song-id="__song_a_troca__"]').click();
+    await expect(page.locator('#titulo')).toHaveValue('__MUSICA_A_TROCA__');
+
+    await page.locator('#musicas li button[data-song-id="__song_b_troca__"]').click();
+    await expect(page.locator('#titulo')).toHaveValue('__MUSICA_B_TROCA__');
+    await expect(page.locator('#classificacao')).toHaveValue('');
+  });
+
+  test('normaliseChordMarkup remove tags b/strong vazias após colagem (linha 272)', async ({ page }) => {
+    // Linha 272: `if (!text) { element.remove(); return; }` dentro de
+    // normaliseChordMarkup, exercitado via cleanForSave no fluxo de salvar -
+    // uma tag <b></b> vazia (sem texto após trim) deve ser removida em vez
+    // de virar um acorde vazio.
+    await page.goto('/src/backend/editor/editor.php');
+    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await page.locator('#titulo').fill('__TESTE_BOLD_VAZIO__');
+    await page.evaluate(() => {
+      const editor = window.tinymce.get('cifraInput');
+      editor.setContent('<b></b><b>   </b>Letra da música com acorde <b>C</b> normal.');
+      editor.dispatch('input');
+    });
+    await page.locator('#saveButton').click();
+    await expect(page.locator('#status')).toHaveText('Música salva com sucesso.');
+
+    const sync = await page.request.get('/api/sync/data.php');
+    const data = await sync.json();
+    const musica = data.musicas.find(item => item.nome === '__TESTE_BOLD_VAZIO__');
+    expect(musica).toBeTruthy();
+    expect(musica.cifra).not.toContain('<b></b>');
+    expect(musica.cifra).toContain('normal.');
+
+    const csrf = await getCsrf(page);
+    await page.request.post(API, {
+      data: JSON.stringify({ action: 'delete', id: musica.id }),
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+    });
+  });
 });
