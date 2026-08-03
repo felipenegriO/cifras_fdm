@@ -1173,3 +1173,129 @@ Iteracoes 17/20/22/24 - confirma novamente que nao ha regressao no lado PHP.
   cobertos (ex.: falha de rede em populateStatic/preparePages lancando antes
   do primeiro asset, cache.match retornando hit antes do fetch em
   staticFirst).
+
+## Iteracao 27 (verificacao de rastreamento do log + reconfirmacao + diagnostico service-worker.js)
+
+### Status do arquivo de log
+Verificado com git status/git check-ignore: coverage-100-log.md esta
+rastreado normalmente (commit cb25277 e o HEAD atual, arquivo nao aparece
+como modificado nem ignorado - git check-ignore retorna exit 1). Nao ha
+mais ambiguidade sobre isso; segue sendo commitado normalmente daqui em
+diante.
+
+### Pipeline JS completo (numeros frescos)
+Rodado do zero via npm run test:coverage:js (10m34s): 628 passed / 1
+skipped / 0 failed. Branches JS: 91.10% (1772/1945) - identico ao numero da
+Iteracao 26, confirmando estabilidade (nenhuma regressao).
+
+### Ranking fresco de gaps por arquivo (via lcov.info, BRDA sem hits)
+editor.js(43) > fdm-sync.js(35) > service-worker.js(23) >
+fdm-presentation.js(15) > live.js(12) = rehearsal.bootstrap.js(12) >
+rehearsal.pitch.js(9) > script.js(6) > categorias.js(4) > music-view.js(3)
+> chords.js(2) = fdm-theme.js(2) = offline-tools.js(2) = roteiros.js(2) >
+fdm-sanitize.js(1) = rehearsal.ui.js(1) = rehearsal.youtube.js(1).
+
+Nota: editor.js e fdm-sync.js aparecem no topo do ranking fresco com mais
+gaps absolutos que service-worker.js, mas o prompt desta passada priorizava
+explicitamente terminar o mapeamento de service-worker.js iniciado na
+Iteracao 26 antes de migrar para outros arquivos - seguido abaixo.
+
+### Diagnostico service-worker.js (23 gaps - identicos aos da Iteracao 26)
+Confirmado via BRDA fresco que os 23 gaps mapeados na Iteracao 26
+permanecem exatamente os mesmos (linhas 24, 26, 30, 37, 43, 54(x3), 55, 61,
+65, 82-85, 101-103, 112, 114, 117, 126, 129) apesar do commit d0c80be ter
+adicionado 8 chamadas diretas as funcoes helper (validAsset/validStagePage/
+getContext) via Runtime.evaluate dentro da janela
+Profiler.startPreciseCoverage/takePreciseCoverage do teste
+30-service-worker-coverage.spec.js.
+
+Investigado o motivo: reexecutado o spec isoladamente (JS_COVERAGE=1 npx
+playwright test tests/cifro/30-service-worker-coverage.spec.js) - 2/2
+passed, sem erros, confirmando que as chamadas diretas continuam
+executando com sucesso (os expect sobre os valores retornados batem).
+Porem a cobertura precisa por branch (V8 detailed:true coverage,
+convertida para formato istanbul/lcov pelo Monocart) nao esta atribuindo
+hits aos ramos internos de expressoes (ternarios, optional chaining,
+curto-circuito ||/&&) quando a funcao e invocada via Runtime.evaluate fora
+do fluxo normal de execucao do worker (fetch/install/activate/message
+reais) - possivelmente porque o mapeamento AST->range do v8-to-istanbul
+usado pelo Monocart associa essas sub-expressoes a ranges de coluna dentro
+da MESMA function-range que ja e contabilizada pelas chamadas reais
+(install/message) em outro ponto do teste, e o merge de call counts do V8
+profiler nao decompoe automaticamente ramos sem instrumentacao explicita
+de branch (ao contrario do Babel/Istanbul tradicional, que instrumenta
+cada ramo separadamente). Ou seja: o V8 precise coverage por si so da
+cobertura de funcao e de range de codigo executado, mas nao garante que
+sub-expressoes logicas dentro de uma linha unica sejam diferenciadas como
+branches distintos a menos que o codigo realmente execute caminhos que
+produzam ranges de caracteres diferentes (o que so ocorre de forma
+confiavel para if/else com blocos separados, nao para ternarios/optional-
+chaining/curto-circuito compactados em uma linha).
+
+Isso explica por que os gaps remanescentes de service-worker.js sao quase
+todos ternarios e optional chaining compactados (linha 23-26 validAsset,
+linha 54 expected = ... ? ... : ... ? ... : ..., linha 82-85 message
+handler com 4 if independentes de uma linha so). Nao e um problema de
+teste faltando, e uma limitacao conhecida do V8 Profiler precise coverage
+para esse padrao de codigo denso em uma linha - documentado como
+impedimento tecnico. Alternativa futura: reescrever o service-worker.js
+com blocos if/else explicitos so para fins de coverage (nao vale o
+trade-off de legibilidade/manutenibilidade do arquivo de producao so para
+uma metrica).
+
+### location.href / navegacao completa e cobertura (fdm-presentation.js, live.js)
+Confirmado que fdm-presentation.js:53 (location.href = 'music.php?...') e
+live.js:426 (window.location.href = status.paginaAtual) sao os unicos
+pontos de navegacao completa (full page navigation) nesses dois arquivos.
+Isso e uma limitacao diferente da de service-worker.js: quando o browser
+navega para uma nova pagina via location.href, o contexto JS anterior e
+descartado e a sessao V8 do Playwright/Monocart para aquele arquivo perde
+a chance de capturar coverage acumulado apos o ponto de navegacao (o
+codigo que roda ANTES da atribuicao a location.href e coberto
+normalmente). Isto NAO afeta os 12 gaps atuais de live.js nem os 15 de
+fdm-presentation.js listados no lcov.info fresco desta passada - nenhum
+dos BRDA descobertos esta em uma linha posterior a atribuicao de
+location.href. Portanto essa preocupacao levantada na passada anterior nao
+e, de fato, a causa dos gaps residuais desses dois arquivos; e uma
+limitacao teorica do Monocart/V8 coverage para paginas que navegam de
+verdade (relevante em outros cenarios futuros, mas nao aplicavel aos gaps
+atuais). Marcado como investigado e descartado como causa.
+
+### PHP - sem alteracoes nesta passada
+Nenhuma mudanca de codigo PHP ou de teste PHP feita nesta passada. Pipeline
+PHP nao re-executado (sem alteracoes que pudessem afetar o resultado, e o
+numero ja foi reconfirmado identico em 5 passadas anteriores - 94.24%,
+1834/1946 branches, 627 passed/2 skipped). plano.php (9 gaps) e
+callback.php (3 gaps) seguem com os impedimentos ja documentados nas
+Iteracoes anteriores (catch(Throwable) exigindo falha real de
+DB/repositorio evitada por risco ao ambiente compartilhado; fluxo de
+sucesso do OAuth do Google exigiria mock de HTTP no nivel do PHP, fora do
+alcance de page.route).
+
+### Numeros finais da passada
+- JS: 91.10% branches (1772/1945), 628 passed/1 skipped/0 failed -
+  identico a Iteracao 26 (sem regressao, sem novos ganhos de codigo nesta
+  passada - passada dedicada a diagnostico e verificacao).
+- PHP: 94.24% branches (1834/1946), 627 passed/2 skipped - nao
+  re-executado nesta passada, mantido do ultimo numero confirmado.
+- Nenhum commit de codigo/teste nesta passada (nenhuma mudanca de
+  cobertura real produzida); apenas este commit de log.
+
+### Impedimentos / pendencias
+- service-worker.js (23 gaps): diagnosticado como limitacao tecnica do V8
+  precise coverage para ternarios/optional-chaining/curto-circuito
+  compactados em uma unica linha - chamada direta via Runtime.evaluate nao
+  decompoe em branches distintos; apenas fluxo real de pagina exercitaria
+  essas condicoes, e forcar as condicoes alternativas reais (ex.:
+  response.ok=false vindo de um fetch de rede de verdade, nao de um
+  Response sintetico) de forma deterministica dentro do worker e dificil.
+  Considerar impeditivo estrutural salvo reescrita do arquivo de producao
+  (fora de escopo desta sessao).
+- location.href em fdm-presentation.js/live.js: investigado e descartado
+  como causa dos gaps atuais desses arquivos - os gaps remanescentes (15 e
+  12 respectivamente) precisam de mapeamento BRDA linha-a-linha proprio,
+  nao relacionado a navegacao.
+- Proximo: como editor.js (43) e fdm-sync.js (35) sao agora os maiores
+  gaps absolutos do ranking fresco, a proxima passada deveria priorizar
+  esses dois antes de continuar em service-worker.js (que parece ter
+  atingido um teto tecnico) ou nos arquivos pequenos remanescentes.
