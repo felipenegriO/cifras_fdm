@@ -595,8 +595,16 @@ test.describe('Editor de Músicas — Tela', () => {
     await page.goto('/src/backend/editor/editor.php');
     await expect(page.locator('#editorLoadError')).toBeVisible();
     await expect(page.locator('#status')).toHaveText('Editor visual indisponível. Usando edição em texto.');
+    // A asserção abaixo flakou intermitentemente sob contenção da suite
+    // completa (nunca isolada) - a mesma classe de corrida documentada em
+    // Iteração 34/35 para outros testes desta suite: sob carga pesada, o
+    // event loop pode atrasar a entrega do evento 'input' disparado por
+    // fill() além do timeout padrão do toBeVisible(). O listener em si é
+    // registrado de forma síncrona antes do teste chegar aqui (garantido
+    // pelo await do #status acima), então um retry curto é suficiente -
+    // não há necessidade de aumentar o timeout global.
     await page.locator('#cifraInput').fill('C G Am F texto simples');
-    await expect(page.locator('#dirtyIndicator')).toBeVisible();
+    await expect(page.locator('#dirtyIndicator')).toBeVisible({ timeout: 15000 });
 
     // Linhas 57-58: setContent() com state.editor nulo (TinyMCE indisponível)
     // cai no ramo `else elements.textarea.value = value || ''`. Clicar em
