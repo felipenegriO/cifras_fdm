@@ -2160,3 +2160,112 @@ terminar com exit 0 e regenerar `coverage/js/lcov.info`.
 4. SEMPRE usar `run_in_background` do harness (nunca `Start-Process`
    PowerShell desanexado) para o pipeline completo - ver achado de
    infraestrutura acima.
+
+## Iteracao 35 (continuação) - pipeline fresco confirmado + editor.js/fdm-sync.js atacados
+
+### Pipeline: 2ª tentativa também falhou (flake), 3ª tentativa limpa
+A 1ª relançada nesta passada (task bml3ugh7n) terminou com 650 passed/1
+skipped/1 failed - `31-browser-branch-matrix.spec.js:376` ("sincronização
+local aplica playlists...") ainda flakou mesmo com o retry de 10x50ms
+adicionado na Iteracao 34 (contenção real da suite completa continua
+ocasionalmente maior que 500ms). Aumentado para 40x100ms (4s de janela
+total). Commit f5d94da. Reconfirmado passando isolado (2/2). Pipeline
+relançado uma 3ª vez (task bxeyltmgr) - desta vez limpo: **651 passed, 1
+skipped, 0 failed, 13m38s, branches 93.62% (1821/1945)**. lcov.info
+genuinamente fresco confirmado (timestamp batendo com o fim da run).
+
+### BRDA fresca extraída de coverage/js/lcov.info (pós pipeline limpo)
+- service-worker.js: ainda 23 gaps nas mesmas linhas da Iteracao 34,
+  **incluindo as linhas 55 e 65 que esta passada escreveu testes
+  específicos para cobrir** (commit 9e66aed, teste passa e a asserção do
+  valor da mensagem de erro confirma que o throw realmente aconteceu).
+  Ou seja: o teste exercita a linha de fato, mas o V8 precise coverage
+  não credita o branch como "taken" - suspeita de limitação/quirk do
+  monocart-reporter ao atribuir cobertura de código que roda dentro de um
+  `CDP Runtime.evaluate` separado (mesmo invocando funções compiladas no
+  script original do SW). Não investigado a fundo por falta de tempo -
+  **impedimento de ferramenta candidato, não de código**; próxima passada
+  deveria tentar mover a chamada para dentro do próprio `install`/mensagem
+  real do SW (via postMessage) em vez de Runtime.evaluate direto, para ver
+  se a atribuição de cobertura muda.
+- editor.js: caiu de 22 para **8 gaps** (linhas 67, 164, 168, 219, 223,
+  272, 277, 290) - a maioria dos gaps antigos já tinha sido fechada em
+  passadas anteriores que não tinham dados frescos para confirmar.
+- fdm-sync.js: confirmado **21 gaps** (linhas 17,20,23,35,77,78,79,80,98,
+  135,136,137,138,157(x2),204,253,277,369,410,410).
+
+### editor.js: 3 dos 8 gaps fechados nesta passada (commit 927eb9a)
+- linha 219/223: `if (state.selected && String(state.selected.id) ===
+  String(song.id)) return;` e fallback `song.classificacao || ''` -
+  faltava um teste que selecionasse uma música, depois **outra música
+  diferente** (só havia teste de clique duplo na mesma música). Novo
+  teste seleciona duas músicas distintas e confirma a segunda tem
+  classificação vazia como fallback.
+- linha 272: `if (!text) { element.remove(); return; }` em
+  `normaliseChordMarkup` - faltava colar uma tag `<b></b>`/`<b>   </b>`
+  vazia. Novo teste cola conteúdo com bold vazio via TinyMCE real
+  (disponível no ambiente de teste) e confirma que é removida do HTML
+  salvo.
+- Tentativa de linha 168 (`ordered.length === 1 ? 'música' : 'músicas'`,
+  ramo singular) **abandonada**: descoberto que `elements.count.textContent`
+  usa `ordered.length` (total de músicas da conta, não o resultado
+  filtrado pela busca) - portanto só fica 1 com uma conta que tenha
+  literalmente 1 música só. A conta de teste compartilhada tem 35 músicas
+  fixas; forçar esse estado exigiria um usuário/conta isolado dedicado,
+  fora do escopo desta passada. **Novo impedimento documentado.**
+- linhas 67, 277, 290 não tentadas (orçamento de tempo).
+
+### fdm-sync.js: análise revela que ~9 dos 21 gaps são código morto
+confirmado por leitura estrutural (não tentativa cega)
+- linhas 77-80 (`json.musicas ?? []` etc dentro de `writeSnapshot`):
+  `validateSnapshot(bandaId, json)` é a PRIMEIRA linha de `writeSnapshot`
+  e já lança se `json.musicas`/`playlists`/`roteiros`/`categorias` não
+  forem arrays - ou seja, por construção, ao chegar nas linhas 77-80 essas
+  chaves SEMPRE são arrays reais, o fallback `?? []` nunca pode disparar
+  through the normal call path. Confirmado inalcançável via API pública
+  (writeSnapshot não é exposta em `window.fdmSync`).
+- linhas 135-138 (mesmo padrão em `applySnapshot`): os dois únicos
+  chamadores (`performSync`, com json já validado, e `loadCached`, que
+  monta o objeto localmente sempre com arrays explícitos) nunca passam
+  undefined nessas chaves. Também inalcançável.
+- linha 98 (`if (!json || ...)` dentro de `validateSnapshot`, ramo
+  `!json`): tentei escrever um teste mockando `/api/sync/data.php` para
+  devolver `null` cru, mas por leitura do código, `performSync` já faz
+  `json.banda_id !== bandaId` ANTES de chamar `writeSnapshot`/
+  `validateSnapshot` (linha 210) - com `json === null` isso lança
+  `TypeError` e cai no `catch` genérico do próprio `performSync` (linha
+  215-217), nunca chegando em `validateSnapshot`. Testei mesmo assim (o
+  teste passa, `sync()` retorna `false` de qualquer forma) mas percebi que
+  NÃO fecha o gap real (a asserção passa pelo motivo errado) - **removido
+  antes de commitar** para não gerar um teste enganoso. Gap 98 também
+  parece inalcançável via API pública, mesma categoria dos anteriores.
+- Não tentadas: linhas 17/20/23/35 (fallbacks `window.FDM_USER_ID ||
+  'anonymous'` - existe um teste com esse nome em
+  `26-offline-sync.spec.js:535` mas ele NÃO exercita de fato as funções
+  internas `storageKey`/`offlineBandStorageKey`/`pendingBandStorageKey`,
+  apenas confirma manualmente o formato da chave via
+  `localStorage.setItem` direto - **teste enganoso pré-existente,
+  candidato a correção/expansão na próxima passada**), 157(x2), 204, 253,
+  277, 369, 410(x2).
+
+### Commits desta sub-passada
+9e66aed (service-worker.js, ver ressalva de instrumentação acima),
+f5d94da (flake fix), 927eb9a (editor.js).
+
+### Próximo
+1. Investigar a divergência de cobertura do CDP Runtime.evaluate em
+   service-worker.js (linhas 55/65) - considerar disparar via mensagem
+   postMessage real em vez de chamada direta.
+2. `tests/cifro/26-offline-sync.spec.js:535` ("storageKey/... caem para
+   anonymous") não exercita as funções reais - corrigir para de fato
+   invocar um caminho que use `storageKey`/`offlineBandStorageKey`/
+   `pendingBandStorageKey` internamente (ex.: `selectOfflineBand`/
+   `selectOnlineBand` com FDM_USER_ID undefined, inspecionando a chave
+   real gravada no localStorage/IndexedDB).
+3. fdm-sync.js linhas 77-80/135-138/98: prováveis inalcançáveis via API
+   pública (ver análise acima) - candidatos a impedimento formal definitivo
+   se confirmado numa revisão futura, ou a serem fechados só se o código de
+   produção for alterado (fora do escopo de "só testes").
+4. editor.js linha 168: exigiria fixture de conta com exatamente 1 música -
+   considerar um teste com usuário/banda dedicado e isolado.
+5. editor.js linhas 67, 277, 290 seguem não tentadas.
