@@ -223,6 +223,11 @@ test('service worker executa instalação, cache, mensagens e recuperação offl
         worker.postMessage({ type: 'PREPARE_OFFLINE', userId: 'playwright-sw' }, [channel.port2]);
       });
       if (!prepared.ok) throw new Error(prepared.error);
+      window.__cifroPrepareOffline = userId => new Promise(resolve => {
+        const channel = new MessageChannel();
+        channel.port1.onmessage = event => resolve(event.data);
+        worker.postMessage({ type: 'PREPARE_OFFLINE', userId }, [channel.port2]);
+      });
       const rejected = await new Promise(resolve => {
         const channel = new MessageChannel();
         channel.port1.onmessage = event => resolve(event.data);
@@ -236,6 +241,38 @@ test('service worker executa instalação, cache, mensagens e recuperação offl
       await fetch('/index.php', { method: 'POST', body: 'x' });
       await fetch(appOrigin.replace('localhost', '127.0.0.1') + '/index.php', { mode: 'no-cors' }).catch(() => null);
     }, appOrigin);
+
+    // Cobertura via postMessage real (não Runtime.evaluate/monkey-patch de
+    // self.fetch) das linhas 55/65: intercepta um único asset estático e uma
+    // única stage page via page.route (nível de rede do Playwright, que
+    // também intercepta os fetches feitos de dentro do próprio service
+    // worker) para forçar populateStatic/preparePages a lançar através do
+    // fluxo real de mensagens PREPARE_OFFLINE, e não de uma chamada direta
+    // no contexto de depuração do SW. Investiga a suspeita da Iteração 35
+    // de que o V8 precise coverage pode não creditar branches executados
+    // via Runtime.evaluate mesmo quando o teste passa e a mensagem de erro
+    // confere.
+    await context.route('**/src/js/offline-tools.js', route => route.fulfill({
+      status: 200, contentType: 'application/octet-stream', body: '// asset inválido de propósito',
+    }));
+    const staticRejected = await page.evaluate(userId => window.__cifroPrepareOffline(userId), 'postmsg-asset-invalido');
+    await context.unroute('**/src/js/offline-tools.js');
+    expect(staticRejected.ok).toBe(false);
+    expect(staticRejected.error).toContain('Asset inválido:');
+
+    await context.route('**/select-banda.php', route => route.fulfill({
+      status: 200, contentType: 'text/html', body: '<html><body>sem marcadores</body></html>',
+    }));
+    const pageRejected = await page.evaluate(userId => window.__cifroPrepareOffline(userId), 'postmsg-pagina-invalida');
+    await context.unroute('**/select-banda.php');
+    expect(pageRejected.ok).toBe(false);
+    expect(pageRejected.error).toContain('Página inválida:');
+
+    // Deixa o service worker num estado limpo/válido para o restante do
+    // teste (cache de assets/páginas coerente antes do cenário offline).
+    const reprepared = await page.evaluate(userId => window.__cifroPrepareOffline(userId), 'playwright-sw');
+    if (!reprepared.ok) throw new Error(reprepared.error);
+
     await cdp.send('Network.enable', {}, sessionId);
     await cdp.send('Network.emulateNetworkConditions', { offline: true, latency: 0, downloadThroughput: 0, uploadThroughput: 0 }, sessionId);
     await context.setOffline(true);

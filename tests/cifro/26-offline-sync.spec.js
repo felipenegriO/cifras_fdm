@@ -500,6 +500,19 @@ test('window.songs/playlistsSalvas/roteirosSalvos/categorias não-array são nor
   // módulo, antes de qualquer outro script. Um addInitScript injeta valores
   // não-array nessas globais antes do carregamento da página real, forçando
   // o ramo falso do ternário.
+  // Causa raiz do flake intermitente na suite completa (mas nunca
+  // isolada): fdm-sync.js registra um listener de 'visibilitychange'
+  // (linha ~408) que dispara sync({ throttle: true }) sempre que a aba
+  // fica visível. Quando o Playwright reutiliza a mesma aba entre specs
+  // (1 worker), a troca de foco entre testes pode disparar
+  // visibilitychange logo após o goto abaixo, fazendo applySnapshot()
+  // (linha ~135) sobrescrever window.songs/playlistsSalvas/etc com dados
+  // reais do servidor ANTES do page.evaluate ler o estado — uma corrida
+  // genuína contra o próprio boot do app, não um flake de ambiente.
+  // Bloqueamos o endpoint de sync para este teste especificamente, para
+  // que nenhum sync automático (por 'online' ou 'visibilitychange')
+  // consiga sobrescrever os valores forçados antes da asserção.
+  await page.route('/api/sync/data.php', route => route.abort());
   await page.addInitScript(() => {
     window.songs = 'not-an-array';
     window.playlistsSalvas = 42;
@@ -523,17 +536,38 @@ test('storageKey/offlineBandStorageKey/pendingBandStorageKey caem para "anonymou
   // As três funções fazem `String(window.FDM_USER_ID || 'anonymous')`.
   // FDM_USER_ID normalmente é preenchido pelo backend antes de fdm-sync.js
   // rodar; forçamos undefined via addInitScript para cobrir o fallback.
-  await page.addInitScript(() => {
-    Object.defineProperty(window, 'FDM_USER_ID', { value: undefined, writable: true, configurable: true });
-  });
+  //
+  // Nota (Iteração 36): a versão anterior deste teste apenas gravava a
+  // chave 'fdmPendingBandId:anonymous' manualmente via localStorage.setItem
+  // e conferia o próprio valor que ela mesma tinha acabado de escrever -
+  // não exercitava de fato `pendingBandStorageKey()`/`storageKey()`
+  // internas do módulo. Corrigido para chamar `window.fdmSync.selectOnlineBand`
+  // (exposta publicamente), que internamente usa `pendingBandStorageKey()`
+  // e `storageKey()` para montar as chaves reais gravadas no localStorage -
+  // se o fallback 'anonymous' não disparasse, a chave gravada teria outro
+  // prefixo e a asserção falharia.
+  //
+  // A primeira tentativa desta correção usava `addInitScript` para zerar
+  // `window.FDM_USER_ID` antes do load - mas descobri que
+  // `public/src/Views/index.php:257` grava um `<script>` inline
+  // `window.FDM_USER_ID = '<sessão real>'` no corpo da página, que roda
+  // DEPOIS do addInitScript e sobrescreve o valor forçado antes mesmo de
+  // fdm-sync.js carregar (a propriedade continua `writable`). Corrigido
+  // para esperar o load completo e então apagar `window.FDM_USER_ID` via
+  // `page.evaluate` imediatamente antes de chamar `selectOnlineBand`, que
+  // lê `window.FDM_USER_ID` em tempo de execução (não apenas no boot do
+  // módulo) - isso de fato força o ramo `|| 'anonymous'`.
   await page.goto('/index.php');
   const keys = await page.evaluate(() => {
-    localStorage.setItem('fdmPendingBandId:anonymous', '123');
+    delete window.FDM_USER_ID;
+    window.fdmSync.selectOnlineBand('123');
     return {
       pendingBandKeyPresent: localStorage.getItem('fdmPendingBandId:anonymous') === '123',
+      bandIdSet: window.FDM_BAND_ID === '123',
     };
   });
   expect(keys.pendingBandKeyPresent).toBe(true);
+  expect(keys.bandIdSet).toBe(true);
 });
 
 test('FDM_BAND_ID assume pendingBand quando só existe pendingBandStorageKey (sem offlineBand)', async ({ page }) => {
