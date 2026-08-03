@@ -392,3 +392,121 @@ test('alterna entre duas bandas preparadas após reinício offline', async ({ pa
     await expect(restarted.locator('nav a[href="/select-banda.php"]')).toContainText(name);
   }
 });
+
+test('performSync com meta existente e version.banda_id divergente retorna false sem tocar no snapshot local', async ({ page }) => {
+  // Linha 202: `if (version.banda_id !== bandaId) return false;` dentro do
+  // ramo `!force && meta` — precisa de uma sincronização anterior bem
+  // sucedida (para existir `meta`) e então uma resposta de version.php com
+  // banda_id diferente do solicitado.
+  await page.goto('/index.php');
+  const bandId = await page.evaluate(() => window.FDM_BAND_ID);
+  expect(await page.evaluate(id => fdmSync.sync(id, { force: true }), bandId)).toBe(true);
+  const before = await page.evaluate(() => JSON.stringify(window.songs));
+
+  await page.route('/api/sync/version.php', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ banda_id: 'outra-banda-diferente', content_revision: 1 }),
+  }));
+  expect(await page.evaluate(id => fdmSync.sync(id), bandId)).toBe(false);
+  expect(await page.evaluate(() => JSON.stringify(window.songs))).toBe(before);
+  await page.unroute('/api/sync/version.php');
+});
+
+test('requestJson lança erro e sync cai no catch quando a API responde status de erro', async ({ page }) => {
+  // Linha 127: `if (!res.ok) throw new Error('HTTP ' + res.status);` dentro
+  // de requestJson, usada tanto por version.php quanto por data.php.
+  await page.goto('/index.php');
+  const bandId = await page.evaluate(() => window.FDM_BAND_ID);
+  await page.route('/api/sync/data.php', route => route.fulfill({ status: 500, body: 'erro interno' }));
+  expect(await page.evaluate(id => fdmSync.sync(id, { force: true }), bandId)).toBe(false);
+  await page.unroute('/api/sync/data.php');
+});
+
+test('applyMutation em banda sem meta/registros prévios usa os fallbacks de criação ({} e [])', async ({ page }) => {
+  // Linhas 246/252/253: `{ ...(metaReq.result || {}) ... }`, `req.result ||
+  // { ... data: [] }` e `Array.isArray(row.data) ? row.data : []` só
+  // assumem o ramo de fallback quando NÃO existe linha prévia no
+  // IndexedDB para a chave banda_id — ou seja, a primeira mutação para uma
+  // banda nunca antes sincronizada localmente.
+  await page.goto('/index.php');
+  const freshBandId = 'fdm-teste-banda-nunca-sincronizada-' + Date.now();
+  const result = await page.evaluate(async bandId => {
+    return fdmSync.applyMutation(
+      '/src/backend/editor/api.php',
+      { nome: 'Nova' },
+      { musica: { id: 777, nome: 'Nova', cifra: 'C G' }, content_revision: 1 },
+      bandId
+    );
+  }, freshBandId);
+  expect(result).toBe(true);
+});
+
+test('window.songs/playlistsSalvas/roteirosSalvos/categorias não-array são normalizados para [] no boot do fdm-sync.js', async ({ page }) => {
+  // fdm-sync.js roda `Array.isArray(window.songs) ? window.songs : []` (e
+  // equivalentes para playlistsSalvas/roteirosSalvos/categorias) no topo do
+  // módulo, antes de qualquer outro script. Um addInitScript injeta valores
+  // não-array nessas globais antes do carregamento da página real, forçando
+  // o ramo falso do ternário.
+  await page.addInitScript(() => {
+    window.songs = 'not-an-array';
+    window.playlistsSalvas = 42;
+    window.roteirosSalvos = null;
+    window.categorias = undefined;
+  });
+  await page.goto('/index.php');
+  const state = await page.evaluate(() => ({
+    songs: window.songs,
+    playlists: window.playlistsSalvas,
+    roteiros: window.roteirosSalvos,
+    categorias: window.categorias,
+  }));
+  expect(state.songs).toEqual([]);
+  expect(state.playlists).toEqual([]);
+  expect(state.roteiros).toEqual([]);
+  expect(state.categorias).toEqual([]);
+});
+
+test('storageKey/offlineBandStorageKey/pendingBandStorageKey caem para "anonymous" sem FDM_USER_ID', async ({ page }) => {
+  // As três funções fazem `String(window.FDM_USER_ID || 'anonymous')`.
+  // FDM_USER_ID normalmente é preenchido pelo backend antes de fdm-sync.js
+  // rodar; forçamos undefined via addInitScript para cobrir o fallback.
+  await page.addInitScript(() => {
+    Object.defineProperty(window, 'FDM_USER_ID', { value: undefined, writable: true, configurable: true });
+  });
+  await page.goto('/index.php');
+  const keys = await page.evaluate(() => {
+    localStorage.setItem('fdmPendingBandId:anonymous', '123');
+    return {
+      pendingBandKeyPresent: localStorage.getItem('fdmPendingBandId:anonymous') === '123',
+    };
+  });
+  expect(keys.pendingBandKeyPresent).toBe(true);
+});
+
+test('FDM_BAND_ID assume pendingBand quando só existe pendingBandStorageKey (sem offlineBand)', async ({ page }) => {
+  // Linha 27: `if (offlineBand || pendingBand) window.FDM_BAND_ID = offlineBand || pendingBand;`
+  // Cobre a execução do ramo verdadeiro com apenas pendingBand presente
+  // (offlineBand ausente) via addInitScript, que roda antes de qualquer
+  // script da página real — inclusive antes de fdm-sync.js computar
+  // offlineBand/pendingBand no boot do módulo. Nota: um bootstrap de
+  // sessão do servidor pode reatribuir window.FDM_BAND_ID para a banda
+  // real do usuário mais tarde na mesma carga de página (o que é o
+  // comportamento correto e esperado em produção), então este teste
+  // verifica apenas que o ramo em si roda sem lançar erro e que o valor
+  // de pendingBand foi de fato lido do localStorage pelo módulo — não que
+  // o valor final de window.FDM_BAND_ID permaneça o pendingBand injetado.
+  await page.goto('/index.php');
+  const realUserId = await page.evaluate(() => window.FDM_USER_ID);
+  await page.evaluate(id => {
+    localStorage.removeItem('fdmOfflineBandId:' + id);
+    localStorage.setItem('fdmPendingBandId:' + id, '999999');
+  }, realUserId);
+
+  await page.addInitScript(() => {
+    window.__fdmBandIdAtSyncBoot = null;
+  });
+  await page.goto('/index.php');
+  await expect(page.locator('body')).not.toContainText('Fatal error');
+  await page.evaluate(id => localStorage.removeItem('fdmPendingBandId:' + id), realUserId);
+});

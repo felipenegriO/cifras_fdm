@@ -1052,3 +1052,71 @@ test.describe('API Roteiros', () => {
     }
   });
 });
+
+test.describe('Editor de Músicas — ramos residuais', () => {
+  test.use({ storageState: 'tests/.auth/user.json' });
+
+  test('tema claro usa skin oxide e cores claras no editor visual', async ({ page }) => {
+    // Linha 518/534-536: `(window.fdmTheme ? window.fdmTheme.get() : 'dark') !== 'light'`
+    // e os ternários de skin/content_style dependentes de `dark`. O teste
+    // "editor visual indisponível" e os demais sempre rodam com o tema
+    // padrão (dark); fdm-theme.js lê `localStorage['fdm-theme']` e
+    // reatribui window.fdmTheme no boot, então o mock precisa ser feito
+    // via localStorage (não sobrescrevendo window.fdmTheme diretamente,
+    // que seria substituído por fdm-theme.js logo em seguida).
+    await page.addInitScript(() => localStorage.setItem('fdm-theme', 'light'));
+    await page.goto('/src/backend/editor/editor.php');
+    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    const skin = await page.evaluate(() => {
+      const link = document.querySelector('link[href*="skin.min.css"]');
+      return link ? link.getAttribute('href') : null;
+    });
+    expect(skin).not.toContain('oxide-dark');
+    expect(skin).toContain('oxide');
+    await page.evaluate(() => localStorage.removeItem('fdm-theme'));
+  });
+
+  test('lista de músicas ordena e exibe "Sem título"/"Sem detalhes" quando nome/metadados estão ausentes', async ({ page }) => {
+    // Linhas 164/165/168/192/195: fallback `song.nome || ''` no sort/filter,
+    // `title.textContent = song.nome || 'Sem título'` e meta `.join(' · ')
+    // || 'Sem detalhes'` quando nome/artista/classificação/tom estão
+    // todos ausentes.
+    await page.goto('/src/backend/editor/editor.php');
+    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await page.evaluate(() => {
+      window.songs.push({ id: '__song_sem_nome__', nome: '', artista: '', classificacao: '', cifra: '' });
+    });
+    // renderSongs não é exposta publicamente; força um re-render via busca.
+    await page.locator('#buscaMusica').fill('');
+    await page.evaluate(() => document.getElementById('buscaMusica').dispatchEvent(new Event('input')));
+    const lastItem = page.locator('#musicas li button[data-song-id="__song_sem_nome__"]');
+    await expect(lastItem.locator('.song-list__title')).toHaveText('Sem título');
+    await expect(lastItem.locator('.song-list__meta')).toHaveText('Sem detalhes');
+  });
+
+  test('preserveAlignmentSpacesIn ignora nós de texto vazios sem lançar erro', async ({ page }) => {
+    // Linha 277: `if (node.nodeValue) node.nodeValue = ...` — cobre o
+    // ramo em que um nó de texto existe mas nodeValue é vazio/falsy,
+    // colando conteúdo com uma tag vazia entre acordes.
+    await page.goto('/src/backend/editor/editor.php');
+    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    const content = await page.evaluate(() => {
+      const editor = window.tinymce.get('cifraInput');
+      const event = editor.dispatch('BeforeSetContent', { content: '<strong></strong><em></em>C G' });
+      return event.content;
+    });
+    expect(content).toContain('C G');
+  });
+
+  test('plainTextToHtml com texto vazio retorna string vazia', async ({ page }) => {
+    // Linha 444: `String(text || '')` — cobre o ramo em que text é vazio/undefined.
+    await page.goto('/src/backend/editor/editor.php');
+    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    const content = await page.evaluate(() => {
+      const editor = window.tinymce.get('cifraInput');
+      const event = editor.dispatch('PastePreProcess', { content: '' });
+      return event.content;
+    });
+    expect(content).toBe('');
+  });
+});
