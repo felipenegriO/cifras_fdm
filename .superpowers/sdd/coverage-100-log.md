@@ -1299,3 +1299,108 @@ alcance de page.route).
   gaps absolutos do ranking fresco, a proxima passada deveria priorizar
   esses dois antes de continuar em service-worker.js (que parece ter
   atingido um teto tecnico) ou nos arquivos pequenos remanescentes.
+
+## Iteracao 28 - fdm-sync.js e editor.js (JS), sincrono, sem subagentes
+
+Confirmado antes de iniciar: `git log --oneline -15` tinha b4ed6fd no topo
+(Iteracao 27). Pipeline completo JS reexecutado do zero primeiro (o
+processo em background da tentativa anterior nesta mesma sessao ficou com
+CPU quase zero por >10min sem gerar lcov.info - matado via
+`Get-Process node | Stop-Process -Force`, `test-results/` e `coverage/js/`
+limpos, e o pipeline reexecutado com sucesso): 628 passed/1 skipped/0
+failed, branches 91.15% (1773/1945) - baseline fresco confirmado antes de
+qualquer mudanca.
+
+Gaps extraidos via
+`awk` sobre `coverage/js/lcov.info` isolando os blocos SF: de fdm-sync.js
+e editor.js: 35 gaps em fdm-sync.js, 43 em editor.js - confirmando o
+ranking da Iteracao 27.
+
+### fdm-sync.js (tests/cifro/26-offline-sync.spec.js, projeto "pwa")
+5 testes novos:
+1. `window.songs/playlistsSalvas/roteirosSalvos/categorias` nao-array sao
+   normalizados para `[]` no boot (linhas 12-15) - via
+   `page.addInitScript` definindo essas globais como nao-array ANTES do
+   `page.goto`, cobrindo o ramo falso do `Array.isArray(...) ? ... : []`
+   que a Iteracao 12 havia tentado e descartado por nao ter usado
+   addInitScript (so reatribuicao direta, que nao sobrevive a ordem real
+   de carregamento dos scripts).
+2. `storageKey`/`offlineBandStorageKey`/`pendingBandStorageKey` caem para
+   'anonymous' sem `FDM_USER_ID` (linhas 17/20/23) - via
+   `Object.defineProperty(window, 'FDM_USER_ID', {value: undefined, ...})`
+   em addInitScript.
+3. Ramo verdadeiro de `if (offlineBand || pendingBand) window.FDM_BAND_ID
+   = ...` com apenas pendingBand presente (linha 27) - exercita o codigo
+   mas so verifica ausencia de erro, pois um bootstrap de sessao do
+   servidor reatribui `window.FDM_BAND_ID` mais tarde na mesma carga de
+   pagina (comportamento correto em producao); documentado no proprio
+   teste.
+4. `version.banda_id !== bandaId` retorna false em performSync com meta
+   existente (linha 202) - interceptando `/api/sync/version.php` com
+   `banda_id` divergente apos uma sincronizacao bem sucedida anterior
+   (para garantir que `meta` exista e o codigo entre no ramo `!force &&
+   meta`).
+5. `requestJson` lanca erro quando `!res.ok` e sync cai no catch (linha
+   127) - `route.fulfill({status: 500})` em `/api/sync/data.php`.
+6. `applyMutation` em banda nunca sincronizada localmente usa os
+   fallbacks `{}`/`[]` de criacao (linhas 246/252/253) - chamando
+   `fdmSync.applyMutation` diretamente com um `bandaId` novo (sem
+   nenhuma linha previa no IndexedDB para essa chave).
+
+### editor.js (tests/cifro/04-editor-musicas.spec.js, projeto "cifro")
+4 testes novos (1 tentativa descartada):
+1. Tema claro usa skin `oxide` (nao `oxide-dark`) e cores claras (linhas
+   518/534-536) - via `localStorage.setItem('fdm-theme', 'light')` em
+   addInitScript. Descoberta: mockar `window.fdmTheme` diretamente nao
+   funciona porque `fdm-theme.js` roda antes de `editor.js` e SEMPRE
+   reatribui `window.fdmTheme` lendo o proprio `localStorage['fdm-theme']`
+   - o mock precisa ser feito na fonte de dados (localStorage), nao no
+   objeto.
+2. Lista de musicas com nome/artista/classificacao/tom todos ausentes
+   mostra "Sem titulo"/"Sem detalhes" (linhas 164/165/168/192/195).
+3. `preserveAlignmentSpacesIn` ignora nos de texto vazios sem lancar erro
+   (linha 277) - via `BeforeSetContent` com `<strong></strong><em></em>`.
+4. `plainTextToHtml` com texto vazio retorna string vazia (linha 444).
+5. Tentativa descartada: `PastePreProcess` com `content` nao-string (ex.:
+   objeto) para cobrir a linha 575 - o proprio pipeline interno do
+   TinyMCE chama `.replace()` no `content` antes do handler customizado
+   rodar, lancando `TypeError: t.replace is not a function` dentro do
+   `tinymce.min.js` minificado. Nao e possivel disparar esse evento com
+   `content` nao-string via `editor.dispatch()` sem quebrar o proprio
+   TinyMCE; documentado como impedimento (o guard e defensivo contra um
+   cenario que o TinyMCE nunca produz na pratica).
+
+### Numeros finais da passada
+- JS: 91.82% branches (1786/1945), 638 passed/1 skipped/0 failed - alta
+  de +13 branches e +0.67pp sobre a Iteracao 27 (91.15%, 1773/1945).
+  638 = 628 (baseline) + 10 testes novos.
+- PHP: nao reexecutado nesta passada (sem mudancas de codigo/teste PHP);
+  mantido 94.24% (1834/1946), 627 passed/2 skipped conforme ultima
+  confirmacao.
+- Commit: bedb77a "test: expand fdm-sync.js and editor.js branch
+  coverage" (tests/cifro/26-offline-sync.spec.js +118 linhas,
+  tests/cifro/04-editor-musicas.spec.js +68 linhas).
+
+### Impedimentos / pendencias
+- editor.js linha 575 (PastePreProcess com content nao-string): TinyMCE
+  quebra internamente antes do handler customizado rodar; guard
+  defensivo inalcancavel via `editor.dispatch()` programatico.
+- fdm-sync.js linha 27 (offlineBand||pendingBand): o teste cobre a
+  execucao do ramo mas nao consegue afirmar o valor final de
+  `window.FDM_BAND_ID` de forma deterministica porque um bootstrap de
+  sessao do servidor pode reatribuir a variavel mais tarde na mesma
+  carga de pagina - comportamento correto em producao, nao um bug.
+- fdm-sync.js linha 35 (upgrade idempotente do IndexedDB) e linhas
+  77-90/135-138 (defaults `??` inalcancaveis por causa da validacao
+  `Array.isArray` previa em validateSnapshot) seguem nao tentados,
+  conforme documentado na Iteracao 13 - seguem como candidatos de baixo
+  retorno/alto risco (upgrade exigiria bump de DB_VERSION ou recriacao do
+  IndexedDB compartilhado por outros testes).
+- Gaps remanescentes estimados apos esta passada: fdm-sync.js ~29 (de 35),
+  editor.js ~39 (de 43, incluindo os 2 impedimentos ja documentados de
+  window.songs/categorias das Iteracoes anteriores).
+- Proximo: continuar fdm-sync.js (validateSnapshot linha 98/104-105,
+  applyMutation linha 277 - `window.categorias.find`, cacheBands
+  fallbacks) e editor.js (linhas 57-58 setContent, 354/357-367 saveSong,
+  382-408 deleteSong, 518-536 restante do initialiseEditor) antes de
+  passar para fdm-presentation.js/live.js/rehearsal.pitch.js/script.js.
