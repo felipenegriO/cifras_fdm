@@ -500,6 +500,14 @@ test.describe('Modo Apresentação — ramos residuais', () => {
     await gotoFirstSong(page);
     await page.waitForFunction(() => window.fdmPresentation);
     await page.evaluate(() => window.fdmPresentation.enter());
+    // Garante conteúdo rolável (scrollHeight > clientHeight): sem overflow,
+    // o primeiro requestAnimationFrame de step() já chama stopScroll() e
+    // remove fdm-scroll-active antes que a asserção abaixo consiga
+    // observar a classe, criando uma corrida (flake real visto na CI).
+    await page.evaluate(() => {
+      const el = document.getElementById('song-cifra') || document.scrollingElement || document.documentElement;
+      el.style.minHeight = '400vh';
+    });
     // Primeira chamada inicia a rolagem; a segunda deve cair no guard
     // "if (state.scrolling) return;" de startScroll (branch true já coberta
     // aqui, mas exercitamos via toggleScroll -> stopScroll no ramo seguinte).
