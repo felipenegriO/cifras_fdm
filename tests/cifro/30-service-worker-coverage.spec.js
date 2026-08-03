@@ -119,16 +119,49 @@ test('service worker executa instalação, cache, mensagens e recuperação offl
           validAsset(Response.redirect(appOrigin + '/index.php')),
           validAsset(new Response('', { status: 200, headers: { 'content-type': 'text/css' } }), 'text/css'),
           validAsset(new Response('', { status: 200, headers: { 'content-type': 'application/octet-stream' } })),
+          // expectedType fornecido mas o content-type real não bate (branch4 de validAsset, linha 26).
+          validAsset(new Response('', { status: 200, headers: { 'content-type': 'text/css' } }), 'javascript'),
+          // sem expectedType, mas content-type é text/html (ramo !type.includes('text/html') falso).
+          validAsset(new Response('', { status: 200, headers: { 'content-type': 'text/html' } })),
+          // resposta ok=false (status de erro) sem redirected - cobre o outro lado do optional chaining em response.ok.
+          validAsset(new Response('', { status: 500 })),
+          // validStagePage: resposta que não é validAsset (não-html) retorna false direto (linha 30, branch de curto-circuito).
+          await validStagePage(new Response('', { status: 200, headers: { 'content-type': 'application/json' } })),
+          // validStagePage: html valido mas sem marcador FDM_USER_ID nem loginForm - cai no false final.
+          await validStagePage(new Response('<html></html>', { status: 200, headers: { 'content-type': 'text/html' } })),
+          // pageKey com caracteres especiais no userId, força o encodeURIComponent (linha 48 implícita).
+          typeof pageKey === 'function' ? pageKey('/index.php', 'a b&c') : 'no-pageKey',
         ];
         await setContext('');
         checks.push(await getContext());
+        // getContext com cache contendo JSON inválido (linha 44, catch branch).
+        {
+          const cache = await caches.open('cifro-meta');
+          await cache.put('/__cifro_context__', new Response('não é json'));
+          checks.push(await getContext());
+        }
+        // getContext com JSON válido mas sem a chave userId (linha 44, fallback null).
+        {
+          const cache = await caches.open('cifro-meta');
+          await cache.put('/__cifro_context__', new Response(JSON.stringify({ outro: 1 }), { headers: { 'Content-Type': 'application/json' } }));
+          checks.push(await getContext());
+        }
+        await setContext('');
         checks.push(await preparePages('').then(() => '', error => error.message));
         return checks;
       })()`,
       awaitPromise: true,
       returnByValue: true,
     }, sessionId);
-    expect(helpers.result.value.at(-1)).toBe('Usuário não identificado');
+    const helperChecks = helpers.result.value;
+    expect(helperChecks.at(-1)).toBe('Usuário não identificado');
+    // [4]=false (content-type não bate com expectedType), [5]=true (sem expectedType, html não é bloqueado por si só quando ok),
+    // [6]=false (status 500 => ok false), [7]=false (validStagePage em JSON não-html), [8]=false (html sem marcador FDM_USER_ID).
+    expect(helperChecks[4]).toBe(false);
+    expect(helperChecks[6]).toBe(false);
+    expect(helperChecks[7]).toBe(false);
+    expect(helperChecks[8]).toBe(false);
+    expect(helperChecks[9]).toContain('a%20b%26c');
 
     await page.evaluate(async appOrigin => {
       const registration = await navigator.serviceWorker.ready;
