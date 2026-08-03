@@ -1599,3 +1599,96 @@ tests/cifro/04-editor-musicas.spec.js +88 linhas).
   rehearsal.pitch.js/script.js (contagens desta passada: 15/12/9/6
   gaps residuais respectivamente, nao tocados ainda) ou PHP
   (plano.php/callback.php) se o retorno em JS diminuir.
+
+## Iteracao 31
+
+### Processo: incidentes com o pipeline em background (documentado para evitar repeticao)
+Nesta passada o pipeline `npm run test:coverage:js` foi disparado
+acidentalmente 2x sem aguardar corretamente a conclusao (o comando
+sempre excede o timeout de foreground de 10 min da ferramenta Bash e
+e movido para background automaticamente). Dois disparos anteriores
+foram interrompidos por engano via `Stop-Process` antes de terminar
+(matando processos node legitimos que ainda estavam rodando,
+gerando corrida com lcov.info nao gerado). Tecnica que funcionou:
+disparar o pipeline com `run_in_background: true` explicito,
+redirecionando stdout/stderr para um arquivo de log proprio com um
+marcador `EXITCODE:$?` ao final, e entao fazer polling direto e
+sincrono desse arquivo (loop `grep -q "^EXITCODE:"` com `sleep 10`)
+dentro de uma unica chamada Bash com timeout longo, sem tocar em
+processos node/php ate o marcador aparecer. Licao reforcada: nunca
+matar processos node/php sem antes confirmar via `Get-CimInstance
+Win32_Process` qual comando cada PID representa - um `Stop-Process`
+as cegas pode destruir um pipeline valido em andamento.
+
+### editor.js (tests/cifro/04-editor-musicas.spec.js)
+BRDA re-extraida de coverage/js/lcov.info no inicio da passada mostrou
+25 branches residuais em editor.js, incluindo os gaps de linhas
+459-582 (paste handlers e initialiseEditor) mencionados como pendentes
+na Iteracao 30. Atacados 3 dos gaps mais acessiveis:
+
+- **Linha 459** (`wrap.innerHTml = String(html || '')` em
+  `preserveSpaces`): novo teste cola apenas `<script>alert(1)</script>`
+  via PastePreProcess. `cleanImportedHtml` remove o `<script>` antes de
+  chamar `preserveSpaces`, resultando em `root.innerHTML === ''` -
+  cobre o ramo falsy do `html || ''`.
+- **Linha 474** (`(pre.innerHTML || '')` dentro do branch `<pre>` de
+  `cleanImportedHtml`): novo teste cola `<pre></pre>` vazio - a tag
+  `<pre>` e encontrada mas sem conteudo, cobrindo o fallback.
+- **Linha 518** (`(window.fdmTheme ? window.fdmTheme.get() : 'dark')
+  !== 'light'` em `initialiseEditor`): novo teste usa
+  `page.addInitScript` com `Object.defineProperty(window, 'fdmTheme',
+  {get: () => undefined, set: () => {}})` para forcar `window.fdmTheme`
+  permanentemente falsy (impedindo que fdm-theme.js consiga
+  reatribuir), e verifica que o link de skin do TinyMCE injetado
+  contem `oxide-dark` (fallback padrao quando o helper de tema esta
+  ausente).
+
+Tentativa de terceiro teste para a linha 575 (`else if (typeof
+event.content === 'string')` dentro do listener `PastePreProcess`) foi
+**descartada como impedimento estrutural**: disparar
+`editor.dispatch('PastePreProcess', { content: null })` faz o proprio
+motor interno do TinyMCE (nao o nosso handler) lancar
+`TypeError: Cannot read properties of null (reading 'replace')` antes
+mesmo do nosso listener terminar de rodar - o TinyMCE espera que
+`event.content` seja sempre string em qualquer listener registrado
+nesse evento, entao esse ramo (content nem string-sem-tag nem
+string-com-tag, i.e. nao-string) e inatingivel via uso real do editor.
+
+### Impedimentos remanescentes em editor.js (nao tentados/nao atingidos)
+- Linha 464 (`if (node.nodeValue)` em preserveSpaces): exigiria um
+  text node real com `nodeValue === ''`, o que o parser HTML do
+  browser normalmente nao produz a partir de innerHTML - candidato a
+  teto tecnico, nao tentado a fundo nesta passada.
+- Linha 470 (`String(rawHtml || '')` em cleanImportedHtml): confirmado
+  estruturalmente inatingivel - so e chamado quando
+  `event.content.includes('<')` e verdadeiro, o que implica uma string
+  nao-vazia (logo sempre truthy).
+- Linha 582 (`if (window.tinymce)` dentro do catch de
+  `tinymce.init()`): exigiria window.tinymce se tornar falsy entre a
+  chamada de init e o catch, o que so ocorreria via manipulacao
+  artificial do ambiente; nao tentado por tempo.
+
+### fdm-presentation.js / live.js / rehearsal.pitch.js / script.js
+Gaps residuais re-confirmados via BRDA fresca (15/12/9/6
+respectivamente), mas nao atacados nesta passada - o tempo foi
+consumido majoritariamente por incidentes de processo com o pipeline
+em background (3 disparos, 2 interrompidos por engano). Prioridade
+para a proxima passada.
+
+### Numeros finais da passada
+JS: 647 testes, 646 passed, 1 skipped, 0 failed. Branches
+92.80% -> 92.95% (1805 -> 1808 de 1945).
+PHP: reconfirmado sem mudancas de codigo/teste - 645 passed, 2
+skipped, 0 failed, branches 94.24% (1834/1946), estavel.
+
+Commit desta passada: "test: cover editor.js paste-fallback and
+fdmTheme-absent branches (Iteracao 31)" (ceb1079).
+
+### Proximo
+Reextrair BRDA fresca apos este commit para fdm-presentation.js,
+live.js, rehearsal.pitch.js e script.js e atacar seus gaps residuais;
+retomar linha 464/582 de editor.js caso sobre tempo; considerar
+plano.php/callback.php em PHP se o retorno em JS diminuir. Reforcar o
+protocolo de disparo do pipeline em background (arquivo de log +
+polling direto do marcador EXITCODE, sem jamais usar Stop-Process sem
+antes confirmar via Get-CimInstance qual comando cada PID representa).
