@@ -1931,15 +1931,27 @@ A primeira rodada completa do pipeline (coverage-js-run.log, 14m9s,
 ### Numeros
 - Pipeline completo #1 (antes dos fixes): 647 passed, 1 skipped, 2
   failed, branches 93.05% (1862/2001), 14m9s.
-- Pipeline completo #2 (apos todos os fixes desta passada) rodado em
-  background ao final da passada para confirmacao.
-- Commits desta passada: 86d2ecd, aee9609, 68cad48, a784194.
+- Pipeline completo #2 (apos todos os fixes desta passada, rodado ate
+  o fim): 649 passed, 1 skipped, 1 failed, branches 93.40% (1869/2001),
+  13m42s.
+- A unica falha do pipeline #2
+  (tests/cifro/26-offline-sync.spec.js:497, "window.songs/
+  playlistsSalvas/roteirosSalvos/categorias nao-array sao normalizados
+  para [] no boot do fdm-sync.js") reproduzida como flake de
+  ordem/estado entre specs: passou 2/2 isolada
+  (--project=pwa -g "nao-array sao normalizados"). Arquivo nao tocado
+  nesta passada; nao investigado a fundo (nao esta entre as
+  prioridades desta sessao) - candidato a proxima passada se
+  persistir.
+- BRDA fresca confirmou fechamento real: script.js 6/64 -> 1/64 gap
+  residual (so a linha 61 continua aberta); rehearsal.pitch.js 9/96 ->
+  8/96 gap (linha 22 fechada, os 4 defensivos documentados acima
+  seguem abertos por serem inalcancaveis).
+- Commits desta passada: 86d2ecd, aee9609, 68cad48, a784194, 673c218
+  (docs).
 
 ### Proximo
-1. Confirmar resultado do pipeline #2 e reextrair BRDA fresca para
-   confirmar fechamento de script.js linhas 6/31/32/40/48 e
-   rehearsal.pitch.js linha 22.
-2. script.js linha 61 (guard sideOpen && !closest(...)) - gap residual
+1. script.js linha 61 (guard sideOpen && !closest(...)) - gap residual
    nao investigado.
 3. live.js - atacar os gaps ainda nao analisados (linhas 2, 48, 196,
    298, 403, 493, 148/151); considerar documentar linhas
