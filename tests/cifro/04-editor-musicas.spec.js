@@ -595,16 +595,25 @@ test.describe('Editor de Músicas — Tela', () => {
     await page.goto('/src/backend/editor/editor.php');
     await expect(page.locator('#editorLoadError')).toBeVisible();
     await expect(page.locator('#status')).toHaveText('Editor visual indisponível. Usando edição em texto.');
-    // A asserção abaixo flakou intermitentemente sob contenção da suite
-    // completa (nunca isolada) - a mesma classe de corrida documentada em
-    // Iteração 34/35 para outros testes desta suite: sob carga pesada, o
-    // event loop pode atrasar a entrega do evento 'input' disparado por
-    // fill() além do timeout padrão do toBeVisible(). O listener em si é
-    // registrado de forma síncrona antes do teste chegar aqui (garantido
-    // pelo await do #status acima), então um retry curto é suficiente -
-    // não há necessidade de aumentar o timeout global.
+    // Causa raiz real da falha determinística sob a suite completa (não um
+    // atraso de renderização - o indicador ficava oculto pelos 15s inteiros,
+    // não "quase visível"): `initialise()` roda
+    // `await Promise.all([initialiseEditor(), fdmSync.load(...)])` e só
+    // então chama `setBaseline()` (que zera state.dirty e esconde o
+    // indicador). `elements.editorError.hidden = false` é setado de forma
+    // síncrona DENTRO de initialiseEditor(), ou seja, os dois `await
+    // expect(...)` acima passam bem antes de `fdmSync.load()` (fetch de
+    // rede real) terminar. Isolado, esse fetch é rápido o bastante para
+    // sempre terminar antes do fill() abaixo. Sob a suite completa (rede/
+    // CPU sob contenção), `fdmSync.load()` pode terminar DEPOIS do nosso
+    // fill()+detectDirty(), e o `setBaseline()` subsequente reseta
+    // silenciosamente o estado "dirty" que acabamos de forçar - por isso
+    // aumentar o timeout (tentativa anterior, Iteração 36) não ajudou.
+    // Corrigido esperando a rede ficar ociosa (fdmSync.load já concluído)
+    // antes de interagir com o textarea.
+    await page.waitForLoadState('networkidle');
     await page.locator('#cifraInput').fill('C G Am F texto simples');
-    await expect(page.locator('#dirtyIndicator')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('#dirtyIndicator')).toBeVisible();
 
     // Linhas 57-58: setContent() com state.editor nulo (TinyMCE indisponível)
     // cai no ramo `else elements.textarea.value = value || ''`. Clicar em
