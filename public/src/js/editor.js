@@ -510,11 +510,15 @@
   }
 
   function plainTextToHtml(text) {
-    return markChordLines(text)
+    const html = markChordLines(text)
       .replace(/ {2}/g, ' &nbsp;')
       .replace(/\t/g, '&nbsp;&nbsp;&nbsp;&nbsp;')
       .replace(/\n/g, '<br/>')
       .trim();
+    // O TinyMCE fragmenta em vários <p> quando recebe muitos <b> adjacentes
+    // separados só por espaço (comum em linhas de acorde). Envolver tudo
+    // num único bloco evita essa quebra e mantém a cifra como um bloco só.
+    return `<div>${html}</div>`;
   }
 
   function parseImportedSong(rawText) {
