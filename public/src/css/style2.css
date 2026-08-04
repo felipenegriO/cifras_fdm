@@ -371,20 +371,15 @@ b {
 
         .cifra refrao {
             display: block;
-            background: rgba(0, 255, 0, .08);
         }
         .cifra prerefrao {
             display: block;
-            background: rgba(0, 229, 255, .08);
         }
         .cifra ponte {
             display: block;
-            background: rgba(255, 107, 107, .08);
         }
-        [data-theme="light"] .cifra refrao    { background: rgba(0, 180, 0,   .08); }
-        [data-theme="light"] .cifra prerefrao { background: rgba(0, 180, 220, .08); }
-        [data-theme="light"] .cifra ponte     { background: rgba(200, 40, 40, .08); }
-        .cifra b {
+        .cifra b,
+        .cifra strong {
             font-weight: var(--fw-bold);
             color: var(--cifra-chord);
             letter-spacing: 0.02em;
@@ -399,7 +394,7 @@ pre {
 }
 
 /* ===== Sistema de botões semânticos (Sprint 2) ===== */
-.fdm-btn,
+.cifro-btn,
 .btn-danger,
 .btn-success,
 .btn-secondary {
@@ -419,7 +414,7 @@ pre {
     line-height: 1.2;
 }
 
-.fdm-btn:focus-visible,
+.cifro-btn:focus-visible,
 .btn-danger:focus-visible,
 .btn-success:focus-visible,
 .btn-secondary:focus-visible {
