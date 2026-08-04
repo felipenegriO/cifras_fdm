@@ -36,9 +36,7 @@
     importTabLink: document.getElementById('importTabLink'),
     importTabText: document.getElementById('importTabText'),
     importUrlInput: document.getElementById('importUrlInput'),
-    fetchImportButton: document.getElementById('fetchImportButton'),
     importFetchError: document.getElementById('importFetchError'),
-    importSourceUrl: document.getElementById('importSourceUrl'),
     importContent: document.getElementById('importContent'),
     importRights: document.getElementById('importRights'),
     importPreview: document.getElementById('importPreview'),
@@ -517,15 +515,6 @@
     return { title: title.slice(0, 200), artist: artist.slice(0, 200), content, metadata };
   }
 
-  function validateImportUrl(value) {
-    const raw = String(value || '').trim();
-    if (!raw) return '';
-    let url;
-    try { url = new URL(raw); } catch { throw new Error('Informe um link de origem válido.'); }
-    if (!['http:', 'https:'].includes(url.protocol)) throw new Error('O link deve usar HTTP ou HTTPS.');
-    return url.toString();
-  }
-
   function switchImportTab(tab) {
     const isLink = tab === 'link';
     elements.importTabLinkButton.classList.toggle('is-active', isLink);
@@ -550,23 +539,23 @@
 
   async function fetchImportFromUrl() {
     elements.importFetchError.hidden = true;
-    elements.importPreview.hidden = true;
     elements.confirmImportButton.disabled = true;
 
     const url = elements.importUrlInput.value.trim();
     if (!url) {
-      elements.importFetchError.textContent = 'Informe um link do CifraClub.';
-      elements.importFetchError.hidden = false;
+      elements.importPreview.hidden = true;
       return;
     }
     if (!elements.importRights.checked) {
+      elements.importPreview.hidden = true;
       elements.importFetchError.textContent = 'Confirme que você tem autorização para usar o conteúdo.';
       elements.importFetchError.hidden = false;
       return;
     }
 
-    elements.fetchImportButton.disabled = true;
-    elements.fetchImportButton.textContent = 'Buscando...';
+    elements.importUrlInput.disabled = true;
+    elements.importPreview.textContent = 'Buscando cifra...';
+    elements.importPreview.hidden = false;
     try {
       const response = await fetch('import.php', {
         method: 'POST',
@@ -576,6 +565,7 @@
       const data = await parseJsonResponse(response);
       applyImportPreview({ title: data.title, artist: data.artist, content: data.content, metadata: data.metadata }, data.source);
     } catch (error) {
+      elements.importPreview.hidden = true;
       elements.importFetchError.innerHTML = '';
       const message = document.createElement('span');
       message.textContent = (error.message || 'Não foi possível buscar a cifra.') + ' ';
@@ -588,9 +578,12 @@
       elements.importFetchError.appendChild(switchLink);
       elements.importFetchError.hidden = false;
     } finally {
-      elements.fetchImportButton.disabled = false;
-      elements.fetchImportButton.textContent = 'Buscar cifra';
+      elements.importUrlInput.disabled = false;
     }
+  }
+
+  function maybeAutoFetchImportUrl() {
+    if (elements.importUrlInput.value.trim()) fetchImportFromUrl();
   }
 
   function openImport() {
@@ -608,9 +601,8 @@
   function previewImport() {
     try {
       const parsed = parseImportedSong(elements.importContent.value);
-      const source = validateImportUrl(elements.importSourceUrl.value);
       if (!elements.importRights.checked) throw new Error('Confirme que você tem autorização para usar o conteúdo.');
-      applyImportPreview(parsed, source);
+      applyImportPreview(parsed, '');
     } catch (error) {
       elements.importPreview.textContent = error.message;
       elements.importPreview.hidden = false;
@@ -819,7 +811,8 @@
     document.getElementById('previewImportButton')?.addEventListener('click', previewImport);
     elements.importTabLinkButton?.addEventListener('click', () => switchImportTab('link'));
     elements.importTabTextButton?.addEventListener('click', () => switchImportTab('text'));
-    elements.fetchImportButton?.addEventListener('click', fetchImportFromUrl);
+    elements.importUrlInput?.addEventListener('blur', maybeAutoFetchImportUrl);
+    elements.importUrlInput?.addEventListener('paste', () => setTimeout(maybeAutoFetchImportUrl, 0));
     elements.confirmImportButton?.addEventListener('click', confirmImport);
     elements.importRights?.addEventListener('change', () => {
       elements.confirmImportButton.disabled = !elements.importRights.checked || !elements.importModal.dataset.preview;
