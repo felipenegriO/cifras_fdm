@@ -39,8 +39,16 @@ function getPlaylistItemId(item) {
   return typeof item === 'object' && item !== null ? item.id : item;
 }
 
-function getPlaylistItemTom(item) {
-  return typeof item === 'object' && item !== null ? (item.tom || '') : '';
+function getPlaylistItemTom(item, song) {
+  var selected = typeof item === 'object' && item !== null ? (item.tom || '') : '';
+  var normalized = window.CifroChords ? window.CifroChords.normalizeKey(selected) : selected;
+  var detected = song && window.CifroChords ? window.CifroChords.identifyKey(song.cifra)?.key || '' : '';
+  if (normalized && detected) {
+    return window.CifroChords.tonicOf(normalized) + (window.CifroChords.modeOf(detected) === 'minor' ? 'm' : '');
+  }
+  if (normalized) return normalized;
+  if (detected) return detected;
+  return '';
 }
 
 function addListItem(content, idLista, musicasArray) {
@@ -58,8 +66,8 @@ function addListItem(content, idLista, musicasArray) {
   // Serializa a setlist completa para uso no modo apresentação
   var setlistItems = musicasArray.map(function (item) {
     var id = getPlaylistItemId(item);
-    var tom = getPlaylistItemTom(item);
     var song = (typeof songs !== 'undefined' ? songs : []).find(function (s) { return s.id == id; });
+    var tom = getPlaylistItemTom(item, song);
     return {
       id: id,
       tom: tom || '',
@@ -69,7 +77,8 @@ function addListItem(content, idLista, musicasArray) {
 
   musicasArray.forEach(function (item, index) {
     var element = getPlaylistItemId(item);
-    var tom = getPlaylistItemTom(item);
+    var song = (typeof songs !== 'undefined' ? songs : []).find(function (s) { return s.id == element; });
+    var tom = getPlaylistItemTom(item, song);
     var musica = document.createElement('li');
     var musicaA = document.createElement('a');
     musicaA.className = 'liPlaylist-musica';
@@ -83,7 +92,7 @@ function addListItem(content, idLista, musicasArray) {
 
     musicaA.addEventListener('click', function () {
       try {
-        sessionStorage.setItem('fdmSetlist', JSON.stringify({
+        sessionStorage.setItem('cifroSetlist', JSON.stringify({
           name: content,
           items: setlistItems,
           currentIndex: index
@@ -91,8 +100,7 @@ function addListItem(content, idLista, musicasArray) {
       } catch (e) { /* ignora */ }
     });
 
-    const filteredSongs = songs.filter(song => song.id == element);
-    musicaA.textContent = filteredSongs[0]?.nome || 'Musica ' + element;
+    musicaA.textContent = song?.nome || 'Musica ' + element;
     if (tom) {
       musicaA.textContent += ' [' + tom + ']';
     }

@@ -11,6 +11,7 @@
  */
 import { test, expect } from '../fixtures/coverage.js';
 import { dbQuery } from '../helpers/db.js';
+import { createHash } from 'node:crypto';
 
 // Estes testes exercitam cadastro/login do zero — sem sessão compartilhada.
 test.use({ storageState: { cookies: [], origins: [] } });
@@ -42,6 +43,7 @@ async function preencherCadastro(page, { nome = NOME, email = EMAIL, banda = BAN
   await page.fill('#nome', nome);
   await page.fill('#email', email);
   await page.fill('#banda_nome', banda);
+  await page.check('#legal_acceptance');
   // O submit pode demorar: sem SMTP, o servidor aguarda o timeout do PHPMailer
   await page.click('.btn-submit');
   await page.waitForLoadState('domcontentloaded', { timeout: 45000 });
@@ -58,6 +60,7 @@ test.describe.serial('Onboarding — jornada completa', () => {
     await preencherCadastro(page);
     await expect(page.getByRole('heading', { name: /verifique seu e-mail/i })).toBeVisible();
     await expect(page.locator('body')).toContainText(EMAIL);
+    token = await page.locator('meta[name="e2e-activation-token"]').getAttribute('content');
   });
 
   test('usuário é criado inativo e sem senha; banda entra no plano gratuito', async () => {
@@ -98,7 +101,7 @@ test.describe.serial('Onboarding — jornada completa', () => {
     // 46–52 para absorver diferença de fuso entre PHP e MySQL (UTC−3 no Brasil)
     expect(Number(rows[0].horas)).toBeGreaterThanOrEqual(46);
     expect(Number(rows[0].horas)).toBeLessThanOrEqual(52);
-    token = rows[0].token;
+    expect(rows[0].token).toBe(createHash('sha256').update(token).digest('hex'));
   });
 
   test('cadastrar de novo com o mesmo e-mail mostra "já cadastrado"', async ({ page }) => {
@@ -119,7 +122,7 @@ test.describe.serial('Onboarding — jornada completa', () => {
     await page.fill('#senha', '123');
     await page.fill('#senha2', '123');
     await page.click('button[type="submit"]');
-    await expect(page.locator('.error')).toContainText(/pelo menos 6 caracteres/i);
+    await expect(page.locator('.error')).toContainText(/pelo menos 12 caracteres/i);
   });
 
   test('senhas divergentes são rejeitadas', async ({ page }) => {
@@ -264,7 +267,7 @@ test.describe('Cadastro — validações do RegisterController', () => {
   test('e-mail em formato inválido é rejeitado', async ({ page }) => {
     const csrf = await getRegisterCsrf(page);
     const res = await page.request.post('/register.php', {
-      form: { nome: 'X', email: 'nao-e-email', banda_nome: 'Banda X', csrf_token: csrf },
+      form: { nome: 'X', email: 'nao-e-email', banda_nome: 'Banda X', legal_acceptance: '1', csrf_token: csrf },
     });
     expect(res.status()).toBe(200);
     expect(await res.text()).toContain('E-mail inválido');
@@ -273,7 +276,7 @@ test.describe('Cadastro — validações do RegisterController', () => {
   test('campo obrigatório ausente (nome) é rejeitado', async ({ page }) => {
     const csrf = await getRegisterCsrf(page);
     const res = await page.request.post('/register.php', {
-      form: { nome: '', email: `valida.${Date.now()}@e2e.local`, banda_nome: 'Banda X', csrf_token: csrf },
+      form: { nome: '', email: `valida.${Date.now()}@e2e.local`, banda_nome: 'Banda X', legal_acceptance: '1', csrf_token: csrf },
     });
     expect(res.status()).toBe(200);
     expect(await res.text()).toContain('obrigatórios');

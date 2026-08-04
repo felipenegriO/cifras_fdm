@@ -9,9 +9,9 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     exit;
 }
 
-require_auth_json();
+require_current_band_json();
 
-$salaId  = current_band_id() ?: ($_GET['salaId'] ?? 'default');
+$salaId  = current_band_id();
 session_write_close();
 $service = new LiveStateService(new LiveStateRepository());
 echo json_encode($service->status($salaId));

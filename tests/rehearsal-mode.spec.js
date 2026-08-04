@@ -11,7 +11,7 @@ test.describe('Modo Ensaio (Rehearsal Mode)', () => {
     
     // Navegar para página de música
     await page.goto(MUSIC_PAGE);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     // Injetar mock player para testes que precisam clicar em botões
     // sem ter carregado um arquivo audio real
@@ -295,7 +295,7 @@ test.describe('Modo Ensaio (Rehearsal Mode)', () => {
 
     // Reload
     await page.reload();
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     // Abrir painel novamente
     await btnEnsaio.click();
@@ -509,7 +509,7 @@ test.describe('Modo Ensaio (Rehearsal Mode)', () => {
 
     // Acessar música
     await page.goto(MUSIC_PAGE);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     // Abrir painel
     const btnEnsaio = page.locator('#btnAtivarEnsaio');
@@ -534,7 +534,7 @@ test.describe('Modo Ensaio (Rehearsal Mode)', () => {
     
     // 2. Navegar para página de música
     console.log('🔵 Navegando para music.php?id=1...');
-    await page.goto('http://localhost:8090/music.php?id=1', { waitUntil: 'networkidle' });
+    await page.goto('/music.php?id=1', { waitUntil: 'domcontentloaded' });
     
     // 3. Aguardar que o botão apareça
     const btnEnsaio = page.locator('#btnAtivarEnsaio');

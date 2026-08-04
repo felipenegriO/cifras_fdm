@@ -1,5 +1,5 @@
 <?php
-function fdm_backup_file($filePath) {
+function cifro_backup_file($filePath) {
     if (!is_string($filePath) || $filePath === '' || !file_exists($filePath)) {
         return;
     }
@@ -11,10 +11,10 @@ function fdm_backup_file($filePath) {
 
     $backupName = basename($filePath) . '.' . date('Ymd-His') . '.bak';
     @copy($filePath, $dir . '/' . $backupName);
-    fdm_cleanup_backups($dir, basename($filePath), 20);
+    cifro_cleanup_backups($dir, basename($filePath), 20);
 }
 
-function fdm_cleanup_backups($dir, $baseName, $keep) {
+function cifro_cleanup_backups($dir, $baseName, $keep) {
     $pattern = rtrim($dir, '/\\') . '/' . $baseName . '.*.bak';
     $files = glob($pattern);
     if (!is_array($files) || count($files) <= $keep) {
@@ -30,8 +30,8 @@ function fdm_cleanup_backups($dir, $baseName, $keep) {
     }
 }
 
-function fdm_bump_cache_version() {
-    $serviceWorker = __DIR__ . '/../../service-worker.js';
+function cifro_bump_cache_version($serviceWorker = null) {
+    $serviceWorker = $serviceWorker ?: __DIR__ . '/../../service-worker.js';
     if (!file_exists($serviceWorker) || !is_writable($serviceWorker)) {
         return false;
     }
@@ -41,7 +41,7 @@ function fdm_bump_cache_version() {
         return false;
     }
 
-    $newVersion = 'cacheStageBox-' . date('YmdHis');
+    $newVersion = 'cacheCifro-' . date('YmdHis');
     $updated = preg_replace(
         "/const\s+CACHE_NAME\s*=\s*'[^']+';/",
         "const CACHE_NAME = '" . $newVersion . "';",

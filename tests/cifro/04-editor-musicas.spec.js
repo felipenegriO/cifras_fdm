@@ -6,6 +6,21 @@ import { test, expect } from '../fixtures/coverage.js';
 
 test.use({ storageState: 'tests/.auth/user.json' });
 
+test('importa conteúdo colado com preview, origem e confirmação de direitos', async ({ page }) => {
+  await page.goto('/src/backend/editor/editor.php');
+  await page.locator('#importSongButton').click();
+  await page.locator('#importSourceUrl').fill('https://www.cifraclub.com.br/artista/musica/');
+  await page.locator('#importContent').fill('Minha Música - Minha Banda\nTom: C\n\nC  G  Am  F\nPrimeira linha');
+  await page.locator('#importRights').check();
+  await page.locator('#previewImportButton').click();
+  await expect(page.locator('#importPreview')).toContainText('Minha Música');
+  await expect(page.locator('#confirmImportButton')).toBeEnabled();
+  await page.locator('#confirmImportButton').click();
+  await expect(page.locator('#titulo')).toHaveValue('Minha Música');
+  await expect(page.locator('#artista')).toHaveValue('Minha Banda');
+  await expect(page.locator('#status')).toContainText('Confira o conteúdo antes de salvar');
+});
+
 const API = '/src/backend/editor/api.php';
 
 // Helper: pega CSRF token via endpoint leve (sem disparar JS de background)
@@ -16,6 +31,40 @@ async function getCsrf(page) {
 }
 
 test.describe('Editor de Músicas — Tela', () => {
+  test('edição salva reaparece ao abrir a cifra', async ({ page }) => {
+    const csrf = await getCsrf(page);
+    const marker = `ALTERADA_${Date.now()}`;
+    const created = await page.request.post(API, {
+      data: JSON.stringify({ nome: `__EDICAO_${Date.now()}__`, cifra: '<b>C G</b><br>Conteúdo original', artista: '', classificacao: '', bit: '' }),
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+    });
+    const createdBody = await created.json();
+    expect(createdBody.ok).toBeTruthy();
+
+    try {
+      await page.goto('/src/backend/editor/editor.php');
+      await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+      await page.evaluate(() => window.__cifroEditorReady);
+      await page.locator(`[data-song-id="${createdBody.id}"]`).click();
+      await page.evaluate(value => {
+        const editor = window.tinymce.get('cifraInput');
+        editor.setContent(`<b>D A</b><br>${value}`);
+        editor.dispatch('input');
+      }, marker);
+      await page.locator('#saveButton').click();
+      await expect(page.locator('#status')).toHaveText('Música salva com sucesso.');
+
+      await page.goto(`/music.php?id=${createdBody.id}`);
+      await page.waitForFunction(() => document.querySelector('#song-cifra')?.getAttribute('aria-busy') === 'false');
+      await expect(page.locator('#song-cifra')).toContainText(marker);
+    } finally {
+      await page.request.post(API, {
+        data: JSON.stringify({ action: 'delete', id: createdBody.id }),
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+      });
+    }
+  });
+
   test('carrega a tela do editor', async ({ page }) => {
     await page.goto('/index.php'); // editor está integrado ao index ou acesso direto
     await page.waitForLoadState('networkidle');
@@ -25,6 +74,7 @@ test.describe('Editor de Músicas — Tela', () => {
   test('mantém o espaçamento dos acordes ao marcar verso e reabrir o conteúdo', async ({ page }) => {
     await page.goto('/src/backend/editor/editor.php');
     await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await page.evaluate(() => window.__cifroEditorReady);
     await page.evaluate(() => {
       const editor = window.tinymce.get('cifraInput');
       editor.focus();
@@ -93,6 +143,18 @@ test.describe('Editor de Músicas — Tela', () => {
     expect(colors.chord).toMatch(/rgb\((251, 146, 60|234, 88, 12)\)/);
   });
 
+  test('não cria linha vazia ao reabrir cifra com quebra dentro do acorde', async ({ page }) => {
+    await page.goto('/src/backend/editor/editor.php');
+    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    const result = await page.evaluate(() => {
+      const editor = window.tinymce.get('cifraInput');
+      editor.setContent('<p><b>C&nbsp;&nbsp;G&nbsp;&nbsp;Am&nbsp;&nbsp;&nbsp;F<br></b>Canção de teste.<br>asdj</p>');
+      return { html: editor.getContent(), text: editor.getBody().innerText };
+    });
+    expect(result.html).not.toMatch(/<p>\s*<br\s*\/?>(?:\s|&nbsp;)*<\/p>/i);
+    expect(result.text.replace(/\u00a0/g, ' ')).toBe('C  G  Am   F\nCanção de teste.\nasdj');
+  });
+
   test('limpa e prepara automaticamente o conteúdo colado', async ({ page }) => {
     await page.goto('/src/backend/editor/editor.php');
     await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
@@ -114,6 +176,7 @@ test.describe('Editor de Músicas — Tela', () => {
   test('marca cifras pelo botão Acorde usando a tag compatível', async ({ page }) => {
     await page.goto('/src/backend/editor/editor.php');
     await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await page.evaluate(() => window.__cifroEditorReady);
     await page.evaluate(() => {
       const editor = window.tinymce.get('cifraInput');
       editor.getBody().innerHTML = '<span id="acordes">C&nbsp;&nbsp;G&nbsp;&nbsp;Am&nbsp;&nbsp;F</span><br>Mistica sublime';
@@ -214,18 +277,22 @@ test.describe('Editor de Músicas — Tela', () => {
     await page.goto('/src/backend/editor/editor.php');
     await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
     await page.locator('#titulo').fill('__TESTE_PREVIEW__');
-    await page.evaluate(() => sessionStorage.setItem('fdmSetlist', 'valor-original'));
+    await page.evaluate(() => sessionStorage.setItem('cifroSetlist', 'valor-original'));
 
     await page.locator('#previewButton').click();
     await expect(page.locator('#previewModal')).toHaveClass(/is-open/);
-    const previewStored = await page.evaluate(() => sessionStorage.getItem('fdmEditorPreview'));
+    const previewStored = await page.evaluate(() => sessionStorage.getItem('cifroEditorPreview'));
     expect(previewStored).toContain('__TESTE_PREVIEW__');
-    expect(await page.evaluate(() => sessionStorage.getItem('fdmSetlist'))).toBeNull();
+    expect(await page.evaluate(() => sessionStorage.getItem('cifroSetlist'))).toBeNull();
+    const preview = page.frameLocator('#previewFrame');
+    await expect(preview.locator('body')).toHaveClass(/is-editor-preview/);
+    await expect(preview.locator('#backLink')).toBeHidden();
+    await expect(preview.locator('.music-header__actions')).toBeHidden();
 
     await page.locator('#closePreviewButton').click();
     await expect(page.locator('#previewModal')).not.toHaveClass(/is-open/);
-    expect(await page.evaluate(() => sessionStorage.getItem('fdmSetlist'))).toBe('valor-original');
-    expect(await page.evaluate(() => sessionStorage.getItem('fdmEditorPreview'))).toBeNull();
+    expect(await page.evaluate(() => sessionStorage.getItem('cifroSetlist'))).toBe('valor-original');
+    expect(await page.evaluate(() => sessionStorage.getItem('cifroEditorPreview'))).toBeNull();
   });
 
   test('Escape fecha o preview e Ctrl+S aciona salvar', async ({ page }) => {
@@ -272,7 +339,7 @@ test.describe('Editor de Músicas — Tela', () => {
     await expect(page.locator('#status')).toHaveAttribute('data-kind', 'error');
     await expect(page.locator('#status')).not.toHaveText('');
     await expect(page.locator('#saveButton')).toBeEnabled();
-    await expect(page.locator('#saveButtonLabel')).toHaveText('Salvar');
+    await expect(page.locator('#saveButtonLabel')).toHaveText('Salvar música');
     await page.unroute('**/src/backend/editor/api.php');
   });
 
@@ -316,7 +383,7 @@ test.describe('Editor de Músicas — Tela', () => {
         await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, id: 999999 }) });
       }
     });
-    await page.evaluate(() => { window.fdmConfirm = async () => true; });
+    await page.evaluate(() => { window.cifroConfirm = async () => true; });
 
     await page.locator('#saveButton').click();
     await expect(page.locator('#status')).toHaveText('Música salva com sucesso.');
@@ -341,11 +408,11 @@ test.describe('Editor de Músicas — Tela', () => {
       if (body.action === 'delete') { deleteCalled = true; }
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, id: 999998 }) });
     });
-    await page.evaluate(() => { window.fdmConfirm = async () => true; });
+    await page.evaluate(() => { window.cifroConfirm = async () => true; });
     await page.locator('#saveButton').click();
     await expect(page.locator('#status')).toHaveText('Música salva com sucesso.');
 
-    await page.evaluate(() => { window.fdmConfirm = async () => false; });
+    await page.evaluate(() => { window.cifroConfirm = async () => false; });
     await page.locator('#moreActions').evaluate(el => { el.open = true; });
     await page.locator('#deleteSongButton').click();
     await page.waitForTimeout(150);
@@ -516,7 +583,7 @@ test.describe('Editor de Músicas — Tela', () => {
       await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
       const confirmMessage = await page.evaluate(async () => {
         let captured = null;
-        window.fdmConfirm = async opts => { captured = opts.message; return false; };
+        window.cifroConfirm = async opts => { captured = opts.message; return false; };
         document.getElementById('buscaMusica').value = '__TESTE_NOME_ESPECIAL__';
         document.getElementById('buscaMusica').dispatchEvent(new Event('input'));
         document.querySelector('#musicas li button').click();
@@ -587,7 +654,7 @@ test.describe('Editor de Músicas — Tela', () => {
 
   test('editor visual indisponível usa textarea como fallback', async ({ page }) => {
     // Bloqueia o carregamento do script do TinyMCE para que window.tinymce
-    // nunca exista quando initialiseEditor() rodar (fdm-sync.js já garante
+    // nunca exista quando initialiseEditor() rodar (cifro-sync.js já garante
     // window.songs/categorias como array antes do render, então esses dois
     // guards de songs()/renderCategories() são defensivos e inalcançáveis
     // pela UI real — ver nota no log de cobertura).
@@ -598,18 +665,18 @@ test.describe('Editor de Músicas — Tela', () => {
     // Causa raiz real da falha determinística sob a suite completa (não um
     // atraso de renderização - o indicador ficava oculto pelos 15s inteiros,
     // não "quase visível"): `initialise()` roda
-    // `await Promise.all([initialiseEditor(), fdmSync.load(...)])` e só
+    // `await Promise.all([initialiseEditor(), cifroSync.load(...)])` e só
     // então chama `setBaseline()` (que zera state.dirty e esconde o
     // indicador). `elements.editorError.hidden = false` é setado de forma
     // síncrona DENTRO de initialiseEditor(), ou seja, os dois `await
-    // expect(...)` acima passam bem antes de `fdmSync.load()` (fetch de
+    // expect(...)` acima passam bem antes de `cifroSync.load()` (fetch de
     // rede real) terminar. Isolado, esse fetch é rápido o bastante para
     // sempre terminar antes do fill() abaixo. Sob a suite completa (rede/
-    // CPU sob contenção), `fdmSync.load()` pode terminar DEPOIS do nosso
+    // CPU sob contenção), `cifroSync.load()` pode terminar DEPOIS do nosso
     // fill()+detectDirty(), e o `setBaseline()` subsequente reseta
     // silenciosamente o estado "dirty" que acabamos de forçar - por isso
     // aumentar o timeout (tentativa anterior, Iteração 36) não ajudou.
-    // Corrigido esperando a rede ficar ociosa (fdmSync.load já concluído)
+    // Corrigido esperando a rede ficar ociosa (cifroSync.load já concluído)
     // antes de interagir com o textarea.
     await page.waitForLoadState('networkidle');
     await page.locator('#cifraInput').fill('C G Am F texto simples');
@@ -619,7 +686,7 @@ test.describe('Editor de Músicas — Tela', () => {
     // cai no ramo `else elements.textarea.value = value || ''`. Clicar em
     // "Nova música" chama newSong() -> setContent(''), exercitando esse
     // ramo diretamente (o boot inicial da página não chama setContent()).
-    await page.evaluate(() => { window.fdmConfirm = async () => true; });
+    await page.evaluate(() => { window.cifroConfirm = async () => true; });
     await page.locator('#newSongButton').click();
     await expect(page.locator('#cifraInput')).toHaveValue('');
 
@@ -638,7 +705,7 @@ test.describe('Editor de Músicas — Tela', () => {
     await page.locator('#titulo').fill(firstTitle + ' __DIRTY__');
     await expect(page.locator('#dirtyIndicator')).toBeVisible();
 
-    await page.evaluate(() => { window.fdmConfirm = async () => false; });
+    await page.evaluate(() => { window.cifroConfirm = async () => false; });
     await buttons.nth(1).click();
     await page.waitForTimeout(100);
     await expect(page.locator('#titulo')).toHaveValue(firstTitle + ' __DIRTY__');
@@ -652,7 +719,7 @@ test.describe('Editor de Músicas — Tela', () => {
 
     let confirmCalled = false;
     await page.evaluate(() => {
-      window.fdmConfirm = async opts => { window.__confirmCalled = true; return true; };
+      window.cifroConfirm = async opts => { window.__confirmCalled = true; return true; };
     });
     await page.locator('#newSongMenuButton').evaluate(el => el.click());
     await page.waitForTimeout(100);
@@ -680,7 +747,7 @@ test.describe('Editor de Músicas — Tela', () => {
       const idx = window.songs.findIndex(s => String(s.id) === String(id));
       if (idx >= 0) window.songs.splice(idx, 1);
     }, created.id);
-    await page.evaluate(() => { window.fdmConfirm = async () => true; });
+    await page.evaluate(() => { window.cifroConfirm = async () => true; });
     await page.locator('#moreActions').evaluate(el => { el.open = true; });
     await page.locator('#deleteSongButton').click();
     await expect(page.locator('#status')).toHaveText('Música excluída com sucesso.');
@@ -700,7 +767,7 @@ test.describe('Editor de Músicas — Tela', () => {
         await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, id: 888888 }) });
       }
     });
-    await page.evaluate(() => { window.fdmConfirm = async () => true; });
+    await page.evaluate(() => { window.cifroConfirm = async () => true; });
     await page.locator('#saveButton').click();
     await expect(page.locator('#status')).toHaveText('Música salva com sucesso.');
 
@@ -873,7 +940,7 @@ test.describe('Editor de Músicas — API', () => {
       data: JSON.stringify({ action: 'delete', id: 999999 }),
       headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
     });
-    expect(res.status()).toBe(200);
+    expect([200, 404]).toContain(res.status());
     const body = await res.json();
     // Pode ser sucesso ou "não encontrado", mas não pode ser 500
     expect(typeof body).toBe('object');
@@ -1083,14 +1150,14 @@ test.describe('Editor de Músicas — ramos residuais', () => {
   test.use({ storageState: 'tests/.auth/user.json' });
 
   test('tema claro usa skin oxide e cores claras no editor visual', async ({ page }) => {
-    // Linha 518/534-536: `(window.fdmTheme ? window.fdmTheme.get() : 'dark') !== 'light'`
+    // Linha 518/534-536: `(window.cifroTheme ? window.cifroTheme.get() : 'dark') !== 'light'`
     // e os ternários de skin/content_style dependentes de `dark`. O teste
     // "editor visual indisponível" e os demais sempre rodam com o tema
-    // padrão (dark); fdm-theme.js lê `localStorage['fdm-theme']` e
-    // reatribui window.fdmTheme no boot, então o mock precisa ser feito
-    // via localStorage (não sobrescrevendo window.fdmTheme diretamente,
-    // que seria substituído por fdm-theme.js logo em seguida).
-    await page.addInitScript(() => localStorage.setItem('fdm-theme', 'light'));
+    // padrão (dark); cifro-theme.js lê `localStorage['cifro-theme']` e
+    // reatribui window.cifroTheme no boot, então o mock precisa ser feito
+    // via localStorage (não sobrescrevendo window.cifroTheme diretamente,
+    // que seria substituído por cifro-theme.js logo em seguida).
+    await page.addInitScript(() => localStorage.setItem('cifro-theme', 'light'));
     await page.goto('/src/backend/editor/editor.php');
     await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
     const skin = await page.evaluate(() => {
@@ -1099,7 +1166,7 @@ test.describe('Editor de Músicas — ramos residuais', () => {
     });
     expect(skin).not.toContain('oxide-dark');
     expect(skin).toContain('oxide');
-    await page.evaluate(() => localStorage.removeItem('fdm-theme'));
+    await page.evaluate(() => localStorage.removeItem('cifro-theme'));
   });
 
   test('lista de músicas ordena e exibe "Sem título"/"Sem detalhes" quando nome/metadados estão ausentes', async ({ page }) => {
@@ -1109,6 +1176,7 @@ test.describe('Editor de Músicas — ramos residuais', () => {
     // todos ausentes.
     await page.goto('/src/backend/editor/editor.php');
     await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await page.evaluate(() => window.__cifroEditorReady);
     await page.evaluate(() => {
       window.songs.push({ id: '__song_sem_nome__', nome: '', artista: '', classificacao: '', cifra: '' });
     });
@@ -1183,13 +1251,13 @@ test.describe('Editor de Músicas — ramos residuais', () => {
     await page.unroute('**/src/backend/editor/api.php');
   });
 
-  test('sem window.fdmToast disponível, salvar e excluir com sucesso/erro não lançam erro', async ({ page }) => {
-    // Linhas 364/367/406/408: `if (window.fdmToast) fdmToast(...)` — cobre o ramo
+  test('sem window.cifroToast disponível, salvar e excluir com sucesso/erro não lançam erro', async ({ page }) => {
+    // Linhas 364/367/406/408: `if (window.cifroToast) cifroToast(...)` — cobre o ramo
     // falso (sem toast global) tanto para salvar (sucesso e erro de rede)
     // quanto para excluir (sucesso e erro de rede).
     await page.goto('/src/backend/editor/editor.php');
     await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
-    await page.evaluate(() => { delete window.fdmToast; });
+    await page.evaluate(() => { delete window.cifroToast; });
     await page.locator('#titulo').fill('__TESTE_SEM_TOAST__');
     await page.evaluate(() => window.tinymce.get('cifraInput').setContent('<b>C G Am F</b>'));
 
@@ -1208,7 +1276,7 @@ test.describe('Editor de Músicas — ramos residuais', () => {
     await page.unroute('**/src/backend/editor/api.php');
 
     // Excluir com falha de rede, sem toast.
-    await page.evaluate(() => { window.fdmConfirm = async () => true; });
+    await page.evaluate(() => { window.cifroConfirm = async () => true; });
     await page.route('**/src/backend/editor/api.php', async route => {
       const body = JSON.parse(route.request().postData() || '{}');
       if (body.action === 'delete') await route.abort('failed');
@@ -1263,12 +1331,12 @@ test.describe('Editor de Músicas — ramos residuais', () => {
     expect(content).toBe('');
   });
 
-  test('sem window.fdmTheme, TinyMCE inicializa com skin escura padrão', async ({ page }) => {
-    // Linha 518: `(window.fdmTheme ? window.fdmTheme.get() : 'dark') !== 'light'`
-    // Remove window.fdmTheme antes do boot para exercitar o ramo `: 'dark'`
+  test('sem window.cifroTheme, TinyMCE inicializa com skin escura padrão', async ({ page }) => {
+    // Linha 518: `(window.cifroTheme ? window.cifroTheme.get() : 'dark') !== 'light'`
+    // Remove window.cifroTheme antes do boot para exercitar o ramo `: 'dark'`
     // do ternário (skin oxide-dark aplicada por padrão sem o helper de tema).
     await page.addInitScript(() => {
-      Object.defineProperty(window, 'fdmTheme', {
+      Object.defineProperty(window, 'cifroTheme', {
         configurable: true,
         get() { return undefined; },
         set() { /* ignora tentativas de setar, mantendo o guard sempre falsy */ },
@@ -1291,6 +1359,7 @@ test.describe('Editor de Músicas — ramos residuais', () => {
     // segunda música não tem classificação.
     await page.goto('/src/backend/editor/editor.php');
     await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await page.evaluate(() => window.__cifroEditorReady);
     await page.evaluate(() => {
       window.songs.push(
         { id: '__song_a_troca__', nome: '__MUSICA_A_TROCA__', artista: 'Artista A', classificacao: 'Louvor', cifra: 'A' },

@@ -7,17 +7,17 @@ $success = false;
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     require_csrf();
 
-    if (fdm_rate_limit('reset_senha', 5, 300)) {
+    $q = strtolower(trim($_POST['email'] ?? ''));
+    if (cifro_rate_limit('reset_senha', 5, 300, $q)) {
         $success = true; // Don't leak rate limit info — show same success message
     } else {
 
-    $q    = trim($_POST['email'] ?? '');
     $repo = new UserRepository();
 
     if (!$q) {
-        $erro = 'Informe seu e-mail ou username.';
+        $erro = 'Informe seu e-mail.';
     } else {
-        $user = $repo->findByUsernameOrEmail($q);
+        $user = $repo->findByEmail($q);
         if ($user && $user['email']) {
             $token = $repo->createToken($user['id'], 3600); // 1 hour
             try {
@@ -39,14 +39,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <?php csrf_meta(); ?>
-  <title>Esqueci a senha — StageBox</title>
-  <script src="/src/js/fdm-theme.js"></script>
+  <title>Esqueci a senha — Cifrô</title>
+  <script src="/src/js/cifro-theme.js"></script>
   <link href="/src/css/fonts.css" rel="stylesheet">
   <link href="/src/css/theme.css" rel="stylesheet">
   <style>
     body { display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:linear-gradient(135deg,#0f0f0f,#1a1a2e);padding:20px;box-sizing:border-box;font-family:var(--font-ui,sans-serif); }
     .card { background:var(--bg-2,#1e1e1e);border:1px solid var(--border-1,#333);border-radius:16px;padding:36px 32px;max-width:420px;width:100%;box-shadow:0 12px 40px rgba(0,0,0,.5); }
-    .brand { text-align:center;margin-bottom:24px;font-size:20px;font-weight:700;color:#fff; }
+    .brand { display:flex;justify-content:center;margin-bottom:24px; }
+    .brand img { width:132px;height:auto; }
     h2 { margin:0 0 8px;font-size:18px;color:#fff;text-align:center; }
     .sub { color:#888;font-size:13px;text-align:center;margin-bottom:20px;line-height:1.5; }
     .form-group { margin-bottom:14px; }
@@ -63,18 +64,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 </head>
 <body>
   <div class="card">
-    <div class="brand">StageBox - Cifras</div>
+    <a class="brand" href="/landing.php" aria-label="Cifrô"><img src="/src/images/cifro-logo.svg" alt="Cifrô"></a>
     <h2>Esqueci minha senha</h2>
 
     <?php if ($success): ?>
       <div class="success-box">
         <p style="color:#aaa;font-size:14px;line-height:1.6">
-          Se esse e-mail ou username estiver cadastrado, você receberá um link de redefinição em instantes.<br><br>
+          Se esse e-mail estiver cadastrado, você receberá um link de redefinição em instantes.<br><br>
           Verifique também a pasta de spam.
         </p>
       </div>
     <?php else: ?>
-      <p class="sub">Informe seu e-mail ou username e enviaremos um link para redefinir sua senha.</p>
+      <p class="sub">Informe seu e-mail e enviaremos um link para redefinir sua senha.</p>
 
       <?php if ($erro): ?>
         <div class="error"><?= htmlspecialchars($erro) ?></div>
@@ -83,8 +84,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <form method="post" novalidate>
         <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(csrf_token()) ?>">
         <div class="form-group">
-          <label for="email">E-mail ou username</label>
-          <input type="text" id="email" name="email" placeholder="seu@email.com ou username" required
+          <label for="email">E-mail</label>
+          <input type="email" id="email" name="email" placeholder="seu@email.com" required
             value="<?= htmlspecialchars($_POST['email'] ?? '') ?>">
         </div>
         <button type="submit" class="btn">Enviar link</button>

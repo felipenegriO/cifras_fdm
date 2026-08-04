@@ -1,6 +1,7 @@
 <?php
+require_once __DIR__ . '/guard.php';
 /**
- * migrate_to_mysql.php — StageBox Phase 1 Migration
+ * migrate_to_mysql.php — Cifrô Phase 1 Migration
  *
  * Reads: src/js/musicas.js, src/js/playlists_salvas.js,
  *        src/js/roteiros_salvos.js, src/backend/users/usuarios.json
@@ -23,7 +24,7 @@ $force = in_array('--force', $argv ?? [], true);
 $pdo = Database::getConnection();
 $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
-log_msg("=== StageBox Migration ===");
+log_msg("=== Cifrô Migration ===");
 
 // ---------- helpers ----------
 
@@ -121,7 +122,7 @@ $perfilMap = [
 ];
 
 $insUser = $pdo->prepare(
-    'INSERT INTO usuarios (id, nome, username, senha_hash, perfil, ativo, validade, config)
+    'INSERT INTO usuarios (id, nome, email, senha_hash, perfil, ativo, validade, config)
      VALUES (?,?,?,?,?,?,?,?)'
 );
 $insUB = $pdo->prepare(
@@ -131,7 +132,8 @@ $insUB = $pdo->prepare(
 foreach ($usuariosJson as $u) {
     $id       = $u['id'] ?? generate_uuid();
     $nome     = $u['nome'] ?? '';
-    $username = $u['username'] ?? '';
+    $email    = strtolower(trim($u['email'] ?? ''));
+    if ($email === '') $email = strtolower(trim($u['username'] ?? $id)) . '@legacy.invalid';
     $hash     = $u['senhaHash'] ?? $u['senha_hash'] ?? null;
     $ativo    = (int)(bool)($u['ativo'] ?? true);
     $validade = ($u['validade'] ?? '') ?: null;
@@ -142,10 +144,10 @@ foreach ($usuariosJson as $u) {
     $perfilOriginal = strtolower(trim($u['perfil'] ?? 'administrador'));
     $map = $perfilMap[$perfilOriginal] ?? $perfilMap['administrador'];
 
-    $insUser->execute([$id, $nome, $username, $hash, $map['perfil'], $ativo, $validade, $config]);
+    $insUser->execute([$id, $nome, $email, $hash, $map['perfil'], $ativo, $validade, $config]);
     $insUB->execute([$id, $bandaId, $map['banda_perfil']]);
 
-    log_msg("  Usuário: $username ({$map['perfil']} / banda:{$map['banda_perfil']})");
+    log_msg("  Usuário: $email ({$map['perfil']} / banda:{$map['banda_perfil']})");
 }
 
 // ---------- migrate músicas ----------

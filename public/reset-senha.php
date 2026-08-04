@@ -5,32 +5,25 @@ $token = trim($_GET['token'] ?? $_POST['token'] ?? '');
 $erro  = '';
 $ok    = false;
 $repo  = new UserRepository();
+$flow  = new PasswordResetFlow($repo);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     require_csrf();
     $senha  = $_POST['senha']  ?? '';
     $senha2 = $_POST['senha2'] ?? '';
 
-    if (strlen($senha) < 6) {
-        $erro = 'A senha deve ter pelo menos 6 caracteres.';
-    } elseif ($senha !== $senha2) {
-        $erro = 'As senhas não coincidem.';
-    } else {
-        $userId = $repo->consumeToken($token);
-        if (!$userId) {
-            $erro = 'Link inválido ou expirado. Solicite um novo.';
-        } else {
-            $repo->updatePassword($userId, password_hash($senha, PASSWORD_DEFAULT));
-            // Invalidate any existing session for this user
+    $result = $flow->handleSubmit($token, $senha, $senha2);
+    $erro = $result['erro'];
+    $ok = $result['ok'];
+    if ($ok) {
+        // Invalidate any existing session for this user
+        if (session_status() === PHP_SESSION_ACTIVE && !headers_sent()) {
             session_regenerate_id(true);
-            $_SESSION = [];
-            $ok = true;
         }
+        $_SESSION = [];
     }
 } else {
-    if (!$token || !$repo->peekToken($token)) {
-        $erro = 'Link inválido ou expirado.';
-    }
+    $erro = $flow->checkTokenForDisplay($token) ?? '';
 }
 ?>
 <!DOCTYPE html>
@@ -39,8 +32,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <?php csrf_meta(); ?>
-  <title>Redefinir senha — StageBox</title>
-  <script src="/src/js/fdm-theme.js"></script>
+  <title>Redefinir senha — Cifrô</title>
+  <script src="/src/js/cifro-theme.js"></script>
   <link href="/src/css/fonts.css" rel="stylesheet">
   <link href="/src/css/theme.css" rel="stylesheet">
   <style>
@@ -61,7 +54,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 </head>
 <body>
   <div class="card">
-    <div class="brand">StageBox - Cifras</div>
+    <div class="brand">Cifrô</div>
     <h2>Nova senha</h2>
 
     <?php if ($ok): ?>
@@ -79,7 +72,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         <div class="form-group">
           <label for="senha">Nova senha</label>
-          <input type="password" id="senha" name="senha" placeholder="Mínimo 6 caracteres" required>
+          <input type="password" id="senha" name="senha" placeholder="Mínimo 12 caracteres" minlength="12" autocomplete="new-password" required>
         </div>
         <div class="form-group">
           <label for="senha2">Confirmar senha</label>

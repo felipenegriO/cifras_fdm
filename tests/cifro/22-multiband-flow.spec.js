@@ -314,21 +314,22 @@ test.describe('Cadastrar membros na banda', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 test.describe('Cadastrar músicas na banda', () => {
   const ENDPOINT_MUSICA = '/src/backend/editor/api.php';
+  const ENDPOINT_SYNC = '/api/sync/data.php';
 
   test('listar músicas requer autenticação', async ({ browser }) => {
     const ctx = await browser.newContext({ storageState: { cookies: [], origins: [] } });
     const page = await ctx.newPage();
-    const res = await page.request.get(ENDPOINT_MUSICA);
+    const res = await page.request.get(ENDPOINT_SYNC);
     expect([401, 403]).toContain(res.status());
     await ctx.close();
   });
 
   test('listar músicas retorna array JSON (quando banda_atual está na sessão)', async ({ page }) => {
-    const res = await page.request.get(ENDPOINT_MUSICA);
+    const res = await page.request.get(ENDPOINT_SYNC);
     // 200 se banda_atual está na sessão, 403 se sessão sem banda selecionada
     if (res.status() === 200) {
       const body = await res.json();
-      expect(Array.isArray(body)).toBe(true);
+      expect(Array.isArray(body.musicas)).toBe(true);
     } else {
       expect([403, 401]).toContain(res.status());
     }
@@ -407,10 +408,10 @@ test.describe('Cadastrar músicas na banda', () => {
 test.describe('Isolamento de dados entre bandas', () => {
   test('músicas listadas pertencem à banda_atual da sessão', async ({ page }) => {
     // Lista músicas com banda atual
-    const res1 = await page.request.get('/src/backend/editor/api.php');
+    const res1 = await page.request.get('/api/sync/data.php');
     // 200 se banda_atual está na sessão; 403 se sessão sem banda selecionada
     if (res1.status() === 200) {
-      const musicas1 = await res1.json();
+      const musicas1 = (await res1.json()).musicas;
       expect(Array.isArray(musicas1)).toBe(true);
       for (const m of musicas1) {
         expect(typeof (m.nome ?? m.name)).toBe('string');

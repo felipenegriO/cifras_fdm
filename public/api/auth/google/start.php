@@ -10,6 +10,17 @@ if (!google_oauth_configured()) {
     exit;
 }
 
+if (($_GET['source'] ?? '') === 'register') {
+    if (($_GET['legal_acceptance'] ?? '') !== '1') {
+        http_response_code(422);
+        exit('Aceite legal obrigatório.');
+    }
+    $_SESSION['google_legal_acceptance'] = [
+        'terms' => (string) env('LEGAL_TERMS_VERSION', '2026-08-03'),
+        'privacy' => (string) env('LEGAL_PRIVACY_VERSION', '2026-08-03'),
+    ];
+}
+
 $state = bin2hex(random_bytes(32));
 $_SESSION['google_oauth_state'] = $state;
 

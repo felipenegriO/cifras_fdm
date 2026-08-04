@@ -112,10 +112,10 @@ class GoogleJwtVerifier
         return base64_decode($padded);
     }
 
-    private static function fetchJwksFromGoogle(): array
+    private static function fetchJwksFromGoogle(?string $url = null): array
     {
         $context = stream_context_create(['http' => ['timeout' => 5]]);
-        $raw = @file_get_contents(self::DEFAULT_JWKS_URL, false, $context);
+        $raw = @file_get_contents($url ?? self::DEFAULT_JWKS_URL, false, $context);
         $decoded = $raw ? json_decode($raw, true) : null;
         if (!is_array($decoded)) {
             throw new \RuntimeException('Não foi possível obter as chaves públicas do Google.');

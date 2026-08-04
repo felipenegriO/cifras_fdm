@@ -114,6 +114,44 @@ final class GoogleJwtVerifierTest extends TestCase
         GoogleJwtVerifier::verify('nao-e-um-jwt', 'my-client-id', fn() => $this->jwks());
     }
 
+    public function testRejeitaHeaderOuPayloadNaoJson(): void
+    {
+        $signature = $this->base64url('assinatura');
+
+        foreach ([
+            $this->base64url('invalido') . '.' . $this->base64url('{}') . '.' . $signature,
+            $this->base64url('{}') . '.' . $this->base64url('invalido') . '.' . $signature,
+        ] as $token) {
+            try {
+                GoogleJwtVerifier::verify($token, 'my-client-id', fn() => $this->jwks());
+                self::fail('Token inválido deveria ser rejeitado.');
+            } catch (RuntimeException $error) {
+                self::assertStringContainsString('payload inválido', $error->getMessage());
+            }
+        }
+    }
+
+    public function testRejeitaAlgoritmoDiferenteDeRs256(): void
+    {
+        $header = $this->base64url(json_encode(['alg' => 'HS256', 'kid' => 'test-kid']));
+        $payload = $this->base64url(json_encode($this->validPayload()));
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Algoritmo de assinatura não suportado.');
+        GoogleJwtVerifier::verify($header . '.' . $payload . '.' . $this->base64url('x'), 'my-client-id', fn() => $this->jwks());
+    }
+
+    public function testFetchJwksRealDecodificaJsonERejeitaConteudoInvalido(): void
+    {
+        $method = new ReflectionMethod(GoogleJwtVerifier::class, 'fetchJwksFromGoogle');
+        $method->setAccessible(true);
+        $url = 'data://text/plain,' . rawurlencode(json_encode(['keys' => []]));
+        self::assertSame(['keys' => []], $method->invoke(null, $url));
+
+        $this->expectException(RuntimeException::class);
+        $method->invoke(null, 'data://text/plain,nao-json');
+    }
+
     /** Exercises the real default fetchJwksFromGoogle() (no injected $fetchJwks). */
     public function testUsaFetchJwksPadraoQuandoNaoInjetado(): void
     {

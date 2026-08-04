@@ -5,6 +5,7 @@ ignore_user_abort(true);
 require_once __DIR__ . '/../../config/env.php';
 require_once __DIR__ . '/backup_helpers.php';
 require_once __DIR__ . '/../Views/partials/icons.php';
+$GLOBALS['__cifro_request_started_at'] = microtime(true);
 
 spl_autoload_register(function ($class) {
     $baseDir = __DIR__ . '/../';
@@ -22,13 +23,65 @@ spl_autoload_register(function ($class) {
     }
 });
 
+function request_id(): string {
+    static $id = null;
+    if ($id === null) $id = bin2hex(random_bytes(8));
+    return $id;
+}
+
+function api_success($data = null, array $legacy = []): void {
+    if (!headers_sent()) {
+        header('Content-Type: application/json; charset=utf-8');
+        header('X-Request-Id: ' . request_id());
+    }
+    echo json_encode(array_merge(['ok' => true, 'data' => $data, 'request_id' => request_id()], $legacy), JSON_UNESCAPED_UNICODE);
+}
+
+function api_error(string $code, string $message, int $status = 400, array $legacy = []): void {
+    http_response_code($status);
+    if (!headers_sent()) {
+        header('Content-Type: application/json; charset=utf-8');
+        header('X-Request-Id: ' . request_id());
+    }
+    echo json_encode(array_merge([
+        'ok' => false,
+        'data' => null,
+        'error' => ['code' => $code, 'message' => $message],
+        'request_id' => request_id(),
+    ], $legacy), JSON_UNESCAPED_UNICODE);
+}
+
+set_exception_handler(function (Throwable $error): void {
+    $path = (string) ($_SERVER['SCRIPT_NAME'] ?? '');
+    $accept = (string) ($_SERVER['HTTP_ACCEPT'] ?? '');
+    $isApi = str_starts_with($path, '/api/') || str_contains($path, '/src/backend/') || in_array($path, ['/health', '/ready', '/health.php', '/ready.php'], true) || str_contains($accept, 'application/json');
+    OperationalLogger::log('error', 'request.exception', ['error_type' => get_class($error), 'http_status' => 500]);
+    if ($isApi) {
+        api_error('internal_error', 'Não foi possível concluir a solicitação.', 500);
+        return;
+    }
+    http_response_code(500);
+    echo 'Não foi possível concluir a solicitação. Código: ' . e(request_id());
+});
+
+register_shutdown_function(function (): void {
+    if (!class_exists('OperationalLogger')) return;
+    $startedAt = (float) ($GLOBALS['__cifro_request_started_at'] ?? microtime(true));
+    OperationalLogger::log('info', 'request.completed', [
+        'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
+        'http_status' => http_response_code(),
+    ]);
+});
+
+validate_production_env();
+
 // ===== Security headers =====
 if (!headers_sent()) {
     header('X-Content-Type-Options: nosniff');
-    header('X-Frame-Options: DENY');
+    header('X-Frame-Options: SAMEORIGIN');
     header('Referrer-Policy: strict-origin-when-cross-origin');
     header('Permissions-Policy: camera=(), microphone=(), geolocation=()');
-    header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self' https://fonts.gstatic.com; connect-src 'self'; img-src 'self' data:;");
+    header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://www.youtube.com; img-src 'self' data: https://img.youtube.com;");
 }
 
 // ===== Secure session cookie params =====
@@ -41,7 +94,7 @@ if (session_status() === PHP_SESSION_NONE) {
         'domain'   => '',
         'secure'   => $isHttps,
         'httponly' => true,
-        'samesite' => 'Lax',
+        'samesite' => 'Strict',
     ]);
 }
 
@@ -62,6 +115,24 @@ if (isset($_SESSION['_last_activity']) && (time() - $_SESSION['_last_activity'])
 }
 if (session_status() === PHP_SESSION_ACTIVE) {
     $_SESSION['_last_activity'] = time();
+}
+
+if (!class_exists('CifroTestTerminate', false)) {
+    /** Thrown by cifro_terminate() instead of exit() when running under PHPUnit. */
+    class CifroTestTerminate extends \RuntimeException {}
+}
+
+/**
+ * Isolated seam for script termination. In production this is exit();
+ * under PHPUnit ($GLOBALS['__cifro_test_terminate'] === true) it throws a
+ * catchable exception instead, so tests can assert on the abort path
+ * without killing the test process.
+ */
+function cifro_terminate(): void {
+    if ($GLOBALS['__cifro_test_terminate'] ?? false) {
+        throw new CifroTestTerminate();
+    }
+    exit;
 }
 
 function e($value) {
@@ -89,27 +160,40 @@ function google_oauth_configured(): bool {
 function require_auth_json() {
     if (!isset($_SESSION['autenticado']) || $_SESSION['autenticado'] !== true) {
         http_response_code(401);
-        header('Content-Type: application/json; charset=utf-8');
+        if (!headers_sent()) header('Content-Type: application/json; charset=utf-8');
         echo json_encode(['ok' => false, 'sucesso' => false, 'error' => 'Nao autenticado.', 'mensagem' => 'Nao autenticado.']);
-        exit;
+        cifro_terminate();
     }
-    if (fdm_session_user_expired()) {
+    if (cifro_session_user_expired()) {
         $_SESSION = [];
-        session_destroy();
+        if (session_status() === PHP_SESSION_ACTIVE) session_destroy();
         http_response_code(401);
-        header('Content-Type: application/json; charset=utf-8');
+        if (!headers_sent()) header('Content-Type: application/json; charset=utf-8');
         echo json_encode(['ok' => false, 'sucesso' => false, 'error' => 'Sessao expirada.', 'mensagem' => 'Sessao expirada.']);
-        exit;
+        cifro_terminate();
     }
+    require_closed_beta_json();
+}
+
+function require_closed_beta_json(): void {
+    $path = str_replace('\\', '/', (string) ($_SERVER['SCRIPT_NAME'] ?? ''));
+    if (str_ends_with($path, '/src/backend/bandas/selecionar.php')) return;
+    $bandId = current_band_id();
+    if (ClosedBetaPolicy::fromEnvironment()->allows($bandId)) return;
+    OperationalLogger::log('warning', 'beta.access_denied', ['result' => 'blocked', 'http_status' => 403]);
+    http_response_code(403);
+    if (!headers_sent()) header('Content-Type: application/json; charset=utf-8');
+    echo json_encode(['ok' => false, 'sucesso' => false, 'error' => 'beta_not_invited', 'mensagem' => 'Esta banda não participa do beta fechado.']);
+    cifro_terminate();
 }
 
 function require_admin_json() {
     require_auth_json();
     if (!current_user_is_admin()) {
         http_response_code(403);
-        header('Content-Type: application/json; charset=utf-8');
+        if (!headers_sent()) header('Content-Type: application/json; charset=utf-8');
         echo json_encode(['ok' => false, 'sucesso' => false, 'error' => 'Acesso restrito ao administrador.', 'mensagem' => 'Acesso restrito ao administrador.']);
-        exit;
+        cifro_terminate();
     }
 }
 
@@ -118,13 +202,14 @@ function require_csrf() {
     $received = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? ($_POST['csrf_token'] ?? '');
     if (!is_string($expected) || $expected === '' || !is_string($received) || !hash_equals($expected, $received)) {
         http_response_code(403);
-        header('Content-Type: application/json; charset=utf-8');
+        if (!headers_sent()) header('Content-Type: application/json; charset=utf-8');
         echo json_encode(['ok' => false, 'sucesso' => false, 'error' => 'Token CSRF inválido.', 'mensagem' => 'Token CSRF inválido.']);
-        exit;
+        cifro_terminate();
     }
 }
 
 function send_no_cache_headers() {
+    if (headers_sent()) return;
     header("Cache-Control: no-store, no-cache, must-revalidate, max-age=0");
     header("Pragma: no-cache");
     header("Expires: 0");
@@ -132,45 +217,48 @@ function send_no_cache_headers() {
 
 function require_auth() {
     if (!isset($_SESSION['autenticado']) || $_SESSION['autenticado'] !== true) {
-        header('Location: /landing.php');
-        exit;
+        if (!headers_sent()) header('Location: /landing.php');
+        cifro_terminate();
     }
 
-    if (fdm_session_user_expired()) {
+    if (cifro_session_user_expired()) {
         $_SESSION = [];
-        if (ini_get('session.use_cookies')) {
+        if (ini_get('session.use_cookies') && !headers_sent()) {
             $params = session_get_cookie_params();
             setcookie(session_name(), '', time() - 42000, $params['path'], $params['domain'], $params['secure'], $params['httponly']);
         }
-        session_destroy();
-        header('Location: /login.php?expirado=1');
-        exit;
+        if (session_status() === PHP_SESSION_ACTIVE) session_destroy();
+        if (!headers_sent()) header('Location: /login.php?expirado=1');
+        cifro_terminate();
     }
 
-    fdm_check_plano();
+    $policy = ClosedBetaPolicy::fromEnvironment();
+    $page = basename((string) ($_SERVER['PHP_SELF'] ?? ''));
+    if (!in_array($page, ['select-banda.php', 'logout.php', 'beta-indisponivel.php'], true) && !$policy->allows(current_band_id())) {
+        OperationalLogger::log('warning', 'beta.access_denied', ['result' => 'blocked', 'http_status' => 302]);
+        if (!headers_sent()) header('Location: /beta-indisponivel.php');
+        cifro_terminate();
+    }
+    cifro_check_plano();
 }
 
-function fdm_check_plano(): void {
+function cifro_check_plano(): void {
     $banda = $_SESSION['banda_atual'] ?? [];
     if (empty($banda['id'])) return; // no band selected yet, let select-banda handle it
 
-    $plano = $banda['plano'] ?? 'trial';
+    $plano = $banda['plano'] ?? 'gratuito';
     if ($plano === 'bloqueado') {
-        if (basename($_SERVER['PHP_SELF'] ?? '') !== 'plano-expirado.php') {
-            header('Location: /plano-expirado.php');
-            exit;
+        if (!in_array(basename($_SERVER['PHP_SELF'] ?? ''), ['plano-expirado.php', 'plano.php'], true)) {
+            if (!headers_sent()) header('Location: /plano-expirado.php');
+            cifro_terminate();
         }
         return;
     }
-    if ($plano === 'trial' || $plano === 'gratuito') {
-        $expira = $banda['trial_expira_em'] ?? '';
-        if ($expira && strtotime($expira) < strtotime('today')) {
-            $repo = new BandaRepository();
-            $repo->marcarBloqueada($banda['id']);
-            $_SESSION['banda_atual']['plano'] = 'bloqueado';
-            header('Location: /plano-expirado.php');
-            exit;
-        }
+    if ($plano === 'trial') {
+        $repo = new BandaRepository();
+        $repo->atualizarPlano($banda['id'], 'gratuito');
+        $_SESSION['banda_atual']['plano'] = 'gratuito';
+        $_SESSION['banda_atual']['trial_expira_em'] = null;
     }
 }
 
@@ -189,6 +277,40 @@ function current_band_role(): string {
     return $_SESSION['banda_atual']['perfil'] ?? 'basico';
 }
 
+function require_current_band_json(): string {
+    require_auth_json();
+    $bandId = current_band_id();
+    if ($bandId === '') {
+        http_response_code(404);
+        echo json_encode(['ok' => false, 'sucesso' => false, 'error' => 'Banda não encontrada.', 'mensagem' => 'Banda não encontrada.']);
+        cifro_terminate();
+    }
+
+    $resolver = $GLOBALS['__cifro_band_membership_resolver'] ?? null;
+    if (is_callable($resolver) && strtolower((string) env('APP_ENV', 'production')) === 'test') {
+        $membership = $resolver($_SESSION['usuario']['id'] ?? '', $bandId, is_master());
+    } else {
+        $pdo = Database::getConnection();
+        if (is_master()) {
+            $stmt = $pdo->prepare('SELECT 1 FROM bandas WHERE id=? LIMIT 1');
+            $stmt->execute([$bandId]);
+        } else {
+            $stmt = $pdo->prepare('SELECT perfil FROM usuario_banda WHERE usuario_id=? AND banda_id=? LIMIT 1');
+            $stmt->execute([$_SESSION['usuario']['id'] ?? '', $bandId]);
+        }
+        $membership = $stmt->fetchColumn();
+    }
+    if ($membership === false) {
+        http_response_code(404);
+        echo json_encode(['ok' => false, 'sucesso' => false, 'error' => 'Banda não encontrada.', 'mensagem' => 'Banda não encontrada.']);
+        cifro_terminate();
+    }
+    if (!is_master()) {
+        $_SESSION['banda_atual']['perfil'] = (string) $membership;
+    }
+    return $bandId;
+}
+
 function is_master(): bool {
     return ($_SESSION['usuario']['perfil'] ?? '') === 'master';
 }
@@ -205,15 +327,15 @@ function can_manage_band_users(): bool {
 
 /** Aborts with 403 JSON if caller doesn't have $minRole within current band. */
 function require_band_role(string $minRole): void {
-    require_auth_json();
+    require_current_band_json();
     $order = ['basico' => 0, 'gestor' => 1, 'administrador' => 2];
     $required = $order[$minRole] ?? 0;
     $actual   = is_master() ? 99 : ($order[current_band_role()] ?? 0);
     if ($actual < $required) {
         http_response_code(403);
-        header('Content-Type: application/json; charset=utf-8');
+        if (!headers_sent()) header('Content-Type: application/json; charset=utf-8');
         echo json_encode(['ok' => false, 'sucesso' => false, 'error' => 'Permissão insuficiente.', 'mensagem' => 'Permissão insuficiente.']);
-        exit;
+        cifro_terminate();
     }
 }
 
@@ -228,10 +350,7 @@ function current_user_profile(): string {
 }
 
 function current_user_is_admin(): bool {
-    if (can_manage_band_users()) return true;
-    // Legacy fallback: sessions created before multi-band migration
-    $legacyPerfil = strtolower(trim((string)($_SESSION['usuario']['perfil'] ?? '')));
-    return $legacyPerfil === 'administrador';
+    return can_manage_band_users();
 }
 
 function require_admin(): void {
@@ -239,11 +358,11 @@ function require_admin(): void {
     if (!current_user_is_admin()) {
         http_response_code(403);
         echo 'Acesso restrito ao administrador.';
-        exit;
+        cifro_terminate();
     }
 }
 
-function fdm_session_user_expired(): bool {
+function cifro_session_user_expired(): bool {
     $usuario = $_SESSION['usuario'] ?? null;
     if (!is_array($usuario) || empty($usuario['id'])) {
         return false;
@@ -284,7 +403,7 @@ function render_view($view, $data = []) {
     if (!file_exists($viewPath)) {
         http_response_code(500);
         echo 'View not found.';
-        exit;
+        cifro_terminate();
     }
 
     if (is_array($data)) {
@@ -300,7 +419,7 @@ function render_partial($partial, $data = []) {
     if (!file_exists($partialPath)) {
         http_response_code(500);
         echo 'Partial not found.';
-        exit;
+        cifro_terminate();
     }
 
     if (is_array($data)) {
@@ -313,17 +432,41 @@ function render_partial($partial, $data = []) {
 // ---------- Plan limits ----------
 
 /**
- * Returns resource limits for a given plan.
- * -1 means unlimited.
+ * Planos disponíveis:
+ *   gratuito — free permanente, 10 músicas, todas as funcionalidades
+ *   mensal   — R$9,90/mês, ilimitado
+ *   semestral — R$49,90/6 meses, ilimitado
+ *   anual    — R$89,90/ano, ilimitado
+ *   bloqueado — acesso suspenso
+ *   ativo    — legado (equivale a mensal)
+ *
+ * Returns resource limits for a given plan. -1 means unlimited.
  */
-function fdm_plan_limits(string $plano): array {
+function cifro_plan_limits(string $plano): array {
     return match($plano) {
-        'gratuito' => ['users' => 1, 'musicas' => 10,  'playlists' => 0],
-        'basico'   => ['users' => 1, 'musicas' => 50,  'playlists' => 1],
-        'banda'    => ['users' => -1, 'musicas' => -1, 'playlists' => -1],
-        'trial'    => ['users' => -1, 'musicas' => -1, 'playlists' => -1],
-        'ativo'    => ['users' => -1, 'musicas' => -1, 'playlists' => -1], // legado
-        default    => ['users' => 0,  'musicas' => 0,  'playlists' => 0],  // bloqueado
+        'gratuito'  => ['users' => 1,  'musicas' => 10,  'playlists' => 1,  'bandas' => 1],
+        'trial'     => ['users' => 1,  'musicas' => 10,  'playlists' => 1,  'bandas' => 1],
+        'mensal'    => ['users' => -1, 'musicas' => -1,  'playlists' => -1, 'bandas' => -1],
+        'semestral' => ['users' => -1, 'musicas' => -1,  'playlists' => -1, 'bandas' => -1],
+        'anual'     => ['users' => -1, 'musicas' => -1,  'playlists' => -1, 'bandas' => -1],
+        'ativo'     => ['users' => -1, 'musicas' => -1,  'playlists' => -1, 'bandas' => -1], // legado
+        default     => ['users' => 0,  'musicas' => 0,   'playlists' => 0,  'bandas' => 0],  // bloqueado
+    };
+}
+
+/**
+ * Label amigável para exibição ao usuário.
+ */
+function cifro_plan_label(string $plano): string {
+    return match($plano) {
+        'gratuito'  => 'Gratuito',
+        'trial'     => 'Gratuito',
+        'mensal'    => 'Mensal',
+        'semestral' => 'Semestral',
+        'anual'     => 'Anual',
+        'ativo'     => 'Mensal',
+        'bloqueado' => 'Bloqueado',
+        default     => $plano,
     };
 }
 
@@ -333,27 +476,25 @@ function fdm_plan_limits(string $plano): array {
  * $resource: 'musicas' | 'playlists' | 'users'
  * $currentCount: current count (caller queries the DB)
  */
-function fdm_require_plan_limit(string $resource, int $currentCount): void {
+function cifro_require_plan_limit(string $resource, int $currentCount): void {
+    if (is_master()) return;
     $plano  = $_SESSION['banda_atual']['plano'] ?? 'bloqueado';
-    $limits = fdm_plan_limits($plano);
+    $limits = cifro_plan_limits($plano);
     $limit  = $limits[$resource] ?? 0;
     if ($limit === -1) return; // unlimited
     if ($currentCount >= $limit) {
         $labels = ['musicas' => 'músicas', 'playlists' => 'playlists', 'users' => 'usuários'];
         $label  = $labels[$resource] ?? $resource;
-        $planoLabel = match($plano) {
-            'gratuito' => 'Gratuito', 'basico' => 'Básico', default => $plano,
-        };
         http_response_code(403);
-        header('Content-Type: application/json; charset=utf-8');
+        if (!headers_sent()) header('Content-Type: application/json; charset=utf-8');
         echo json_encode([
-            'ok'       => false,
-            'sucesso'  => false,
-            'error'    => "Limite do plano {$planoLabel} atingido: máximo de {$limit} {$label}.",
-            'mensagem' => "Limite do plano {$planoLabel} atingido: máximo de {$limit} {$label}.",
+            'ok'          => false,
+            'sucesso'     => false,
+            'error'       => "Limite do plano " . cifro_plan_label($plano) . " atingido: máximo de {$limit} {$label}.",
+            'mensagem'    => "Limite do plano " . cifro_plan_label($plano) . " atingido: máximo de {$limit} {$label}.",
             'plano_limit' => true,
         ]);
-        exit;
+        cifro_terminate();
     }
 }
 
@@ -363,13 +504,43 @@ function fdm_require_plan_limit(string $resource, int $currentCount): void {
  * $limit — max attempts per $windowSeconds
  * Returns true if limit exceeded (caller should abort).
  */
-function fdm_rate_limit(string $key, int $limit = 5, int $windowSeconds = 300): bool {
-    $bucket = &$_SESSION["_rl_$key"];
-    if (!isset($bucket) || (time() - ($bucket['t'] ?? 0)) > $windowSeconds) {
-        $bucket = ['c' => 0, 't' => time()];
+function cifro_rate_limit_path(string $action, string $identity = ''): string {
+    $ip = (string) ($_SERVER['REMOTE_ADDR'] ?? 'unknown');
+    $fingerprint = hash('sha256', strtolower(trim($action)) . '|' . strtolower(trim($identity)) . '|' . $ip);
+    $directory = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'cifro-rate-limit';
+    if (!is_dir($directory)) mkdir($directory, 0700, true);
+    return $directory . DIRECTORY_SEPARATOR . $fingerprint . '.json';
+}
+
+function cifro_rate_limit_reset(string $action, string $identity = ''): void {
+    $path = cifro_rate_limit_path($action, $identity);
+    if (is_file($path)) unlink($path);
+}
+
+function cifro_rate_limit(string $action, int $limit = 5, int $windowSeconds = 300, string $identity = ''): bool {
+    $path = cifro_rate_limit_path($action, $identity);
+    $fingerprint = basename($path, '.json');
+    $handle = fopen($path, 'c+');
+    if ($handle === false || !flock($handle, LOCK_EX)) return true;
+    $raw = stream_get_contents($handle);
+    $bucket = $raw ? json_decode($raw, true) : null;
+    $now = time();
+    if (!is_array($bucket) || ($now - (int) ($bucket['started_at'] ?? 0)) >= $windowSeconds) {
+        $bucket = ['count' => 0, 'started_at' => $now];
     }
-    $bucket['c']++;
-    return $bucket['c'] > $limit;
+    $bucket['count']++;
+    rewind($handle);
+    ftruncate($handle, 0);
+    fwrite($handle, json_encode($bucket));
+    fflush($handle);
+    flock($handle, LOCK_UN);
+    fclose($handle);
+    $blocked = $bucket['count'] > $limit;
+    if ($blocked) {
+        error_log('[security] rate_limit action=' . preg_replace('/[^a-z0-9_.-]/i', '', $action) . ' fingerprint=' . substr($fingerprint, 0, 12));
+        usleep((int) min(500000, 50000 * ($bucket['count'] - $limit)));
+    }
+    return $blocked;
 }
 
 send_no_cache_headers();

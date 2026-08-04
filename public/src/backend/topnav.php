@@ -130,7 +130,6 @@ if (!isset($_SESSION['autenticado']) || $_SESSION['autenticado'] !== true) {
     <?php if ($isAdmin): ?>
     <a href="editorplaylist.php">Playlists</a>
     <a href="editor.php">Editor Musicas</a>
-    <a href="roteiro.php">Editor Roteiros</a>
     <a href="/src/backend/users/editoruser.php">Usuários</a>
     <?php endif; ?>
     <!-- no mobile, aparece -->

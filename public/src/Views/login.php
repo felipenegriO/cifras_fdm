@@ -3,12 +3,10 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Login — StageBox</title>
+  <title>Login — Cifrô</title>
 
   <!-- Bootstrap CSS -->
-  <script src="/src/js/fdm-theme.js"></script>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <script src="/src/js/cifro-theme.js"></script>
   <link href="/src/css/fonts.css" rel="stylesheet">
   <link href="/src/css/bootstrap.min.css" rel="stylesheet" />
   <link href="/src/css/theme.css" rel="stylesheet">
@@ -43,6 +41,8 @@
       color: #2a2a2a;
       text-align: center;
     }
+    .brand { display:flex;justify-content:center;margin-bottom:1.25rem; }
+    .brand img { width:132px;height:auto; }
     label {
       font-weight: 600;
       color: #2a2a2a;
@@ -105,8 +105,10 @@
 </head>
 
 <body>
+  <script>if ('serviceWorker' in navigator) navigator.serviceWorker.ready.then(r => r.active?.postMessage({type:'CLEAR_CONTEXT'})).catch(() => {});</script>
 
   <div class="card">
+    <a class="brand" href="/landing.php" aria-label="Cifrô"><img src="/src/images/cifro-logo-dark.svg" alt="Cifrô"></a>
     <h2>Login</h2>
 
     <?php if (!empty($erro)): ?>
@@ -126,15 +128,15 @@
 
     <form method="post" id="loginForm" novalidate>
       <div class="mb-3">
-        <label for="username" class="form-label">Usuário</label>
+        <label for="email" class="form-label">E-mail</label>
         <input
-          type="text"
+          type="email"
           class="form-control"
-          id="username"
-          name="username"
-          placeholder="username"
+          id="email"
+          name="email"
+          placeholder="seu@email.com"
           required
-          autocomplete="username"
+          autocomplete="email"
         >
       </div>
 
@@ -173,7 +175,7 @@
   document.addEventListener('DOMContentLoaded', () => {
     const form = document.getElementById('loginForm');
     const senha = document.getElementById('senha');
-    const username = document.getElementById('username');
+    const email = document.getElementById('email');
     const toggleSenha = document.getElementById('toggleSenha');
 
     function showError(input, message) {
@@ -191,12 +193,12 @@
     }
 
     form.addEventListener('submit', (e) => {
-      removeError(username);
+      removeError(email);
       removeError(senha);
 
       let valid = true;
-      if (!username.value.trim()) {
-        showError(username, 'Informe o usuário.');
+      if (!email.value.trim()) {
+        showError(email, 'Informe o e-mail.');
         valid = false;
       }
       if (!senha.value.trim()) {

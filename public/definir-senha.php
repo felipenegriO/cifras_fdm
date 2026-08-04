@@ -5,62 +5,30 @@ $token  = trim($_GET['token'] ?? $_POST['token'] ?? '');
 $erro   = '';
 $ok     = false;
 $repo   = new UserRepository();
+$flow   = new AccountActivationFlow($repo);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     require_csrf();
     $senha  = $_POST['senha']  ?? '';
     $senha2 = $_POST['senha2'] ?? '';
 
-    if (strlen($senha) < 6) {
-        $erro = 'A senha deve ter pelo menos 6 caracteres.';
-    } elseif ($senha !== $senha2) {
-        $erro = 'As senhas não coincidem.';
-    } else {
-        $userId = $repo->consumeToken($token);
-        if (!$userId) {
-            $erro = 'Link inválido ou expirado. Solicite um novo.';
-        } else {
-            $hash = password_hash($senha, PASSWORD_DEFAULT);
-            $repo->activate($userId, $hash);
+    $result = $flow->handleSubmit($token, $senha, $senha2);
+    $erro = $result['erro'];
+    $ok = $result['ok'];
 
-            // Auto-login
-            $user = $repo->findById($userId);
-            if ($user) {
-                $bandas = $repo->getBandasDoUsuario($userId);
-                session_regenerate_id(true);
-                $_SESSION['autenticado'] = true;
-                $_SESSION['usuario'] = [
-                    'id'       => $user['id'],
-                    'nome'     => $user['nome'],
-                    'username' => $user['username'],
-                    'perfil'   => $user['perfil'],
-                    'validade' => $user['validade'] ?? '',
-                    'config'   => $user['config'] ?? [],
-                    'bandas'   => array_map(fn($b) => ['id' => $b['id'], 'perfil' => $b['usuario_perfil']], $bandas),
-                ];
-                if (count($bandas) === 1) {
-                    $banda = (new BandaRepository())->findById($bandas[0]['id']);
-                    if ($banda) {
-                        $_SESSION['banda_atual'] = [
-                            'id'             => $banda['id'],
-                            'nome'           => $banda['nome'],
-                            'perfil'         => $bandas[0]['usuario_perfil'],
-                            'plano'          => $banda['plano'],
-                            'trial_expira_em'=> $banda['trial_expira_em'],
-                        ];
-                    }
-                    header('Location: /index.php'); exit;
-                }
-                header('Location: /select-banda.php'); exit;
-            }
-            $ok = true;
+    if ($ok && $result['session'] !== null) {
+        if (session_status() === PHP_SESSION_ACTIVE && !headers_sent()) {
+            session_regenerate_id(true);
         }
+        foreach ($result['session'] as $key => $value) {
+            $_SESSION[$key] = $value;
+        }
+        header('Location: ' . $result['redirect']);
+        exit;
     }
 } else {
     // GET: validate token is still good before showing form
-    if (!$token || !$repo->peekToken($token)) {
-        $erro = 'Link inválido ou expirado. Solicite um novo.';
-    }
+    $erro = $flow->checkTokenForDisplay($token) ?? '';
 }
 ?>
 <!DOCTYPE html>
@@ -69,14 +37,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <?php csrf_meta(); ?>
-  <title>Definir senha — StageBox</title>
-  <script src="/src/js/fdm-theme.js"></script>
+  <title>Definir senha — Cifrô</title>
+  <script src="/src/js/cifro-theme.js"></script>
   <link href="/src/css/fonts.css" rel="stylesheet">
   <link href="/src/css/theme.css" rel="stylesheet">
   <style>
     body { display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:linear-gradient(135deg,#0f0f0f,#1a1a2e);padding:20px;box-sizing:border-box;font-family:var(--font-ui,sans-serif); }
     .card { background:var(--bg-2,#1e1e1e);border:1px solid var(--border-1,#333);border-radius:16px;padding:36px 32px;max-width:420px;width:100%;box-shadow:0 12px 40px rgba(0,0,0,.5); }
-    .brand { text-align:center;margin-bottom:24px;font-size:20px;font-weight:700;color:#fff; }
+    .brand { display:flex;justify-content:center;margin-bottom:24px; }
+    .brand img { width:132px;height:auto; }
     h2 { margin:0 0 18px;font-size:18px;color:#fff;text-align:center; }
     .form-group { margin-bottom:14px; }
     label { display:block;font-size:13px;color:#aaa;margin-bottom:5px;font-weight:500; }
@@ -91,7 +60,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 </head>
 <body>
   <div class="card">
-    <div class="brand">StageBox - Cifras</div>
+    <a class="brand" href="/landing.php" aria-label="Cifrô"><img src="/src/images/cifro-logo.svg" alt="Cifrô"></a>
     <h2>Definir senha</h2>
 
     <?php if ($erro): ?>
@@ -106,7 +75,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         <div class="form-group">
           <label for="senha">Nova senha</label>
-          <input type="password" id="senha" name="senha" placeholder="Mínimo 6 caracteres" required>
+          <input type="password" id="senha" name="senha" placeholder="Mínimo 12 caracteres" minlength="12" autocomplete="new-password" required>
         </div>
         <div class="form-group">
           <label for="senha2">Confirmar senha</label>

@@ -13,7 +13,7 @@ test('E2E: Fluxo Completo do Modo Ensaio', async ({ page }) => {
   // 2. Navegar para música
   console.log('\n2. ✓ Navegando para música...');
   await page.goto('/music.php?id=1');
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('domcontentloaded');
   console.log(`   URL: ${page.url()}`);
 
   // 2.5 Injetar mock player

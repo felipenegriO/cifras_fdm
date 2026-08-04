@@ -24,45 +24,32 @@ if (!$userId) {
     exit;
 }
 
-// chaves permitidas (whitelist)
-$allowed = ['tema', 'cifraSize', 'scrollSpeed', 'keepAwake'];
-$config  = [];
-foreach ($allowed as $key) {
-    if (array_key_exists($key, $payload['config'])) {
-        $config[$key] = $payload['config'][$key];
+$config = [];
+foreach ($payload['config'] as $key => $value) {
+    if (!UserConfigValidator::isKeySuportada($key)) {
+        continue;
     }
-}
 
-$arquivo = __DIR__ . '/usuarios.json';
-if (!file_exists($arquivo)) {
-    echo json_encode(['sucesso' => false, 'mensagem' => 'Arquivo de usuários não encontrado.']);
-    exit;
-}
-
-$json     = file_get_contents($arquivo);
-$usuarios = json_decode($json, true);
-if (!is_array($usuarios)) {
-    echo json_encode(['sucesso' => false, 'mensagem' => 'Erro ao ler usuários.']);
-    exit;
-}
-
-$found = false;
-foreach ($usuarios as &$u) {
-    if (($u['id'] ?? '') === $userId) {
-        $u['config'] = array_merge($u['config'] ?? [], $config);
-        $found = true;
-        break;
+    $validated = UserConfigValidator::validate($key, $value);
+    if ($validated === null) {
+        http_response_code(422);
+        echo json_encode(['sucesso' => false, 'mensagem' => 'Valor de configuração inválido.']);
+        exit;
     }
-}
-unset($u);
 
-if (!$found) {
+    $config[$key] = $validated;
+}
+
+$repo = new UserRepository();
+if (!$repo->findById($userId)) {
     echo json_encode(['sucesso' => false, 'mensagem' => 'Usuário não encontrado.']);
     exit;
 }
 
-$newJson = json_encode($usuarios, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
-if (file_put_contents($arquivo, $newJson, LOCK_EX) === false) {
+try {
+    $repo->updateConfig($userId, $config);
+} catch (Throwable $e) {
+    error_log('salvar_config: ' . $e->getMessage());
     echo json_encode(['sucesso' => false, 'mensagem' => 'Falha ao salvar.']);
     exit;
 }

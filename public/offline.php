@@ -1,4 +1,2 @@
 <?php
-require_once __DIR__ . '/src/backend/bootstrap.php';
-$controller = new OfflineController();
-$controller->show();
+require __DIR__ . '/src/Views/offline.php';

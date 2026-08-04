@@ -7,7 +7,7 @@ test.describe('Modo Ensaio - Testes de Áudio Upload', () => {
   test.beforeEach(async ({ page }) => {
     await fazerLogin(page);
     await page.goto(MUSIC_PAGE);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     // Abrir painel ensaio
     const btnEnsaio = page.locator('#btnAtivarEnsaio');
@@ -115,7 +115,7 @@ test.describe('Modo Ensaio - Testes de Áudio Upload', () => {
 
     // Navegar para outra música
     await page.goto('/music.php?id=2');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     // Estado da música 1 deve permanecer intacto
     const state1 = await page.evaluate(() => {

@@ -6,8 +6,8 @@ class AuthService {
         $this->userRepository = $userRepository;
     }
 
-    public function authenticate($username, $password) {
-        $user = $this->userRepository->findByUsername($username);
+    public function authenticate($login, $password) {
+        $user = $this->userRepository->findByEmail($login);
         if (!$user) {
             return [
                 'user' => null,

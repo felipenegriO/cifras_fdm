@@ -112,7 +112,7 @@ e-mail/senha em `login.php` e `register.php`, com `href="/api/auth/google/start.
 - `id_token` com assinatura inválida ou `email_verified=false` → mesma
   mensagem genérica, log interno com o motivo real.
 - E-mail do Google já usado por conta bloqueada/inativa → segue as mesmas
-  regras de `AuthService::authenticate()` já existentes (fdm_check_plano,
+  regras de `AuthService::authenticate()` já existentes (cifro_check_plano,
   etc.) — nenhuma lógica nova aqui.
 
 ## Testes

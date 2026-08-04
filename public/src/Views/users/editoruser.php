@@ -4,19 +4,25 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <?php csrf_meta(); ?>
-  <script src="<?= asset_url('/src/js/fdm-csrf.js') ?>"></script>
-  <script src="<?= asset_url('/src/js/fdm-confirm.js') ?>"></script>
-  <script src="<?= asset_url('/src/js/fdm-toast.js') ?>"></script>
-  <title>Usuários — StageBox</title>
-  <script src="/src/js/fdm-theme.js"></script>
+  <script src="<?= asset_url('/src/js/cifro-csrf.js') ?>"></script>
+  <script src="<?= asset_url('/src/js/cifro-confirm.js') ?>"></script>
+  <script src="<?= asset_url('/src/js/cifro-toast.js') ?>"></script>
+  <title>Usuários — Cifrô</title>
+  <script src="/src/js/cifro-theme.js"></script>
   <link href="/src/css/fonts.css" rel="stylesheet">
   <link href="/src/css/theme.css" rel="stylesheet">
   <style>
     body { font-family: var(--font-ui, sans-serif); padding: 0; margin: 0; background: var(--bg-0); color: var(--text-1); }
-    .page-body { padding: 20px; max-width: 720px; margin: 0 auto; }
+    .page-body { padding: 24px 20px; max-width: 720px; margin: 0 auto; }
+
+    .page-header { margin-bottom: 20px; }
+    .page-header h1 { margin: 0; font-size: var(--text-2xl); line-height: 1.2; }
+    .page-header p { margin: 6px 0 0; color: var(--text-2); font-size: var(--text-sm); }
 
     .toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 16px; }
     .search-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+    .search-field { position: relative; flex: 2 1 260px; }
+    .search-field svg { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--text-3); pointer-events: none; }
     .search-row input,
     .search-row select {
       flex: 1 1 160px; height: 38px; padding: 0 10px;
@@ -24,13 +30,18 @@
       border: 1px solid var(--border-1); border-radius: var(--radius-sm);
       font-family: inherit; font-size: var(--text-sm); box-sizing: border-box;
     }
+    .search-row .search-field input { width: 100%; padding-left: 36px; }
     .search-row input:focus, .search-row select:focus { outline: none; border-color: var(--border-2); }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+
+    .list-summary { min-height: 18px; margin: 0 0 8px; color: var(--text-2); font-size: var(--text-xs); }
 
     .user-list { list-style: none; padding: 0; margin: 0; border: 1px solid var(--border-1); border-radius: var(--radius-md); overflow: hidden; background: var(--bg-2); }
     .user-row { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--border-1); min-height: 56px; }
     .user-row:last-child { border-bottom: none; }
     .user-info { flex: 1; min-width: 0; }
     .user-name { font-size: var(--text-base); font-weight: var(--fw-medium); color: var(--text-1); line-height: 1.3; }
+    .user-identity { margin-top: 2px; color: var(--text-3); font-size: var(--text-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .user-meta { font-size: var(--text-xs); color: var(--text-2); margin-top: 2px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
     .user-actions { display: flex; gap: 6px; flex-shrink: 0; }
 
@@ -44,7 +55,7 @@
 
     .modal-overlay { display: none; position: fixed; inset: 0; background: var(--bg-overlay); z-index: var(--z-modal); align-items: center; justify-content: center; padding: 16px; }
     .modal-overlay.open { display: flex; }
-    .modal { background: var(--bg-elevated); border: 1px solid var(--border-1); border-radius: var(--radius-lg); padding: 24px; width: 100%; max-width: 480px; box-shadow: var(--shadow-3); max-height: 90vh; overflow-y: auto; }
+    .modal { background: var(--bg-elevated); border: 1px solid var(--border-1); border-radius: var(--radius-lg); padding: 24px; width: 100%; max-width: 480px; box-shadow: var(--shadow-3); }
     .modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
     .modal-header h3 { margin: 0; font-size: var(--text-lg); }
     .modal-close { background: none; border: none; color: var(--text-2); cursor: pointer; font-size: 22px; line-height: 1; padding: 0; margin: 0; min-height: unset; }
@@ -56,12 +67,15 @@
     .form-group label { display: block; font-size: var(--text-sm); font-weight: var(--fw-medium); color: var(--text-2); margin-bottom: 4px; }
     .form-group input, .form-group select { width: 100%; height: 38px; padding: 0 10px; box-sizing: border-box; background: var(--bg-1); color: var(--text-1); border: 1px solid var(--border-1); border-radius: var(--radius-sm); font-family: inherit; font-size: var(--text-sm); }
     .form-group input:focus, .form-group select:focus { outline: none; border-color: var(--border-2); }
+    .checkbox-field { display: flex; align-items: center; gap: 9px; min-height: 38px; cursor: pointer; }
+    .form-group .checkbox-field input { width: 18px; height: 18px; margin: 0; accent-color: var(--brand); }
+    .checkbox-field span { color: var(--text-1); font-size: var(--text-sm); }
     .form-hint { font-size: 11px; color: var(--text-3); margin-top: 4px; }
     .modal-footer { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 20px; justify-content: flex-end; }
 
-    .btn-icon-sm { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: var(--radius-sm); border: 1px solid var(--border-1); background: var(--bg-3); color: var(--text-2); cursor: pointer; transition: background var(--t-fast), color var(--t-fast); padding: 0; flex-shrink: 0; }
+    .btn-icon-sm { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: var(--radius-sm); border: 1px solid var(--border-1); background: var(--bg-3); color: var(--text-2); cursor: pointer; transition: background var(--t-fast), color var(--t-fast); padding: 0; flex-shrink: 0; }
     .btn-icon-sm:hover { background: var(--bg-elevated); color: var(--text-1); }
-    .btn-icon-sm.danger:hover { background: var(--danger); color: #fff; border-color: var(--danger); }
+    .btn-icon-sm:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 
     /* import search results */
     .import-results { list-style: none; padding: 0; margin: 8px 0 0; max-height: 200px; overflow-y: auto; border: 1px solid var(--border-1); border-radius: var(--radius-sm); background: var(--bg-1); }
@@ -72,7 +86,24 @@
     .import-result-name { flex: 1; font-size: var(--text-sm); }
     .import-result-user { font-size: 11px; color: var(--text-3); }
 
-    @media (max-width: 480px) { .form-row { flex-direction: column; } }
+    @media (max-width: 480px) {
+      .page-body { padding: 20px 16px; }
+      .page-header h1 { font-size: var(--text-xl); }
+      .toolbar { display: grid; grid-template-columns: 1fr 1fr; }
+      .toolbar .btn { width: 100%; padding-inline: 10px; white-space: normal; }
+      .search-row { flex-direction: column; }
+      .search-field, .search-row select { flex: none; width: 100%; }
+      .form-row { flex-direction: column; gap: 0; }
+      .modal-overlay { align-items: flex-end; padding: 0; }
+      .modal { max-height: calc(100dvh - 24px); overflow-y: auto; border-radius: var(--radius-lg) var(--radius-lg) 0 0; padding: 20px 16px 0; }
+      .modal-close { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; margin: -10px -10px -10px 0; }
+      .modal-footer { position: sticky; bottom: 0; margin: 20px -16px 0; padding: 12px 16px; background: var(--bg-elevated); border-top: 1px solid var(--border-1); }
+      .modal-footer .btn { flex: 1 1 auto; }
+      #btnDeletar { flex-basis: 100%; order: 3; }
+    }
+    @media (min-width: 481px) and (max-height: 680px) {
+      .modal { max-height: calc(100vh - 32px); overflow-y: auto; }
+    }
   </style>
 </head>
 <body>
@@ -80,19 +111,29 @@
 
   <div class="page-body">
 
+    <header class="page-header">
+      <h1>Usuários da banda</h1>
+      <p>Gerencie acessos, perfis e convites.</p>
+    </header>
+
     <div class="toolbar">
       <button type="button" class="btn btn--primary" onclick="abrirModalNovo()">
-        <?= fdm_icon('plus', 16) ?> Novo Usuário
+        <?= cifro_icon('plus', 16) ?> Novo Usuário
       </button>
-      <button type="button" class="btn btn--ghost" onclick="abrirModalImportar()">
-        <?= fdm_icon('users', 16) ?> Importar Usuário
+      <button type="button" class="btn btn--secondary" onclick="abrirModalImportar()">
+        <?= cifro_icon('users', 16) ?> Importar Usuário
       </button>
     </div>
 
     <div class="search-row">
-      <input id="filtroUsuarios" placeholder="Pesquisar nome ou username..." oninput="renderListaUsuarios()">
+      <div class="search-field">
+        <label class="sr-only" for="filtroUsuarios">Pesquisar usuários</label>
+        <?= cifro_icon('search', 16) ?>
+        <input id="filtroUsuarios" type="search" placeholder="Pesquisar usuário" oninput="renderListaUsuarios()">
+      </div>
+      <label class="sr-only" for="filtroStatusUsuarios">Filtrar por status</label>
       <select id="filtroStatusUsuarios" onchange="renderListaUsuarios()">
-        <option value="">Todos</option>
+        <option value="">Todos os status</option>
         <option value="ativos">Ativos</option>
         <option value="temporarios">Temporários</option>
         <option value="expirados">Expirados</option>
@@ -100,6 +141,7 @@
       </select>
     </div>
 
+    <p class="list-summary" id="resumoUsuarios" aria-live="polite"></p>
     <ul class="user-list" id="listaUsuarios"></ul>
   </div>
 
@@ -117,23 +159,18 @@
           <input id="nome" placeholder="Nome completo">
         </div>
         <div class="form-group">
-          <label for="username">Username</label>
-          <input id="username" placeholder="login (sem espaços)">
+          <label for="email">E-mail</label>
+          <input id="email" type="email" placeholder="usuario@email.com" autocomplete="email">
         </div>
-      </div>
-
-      <div class="form-group">
-        <label for="email">E-mail <span style="font-weight:400;color:var(--text-3)">(opcional — envia convite automático)</span></label>
-        <input id="email" type="email" placeholder="usuario@email.com">
       </div>
 
       <div class="form-row">
         <div class="form-group">
-          <label for="ativo">Status</label>
-          <select id="ativo">
-            <option value="true">Ativo</option>
-            <option value="false">Inativo</option>
-          </select>
+          <label>Status</label>
+          <label class="checkbox-field" for="ativo">
+            <input id="ativo" type="checkbox">
+            <span>Usuário ativo</span>
+          </label>
         </div>
         <div class="form-group">
           <label for="bandaPerfil">Perfil na banda</label>
@@ -159,23 +196,23 @@
 
       <div class="modal-footer">
         <button type="button" class="btn btn--ghost" onclick="fecharModal()">Cancelar</button>
-        <button type="button" class="btn btn--danger" id="btnDeletar" onclick="deletarUsuario()"><?= fdm_icon('trash', 16) ?> Remover da banda</button>
-        <button type="button" class="btn btn--primary" onclick="aplicarEdicao()"><?= fdm_icon('check', 16) ?> Salvar</button>
+        <button type="button" class="btn btn--danger" id="btnDeletar" onclick="deletarUsuario()"><?= cifro_icon('trash', 16) ?> Remover da banda</button>
+        <button type="button" class="btn btn--primary" onclick="aplicarEdicao()"><?= cifro_icon('check', 16) ?> Salvar usuário</button>
       </div>
     </div>
   </div>
 
   <!-- ── Modal importar ── -->
-  <div class="modal-overlay" id="modalImportar" role="dialog" aria-modal="true">
+  <div class="modal-overlay" id="modalImportar" role="dialog" aria-modal="true" aria-labelledby="modalImportarTitle">
     <div class="modal">
       <div class="modal-header">
-        <h3>Importar Usuário</h3>
+        <h3 id="modalImportarTitle">Importar Usuário</h3>
         <button class="modal-close" onclick="fecharModalImportar()" aria-label="Fechar">×</button>
       </div>
 
       <div class="form-group">
         <label for="importBusca">Buscar usuário</label>
-        <input id="importBusca" placeholder="Nome ou username..." oninput="buscarParaImportar()">
+        <input id="importBusca" placeholder="Nome ou e-mail..." oninput="buscarParaImportar()">
         <div class="form-hint">Busca usuários já cadastrados que ainda não estão nesta banda.</div>
       </div>
       <ul class="import-results" id="importResultados"></ul>
@@ -192,7 +229,7 @@
 
       <div class="modal-footer">
         <button type="button" class="btn btn--ghost" onclick="fecharModalImportar()">Cancelar</button>
-        <button type="button" class="btn btn--primary" onclick="confirmarImportar()"><?= fdm_icon('check', 16) ?> Importar</button>
+        <button type="button" class="btn btn--primary" onclick="confirmarImportar()"><?= cifro_icon('check', 16) ?> Importar</button>
       </div>
     </div>
   </div>
@@ -202,6 +239,8 @@ const API = '/src/backend/users/salvar_user.php';
 let usuarios = [];
 let usuarioAtualId = null;
 let importBuscaTimer = null;
+let modalTrigger = null;
+let importModalTrigger = null;
 
 async function carregarUsuarios() {
   try {
@@ -245,12 +284,13 @@ function tagHtml(u) {
 
 function renderListaUsuarios() {
   const ul = document.getElementById('listaUsuarios');
+  const resumo = document.getElementById('resumoUsuarios');
   ul.innerHTML = '';
   const filtro = document.getElementById('filtroUsuarios').value.toLowerCase();
   const filtroStatus = document.getElementById('filtroStatusUsuarios').value;
 
   const lista = usuarios.filter(u => {
-    const texto = (u.nome + ' ' + u.username).toLowerCase();
+    const texto = `${u.nome || ''} ${u.email || ''}`.toLowerCase();
     if (!texto.includes(filtro)) return false;
     const ativo = !!u.ativo && String(u.ativo) !== '0';
     if (filtroStatus === 'ativos')      return ativo && !usuarioExpirado(u);
@@ -260,6 +300,10 @@ function renderListaUsuarios() {
     return true;
   });
 
+  const filtrando = filtro !== '' || filtroStatus !== '';
+  const totalLabel = `${usuarios.length} ${usuarios.length === 1 ? 'usuário' : 'usuários'}`;
+  resumo.textContent = filtrando ? `${lista.length} de ${totalLabel}` : totalLabel;
+
   if (lista.length === 0) {
     ul.innerHTML = '<li style="padding:20px;text-align:center;color:var(--text-3);font-size:var(--text-sm);">Nenhum usuário encontrado.</li>';
     return;
@@ -267,21 +311,20 @@ function renderListaUsuarios() {
 
   lista.forEach(u => {
     const li = document.createElement('li');
+    const ativo = !!u.ativo && String(u.ativo) !== '0';
     li.className = 'user-row';
     li.innerHTML = `
       <div class="user-info">
-        <div class="user-name">${escapeHtml(u.nome)} <span style="color:var(--text-3);font-weight:400">@${escapeHtml(u.username)}</span></div>
+        <div class="user-name">${escapeHtml(u.nome)}</div>
+        <div class="user-identity">${escapeHtml(u.email)}</div>
         <div class="user-meta">${tagHtml(u)}</div>
       </div>
       <div class="user-actions">
-        ${u.email && !u.ativo ? `<button class="btn-icon-sm" title="Reenviar convite" onclick="reenviarConvite('${u.id}', '${escapeHtml(u.nome)}')">
+        ${u.email && !ativo ? `<button type="button" class="btn-icon-sm" title="Reenviar convite" aria-label="Reenviar convite para ${escapeHtml(u.nome)}" onclick="reenviarConvite('${u.id}')">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
         </button>` : ''}
-        <button class="btn-icon-sm" title="Editar" onclick="abrirModalEditar('${u.id}')">
+        <button type="button" class="btn-icon-sm" title="Editar" aria-label="Editar ${escapeHtml(u.nome)}" onclick="abrirModalEditar('${u.id}')">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-        </button>
-        <button class="btn-icon-sm danger" title="Remover da banda" onclick="removerDaBanda('${u.id}', '${escapeHtml(u.nome)}')">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
         </button>
       </div>`;
     ul.appendChild(li);
@@ -295,12 +338,12 @@ function escapeHtml(str) {
 // ── Modal editar/criar ────────────────────────────────────────────────────────
 
 function abrirModalNovo() {
+  modalTrigger = document.activeElement;
   usuarioAtualId = null;
   document.getElementById('modalTitle').textContent = 'Novo Usuário';
   document.getElementById('nome').value = '';
-  document.getElementById('username').value = '';
   document.getElementById('email').value = '';
-  document.getElementById('ativo').value = 'true';
+  document.getElementById('ativo').checked = true;
   document.getElementById('bandaPerfil').value = 'basico';
   document.getElementById('validade').value = '';
   document.getElementById('senha').value = '';
@@ -312,13 +355,13 @@ function abrirModalNovo() {
 function abrirModalEditar(id) {
   const u = usuarios.find(u => u.id === id);
   if (!u) return;
+  modalTrigger = document.activeElement;
   usuarioAtualId = id;
 
   document.getElementById('modalTitle').textContent = 'Editar Usuário';
   document.getElementById('nome').value = u.nome || '';
-  document.getElementById('username').value = u.username || '';
   document.getElementById('email').value = u.email || '';
-  document.getElementById('ativo').value = (!!u.ativo && String(u.ativo) !== '0') ? 'true' : 'false';
+  document.getElementById('ativo').checked = !!u.ativo && String(u.ativo) !== '0';
   document.getElementById('bandaPerfil').value = u.banda_perfil || 'basico';
   document.getElementById('validade').value = u.validade || '';
   document.getElementById('senha').value = '';
@@ -329,6 +372,8 @@ function abrirModalEditar(id) {
 
 function fecharModal() {
   document.getElementById('modalOverlay').classList.remove('open');
+  if (modalTrigger instanceof HTMLElement) modalTrigger.focus();
+  modalTrigger = null;
 }
 
 document.getElementById('modalOverlay').addEventListener('click', function(e) {
@@ -337,32 +382,29 @@ document.getElementById('modalOverlay').addEventListener('click', function(e) {
 
 // ── CRUD ────────────────────────────────────────────────────────────────────
 
-function validarUsuario(nome, username, validade) {
+function validarUsuario(nome, email, validade) {
   if (!nome.trim()) return 'Nome é obrigatório.';
-  if (!username.trim()) return 'Username é obrigatório.';
-  if (/\s/.test(username)) return 'Username não pode ter espaços.';
-  if (!/^[a-zA-Z0-9._-]+$/.test(username)) return 'Username só pode ter letras, números, ponto, hífen e underscore.';
+  if (!email) return 'E-mail é obrigatório.';
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return 'E-mail inválido.';
   if (validade && !/^\d{4}-\d{2}-\d{2}$/.test(validade)) return 'Data de validade inválida.';
   return null;
 }
 
 async function aplicarEdicao() {
   const nome        = document.getElementById('nome').value;
-  const username    = document.getElementById('username').value;
   const email       = document.getElementById('email').value.trim();
-  const ativo       = document.getElementById('ativo').value === 'true';
+  const ativo       = document.getElementById('ativo').checked;
   const bandaPerfil = document.getElementById('bandaPerfil').value;
   const validade    = document.getElementById('validade').value;
   const senha       = document.getElementById('senha').value;
 
-  const err = validarUsuario(nome, username, validade);
-  if (err) { fdmToast(err, 'error'); return; }
+  const err = validarUsuario(nome, email, validade);
+  if (err) { cifroToast(err, 'error'); return; }
 
   const payload = {
     action: 'save',
     id: usuarioAtualId || undefined,
     nome: nome.trim(),
-    username: username.trim(),
     email: email || '',
     ativo,
     bandaPerfil,
@@ -371,22 +413,22 @@ async function aplicarEdicao() {
   if (senha) payload._senhaPlain = senha;
 
   try {
-    const res = await fdmFetch(API, payload);
+    const res = await cifroFetch(API, payload);
     if (res.sucesso) {
       const msg = res.convite_enviado ? 'Salvo! Convite enviado por e-mail.' : (res.aviso || 'Salvo!');
-      fdmToast(msg, 'success');
+      cifroToast(msg, 'success');
       fecharModal();
       await carregarUsuarios();
     } else {
-      fdmToast(res.mensagem || 'Erro ao salvar.', 'error');
+      cifroToast(res.mensagem || 'Erro ao salvar.', 'error');
     }
   } catch (e) {
-    fdmToast('Erro ao salvar.', 'error');
+    cifroToast('Erro ao salvar.', 'error');
   }
 }
 
 async function removerDaBanda(id, nomeUsuario) {
-  const ok = await fdmConfirm({
+  const ok = await cifroConfirm({
     title: 'Remover da banda',
     message: 'O usuário <strong>' + escapeHtml(nomeUsuario) + '</strong> será removido desta banda.',
     confirmText: 'Sim, remover',
@@ -395,15 +437,15 @@ async function removerDaBanda(id, nomeUsuario) {
   });
   if (!ok) return;
   try {
-    const res = await fdmFetch(API, { action: 'delete', userId: id });
+    const res = await cifroFetch(API, { action: 'delete', userId: id });
     if (res.sucesso) {
-      fdmToast('Usuário removido da banda.', 'success');
+      cifroToast('Usuário removido da banda.', 'success');
       await carregarUsuarios();
     } else {
-      fdmToast(res.mensagem || 'Erro ao remover.', 'error');
+      cifroToast(res.mensagem || 'Erro ao remover.', 'error');
     }
   } catch (e) {
-    fdmToast('Erro ao remover.', 'error');
+    cifroToast('Erro ao remover.', 'error');
   }
 }
 
@@ -417,6 +459,7 @@ function deletarUsuario() {
 // ── Import modal ─────────────────────────────────────────────────────────────
 
 function abrirModalImportar() {
+  importModalTrigger = document.activeElement;
   document.getElementById('importBusca').value = '';
   document.getElementById('importResultados').innerHTML = '';
   document.getElementById('importUserId').value = '';
@@ -427,10 +470,18 @@ function abrirModalImportar() {
 
 function fecharModalImportar() {
   document.getElementById('modalImportar').classList.remove('open');
+  if (importModalTrigger instanceof HTMLElement) importModalTrigger.focus();
+  importModalTrigger = null;
 }
 
 document.getElementById('modalImportar').addEventListener('click', function(e) {
   if (e.target === this) fecharModalImportar();
+});
+
+document.addEventListener('keydown', function(e) {
+  if (e.key !== 'Escape') return;
+  if (document.getElementById('modalImportar').classList.contains('open')) fecharModalImportar();
+  else if (document.getElementById('modalOverlay').classList.contains('open')) fecharModal();
 });
 
 function buscarParaImportar() {
@@ -440,7 +491,7 @@ function buscarParaImportar() {
     const ul = document.getElementById('importResultados');
     if (q.length < 2) { ul.innerHTML = ''; return; }
     try {
-      const res = await fdmFetch(API, { action: 'search', q });
+      const res = await cifroFetch(API, { action: 'search', q });
       ul.innerHTML = '';
       if (!Array.isArray(res) || res.length === 0) {
         ul.innerHTML = '<li style="padding:10px 12px;color:var(--text-3);font-size:var(--text-sm)">Nenhum resultado.</li>';
@@ -450,7 +501,7 @@ function buscarParaImportar() {
         const li = document.createElement('li');
         li.className = 'import-result-row';
         li.dataset.id = u.id;
-        li.innerHTML = `<span class="import-result-name">${escapeHtml(u.nome)}</span><span class="import-result-user">@${escapeHtml(u.username)}</span>`;
+        li.innerHTML = `<span class="import-result-name">${escapeHtml(u.nome)}</span><span class="import-result-user">${escapeHtml(u.email)}</span>`;
         li.addEventListener('click', () => selecionarImport(u.id, li));
         ul.appendChild(li);
       });
@@ -464,40 +515,41 @@ function selecionarImport(id, el) {
   el.classList.add('selected');
 }
 
-async function reenviarConvite(userId, nome) {
+async function reenviarConvite(userId) {
+  const usuario = usuarios.find(u => u.id === userId);
   try {
-    const res = await fdmFetch(API, { action: 'resend_invite', userId });
+    const res = await cifroFetch(API, { action: 'resend_invite', userId });
     if (res.sucesso) {
-      fdmToast(`Convite reenviado para ${nome}.`, 'success');
+      cifroToast(`Convite reenviado para ${usuario?.nome || 'o usuário'}.`, 'success');
     } else {
-      fdmToast(res.mensagem || 'Erro ao reenviar.', 'error');
+      cifroToast(res.mensagem || 'Erro ao reenviar.', 'error');
     }
   } catch (e) {
-    fdmToast('Erro ao reenviar convite.', 'error');
+    cifroToast('Erro ao reenviar convite.', 'error');
   }
 }
 
 async function confirmarImportar() {
   const userId = document.getElementById('importUserId').value;
   const perfil = document.getElementById('importPerfil').value;
-  if (!userId) { fdmToast('Selecione um usuário.', 'error'); return; }
+  if (!userId) { cifroToast('Selecione um usuário.', 'error'); return; }
   try {
-    const res = await fdmFetch(API, { action: 'import', userId, perfil });
+    const res = await cifroFetch(API, { action: 'import', userId, perfil });
     if (res.sucesso) {
-      fdmToast('Usuário importado!', 'success');
+      cifroToast('Usuário importado!', 'success');
       fecharModalImportar();
       await carregarUsuarios();
     } else {
-      fdmToast(res.mensagem || 'Erro ao importar.', 'error');
+      cifroToast(res.mensagem || 'Erro ao importar.', 'error');
     }
   } catch (e) {
-    fdmToast('Erro ao importar.', 'error');
+    cifroToast('Erro ao importar.', 'error');
   }
 }
 
 // ── helper: POST with CSRF ────────────────────────────────────────────────────
 
-async function fdmFetch(url, payload) {
+async function cifroFetch(url, payload) {
   const res = await fetch(url, {
     method: 'POST',
     headers: {

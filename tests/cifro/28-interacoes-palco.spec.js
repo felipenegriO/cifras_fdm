@@ -34,7 +34,7 @@ async function openFirstSong(page, fromPlaylist = false) {
   await page.waitForFunction(() => Array.isArray(window.songs));
 
   if (fromPlaylist) {
-    await page.getByRole('button', { name: 'Abrir setlists' }).click();
+    await page.getByRole('button', { name: 'Abrir repertórios' }).click();
     const playlistSong = page.locator('.liPlaylist-musica').first();
     if (await playlistSong.count()) {
       await playlistSong.click();
@@ -71,10 +71,10 @@ test('usa apresentação, rolagem, velocidade e navegação da setlist', async (
   try {
     await page.goto('/index.php');
     await page.evaluate(async () => {
-      await fdmSync.sync(window.FDM_BAND_ID, { force: true });
+      await cifroSync.sync(window.CIFRO_BAND_ID, { force: true });
       renderPlaylistsMenu();
     });
-    await page.getByRole('button', { name: 'Abrir setlists' }).click();
+    await page.getByRole('button', { name: 'Abrir repertórios' }).click();
     const group = page.locator('.liPlaylist', { hasText: nome });
     await group.locator(':scope > a').click();
     await group.locator('.liPlaylist-musica').first().click();
@@ -82,22 +82,22 @@ test('usa apresentação, rolagem, velocidade e navegação da setlist', async (
     await page.getByRole('button', { name: 'Abrir ajustes' }).click();
     await page.getByRole('button', { name: 'Modo apresentação' }).click();
 
-    await expect(page.locator('body')).toHaveClass(/fdm-presenting/);
+    await expect(page.locator('body')).toHaveClass(/cifro-presenting/);
     await expect(page.getByText('Pronto para palco')).toBeVisible();
     await page.getByRole('button', { name: 'Velocidade da rolagem' }).click();
     await page.getByRole('button', { name: 'Velocidade da rolagem' }).click();
     await page.getByRole('button', { name: 'Velocidade da rolagem' }).click();
-    await page.locator('#fdmAutoScrollToggle').click();
+    await page.locator('#cifroAutoScrollToggle').click();
     await page.waitForTimeout(50);
-    if (!await page.locator('body').evaluate(body => body.classList.contains('fdm-scroll-active'))) {
-      await page.evaluate(() => window.fdmPresentation.toggleScroll());
+    if (!await page.locator('body').evaluate(body => body.classList.contains('cifro-scroll-active'))) {
+      await page.evaluate(() => window.cifroPresentation.toggleScroll());
     }
-    await expect(page.locator('body')).toHaveClass(/fdm-scroll-active/);
+    await expect(page.locator('body')).toHaveClass(/cifro-scroll-active/);
     await page.keyboard.press('Space');
-    await expect(page.locator('body')).not.toHaveClass(/fdm-scroll-active/);
+    await expect(page.locator('body')).not.toHaveClass(/cifro-scroll-active/);
 
     await page.getByRole('button', { name: 'Sair do modo apresentação' }).click();
-    await expect(page.locator('body')).not.toHaveClass(/fdm-presenting/);
+    await expect(page.locator('body')).not.toHaveClass(/cifro-presenting/);
   } finally {
     await page.request.post('/src/backend/editor/salvar_playlists.php', {
       headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': token },
@@ -219,10 +219,10 @@ test('abre roteiro real, sanitiza conteúdo e retorna da música', async ({ page
   try {
     await page.goto('/index.php');
     await page.evaluate(async () => {
-      await fdmSync.sync(window.FDM_BAND_ID, { force: true });
+      await cifroSync.sync(window.CIFRO_BAND_ID, { force: true });
       renderPlaylistsMenu();
     });
-    await page.getByRole('button', { name: 'Abrir setlists' }).click();
+    await page.getByRole('button', { name: 'Abrir repertórios' }).click();
     await page.locator('.liRoteiro a', { hasText: titulo }).click();
     await expect(page).toHaveURL(/roteiro\.php\?id=/);
     await expect(page.locator('#roteiro-title')).toHaveText(titulo);
@@ -281,7 +281,7 @@ test('usa controles reais de leitura, colunas, rolagem e metrônomo', async ({ p
   await page.locator('#stopMetronome').click();
 
   await page.getByRole('button', { name: 'Fechar ajustes' }).click();
-  await page.getByRole('button', { name: 'Abrir playlists' }).click();
+  await page.getByRole('button', { name: 'Abrir repertórios' }).click();
   await page.locator('#closeButton').click();
 });
 
@@ -291,18 +291,7 @@ test('cria, visualiza, descarta alterações e exclui música no editor', async 
   const editorBody = page.frameLocator('.tox-edit-area iframe').locator('body');
   await expect(editorBody).toBeVisible();
 
-  for (const prefix of ['__EDITOR_UI_', '__SCROLL_VISUAL_TEST__']) {
-    await page.locator('#buscaMusica').fill(prefix);
-    while (await page.locator('#musicas button').count()) {
-      await page.locator('#musicas button').first().click();
-      await page.locator('#moreActions').locator('summary').click();
-      await page.locator('#deleteSongButton').click();
-      await page.getByRole('dialog').getByRole('button', { name: 'Sim, excluir' }).click();
-      await expect(page.locator('#status')).toHaveText('Música excluída com sucesso.', { timeout: 10000 });
-      await page.locator('#buscaMusica').fill(prefix);
-    }
-  }
-
+  await page.locator('#buscaMusica').fill('');
   await page.locator('#newSongButton').click();
   await page.locator('#saveButton').click();
   await expect(page.locator('#status')).toHaveText('Digite o nome da música.');

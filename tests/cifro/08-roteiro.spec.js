@@ -29,12 +29,12 @@ test.describe('Roteiro', () => {
 test.describe('Setlist', () => {
   test('exibe o tom detectado quando o item ainda não possui tom salvo', async ({ page }) => {
     await page.goto('/index.php');
-    await page.waitForFunction(() => window.FdmChords && Array.isArray(window.songs));
+    await page.waitForFunction(() => window.CifroChords && Array.isArray(window.songs));
 
     const result = await page.evaluate(() => {
       const song = { id: 'teste-tom', nome: 'Música teste', cifra: '<b>D A Bm G</b><br><b>Em A D</b>' };
       window.songs = [song];
-      const expected = window.FdmChords.identifyKey(song.cifra).key;
+      const expected = window.CifroChords.identifyKey(song.cifra).key;
       window.playlistsSalvas = [{ nome: 'Teste de tom', itens: [song.id] }];
       window.renderPlaylistsMenu();
       return {
@@ -48,7 +48,7 @@ test.describe('Setlist', () => {
 
   test('editor da setlist mostra e atualiza o tom escolhido', async ({ page }) => {
     await page.goto('/src/backend/editor/editorplaylist.php');
-    await page.waitForFunction(() => window.FdmChords && typeof carregarPlaylistsDisponiveis === 'function');
+    await page.waitForFunction(() => window.CifroChords && typeof carregarPlaylistsDisponiveis === 'function');
     await page.waitForFunction(() => {
       const select = document.getElementById('playlistSelecionada');
       return select && (select.options.length > 0 || document.querySelector('#musicasDisponiveis .empty-state'));

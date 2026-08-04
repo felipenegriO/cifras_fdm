@@ -392,7 +392,7 @@ test.describe('Landing page — segurança', () => {
 
   test('tem header X-Frame-Options', async ({ page }) => {
     const res = await page.request.get('/landing.php');
-    expect(res.headers()['x-frame-options']?.toLowerCase()).toBe('deny');
+    expect(res.headers()['x-frame-options']?.toLowerCase()).toBe('sameorigin');
   });
 
   test('tem header Referrer-Policy', async ({ page }) => {

@@ -123,7 +123,7 @@ test.describe('SQL Injection — campos de API', () => {
       headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
     });
     // Either succeeds (stored as literal string) or fails gracefully — never 500
-    expect([200, 400, 422]).toContain(res.status());
+    expect([200, 400, 404, 422]).toContain(res.status());
     if (res.status() === 200) {
       const body = await res.json();
       const id = body.id;
@@ -349,7 +349,7 @@ test.describe('Requisições inválidas', () => {
       data: JSON.stringify({ action: 'delete', id: -1 }),
       headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
     });
-    expect([200, 400, 422]).toContain(res.status());
+    expect([200, 400, 404, 422]).toContain(res.status());
   });
 
   test('ID string não numérico em delete não causa crash', async ({ page }) => {

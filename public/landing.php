@@ -10,9 +10,9 @@ if (isset($_SESSION['autenticado']) && $_SESSION['autenticado'] === true) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>StageBox - Cifras · Sua banda na mesma página. Sempre.</title>
-  <meta name="description" content="Cifras, setlists e modo ao vivo — tudo sincronizado, funciona offline. Experimente grátis por 30 dias.">
-  <script src="/src/js/fdm-theme.js"></script>
+  <title>Cifrô · Sua banda na mesma página. Sempre.</title>
+  <meta name="description" content="Cifras, repertórios e modo ao vivo — tudo sincronizado, funciona offline. Comece grátis.">
+  <script src="/src/js/cifro-theme.js"></script>
   <link href="/src/css/fonts.css" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; }
@@ -33,7 +33,8 @@ if (isset($_SESSION['autenticado']) && $_SESSION['autenticado'] === true) {
 
     /* ── NAV ── */
     nav { display:flex;align-items:center;justify-content:space-between;padding:16px 24px;border-bottom:1px solid var(--border);max-width:1100px;margin:0 auto; }
-    .nav-brand { font-size:18px;font-weight:700;color:#fff; }
+    .nav-brand { display:flex;align-items:center; }
+    .nav-brand img { width:112px;height:auto;display:block; }
     .nav-links { display:flex;gap:12px;align-items:center; }
     .nav-link { padding:8px 16px;border-radius:8px;font-size:14px;color:var(--text-2); }
     .nav-link:hover { color:#fff;background:#1e1e1e; }
@@ -71,14 +72,29 @@ if (isset($_SESSION['autenticado']) && $_SESSION['autenticado'] === true) {
     .feature-icon { font-size:28px;margin-bottom:14px; }
 
     /* ── PRICING ── */
-    .pricing { max-width:560px;margin:0 auto;padding:0 24px 80px;text-align:center; }
-    .price-card { background:var(--bg-card);border:1px solid rgba(124,58,237,.4);border-radius:var(--radius);padding:40px 32px; }
-    .price-tag { font-size:48px;font-weight:800;color:#fff;margin:16px 0 4px; }
-    .price-tag span { font-size:20px;font-weight:400;color:var(--text-2); }
-    .price-note { color:var(--text-2);font-size:14px;margin-bottom:28px; }
-    .price-features { list-style:none;padding:0;margin:0 0 28px;text-align:left;display:inline-block; }
-    .price-features li { padding:6px 0;font-size:15px;color:var(--text-2); }
+    .pricing { max-width:960px;margin:0 auto;padding:0 24px 80px;text-align:center; }
+    .pricing-grid { display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:40px; }
+    .price-card { background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:28px 20px;display:flex;flex-direction:column;position:relative; }
+    .price-card.featured { border-color:rgba(124,58,237,.6);background:#1a1230; }
+    .price-badge { position:absolute;top:-12px;left:50%;transform:translateX(-50%);background:var(--brand);color:#fff;font-size:11px;font-weight:700;padding:3px 12px;border-radius:999px;white-space:nowrap; }
+    .price-name { font-size:14px;font-weight:700;color:var(--text-2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:16px; }
+    .price-tag { font-size:36px;font-weight:800;color:#fff;line-height:1; }
+    .price-tag span { font-size:15px;font-weight:400;color:var(--text-2); }
+    .price-period { font-size:12px;color:var(--text-3);margin:6px 0 8px; }
+    .price-economy { font-size:12px;color:#4ade80;font-weight:600;min-height:18px; }
+    .price-divider { border:none;border-top:1px solid var(--border);margin:20px 0; }
+    .price-features { list-style:none;padding:0;margin:0 0 24px;text-align:left;flex:1; }
+    .price-features li { padding:5px 0;font-size:13px;color:var(--text-2); }
     .price-features li::before { content:'✓  ';color:var(--brand);font-weight:700; }
+    .price-features li.limit { color:var(--text-3); }
+    .price-features li.limit::before { content:'·  ';color:var(--text-3); }
+    .btn-plan { display:block;width:100%;padding:10px;border-radius:8px;font-size:14px;font-weight:700;text-align:center;cursor:pointer; }
+    .btn-plan-outline { background:transparent;border:1px solid var(--border);color:var(--text-2); }
+    .btn-plan-outline:hover { border-color:#555;color:#fff; }
+    .btn-plan-primary { background:var(--brand);color:#fff;border:none; }
+    .btn-plan-primary:hover { background:var(--brand-hover); }
+    @media (max-width:760px) { .pricing-grid { grid-template-columns:1fr 1fr; } }
+    @media (max-width:480px) { .pricing-grid { grid-template-columns:1fr; } }
 
     /* ── CTA FINAL ── */
     .final-cta { text-align:center;padding:0 24px 80px; }
@@ -99,7 +115,7 @@ if (isset($_SESSION['autenticado']) && $_SESSION['autenticado'] === true) {
 
   <!-- NAV -->
   <nav>
-    <div class="nav-brand">StageBox <span style="color:var(--brand)">·</span> Cifras</div>
+    <a href="/landing.php" class="nav-brand" aria-label="Cifrô"><img src="/src/images/cifro-logo.svg" alt="Cifrô"></a>
     <div class="nav-links">
       <a href="/login.php" class="nav-link">Entrar</a>
       <a href="/register.php" class="btn-nav">Testar grátis</a>
@@ -108,14 +124,14 @@ if (isset($_SESSION['autenticado']) && $_SESSION['autenticado'] === true) {
 
   <!-- HERO -->
   <section class="hero">
-    <div class="hero-badge">🎸 Grátis por 30 dias · Sem cartão</div>
+    <div class="hero-badge">🎸 Plano grátis · Sem cartão</div>
     <h1>Sua banda na<br><span>mesma página.</span><br>Sempre.</h1>
-    <p>Cifras, setlists e modo ao vivo — tudo sincronizado, funciona offline. Chega de "qual tom mesmo?"</p>
+    <p>Cifras, repertórios e modo ao vivo — tudo sincronizado, funciona offline. Chega de "qual tom mesmo?"</p>
     <div class="cta-group">
-      <a href="/register.php" class="btn-primary">Testar grátis por 30 dias</a>
+      <a href="/register.php" class="btn-primary">Criar conta grátis</a>
       <a href="/login.php" class="btn-secondary">Já tenho conta</a>
     </div>
-    <p class="hero-note">30 dias gratuitos · R$5/mês depois · Cancele quando quiser</p>
+    <p class="hero-note">1 banda · até 10 músicas · faça upgrade quando quiser</p>
   </section>
 
   <!-- PROOF OF VALUE -->
@@ -128,7 +144,7 @@ if (isset($_SESSION['autenticado']) && $_SESSION['autenticado'] === true) {
       </div>
       <div class="proof-card">
         <div class="proof-icon">📋</div>
-        <div class="proof-title">Setlists por data</div>
+        <div class="proof-title">Repertórios por data</div>
         <div class="proof-desc">A banda toca no tom certo, na ordem certa. Sem papel, sem confusão.</div>
       </div>
       <div class="proof-card">
@@ -168,22 +184,82 @@ if (isset($_SESSION['autenticado']) && $_SESSION['autenticado'] === true) {
 
   <!-- PRICING -->
   <section class="pricing">
-    <h2 class="section-title">Preço simples</h2>
-    <div class="price-card">
-      <p style="color:var(--text-2);margin:0">Para toda a banda</p>
-      <div class="price-tag">R$5<span>/mês</span></div>
-      <p class="price-note">ou R$50/ano (2 meses grátis)</p>
-      <ul class="price-features">
-        <li>Membros ilimitados na banda</li>
-        <li>Músicas, setlists e roteiros ilimitados</li>
-        <li>Modo ao vivo para todos</li>
-        <li>Funciona offline</li>
-        <li>Suporte por e-mail</li>
-      </ul>
-      <a href="/register.php" class="btn-primary" style="display:block;width:100%;text-align:center">
-        Testar grátis por 30 dias
-      </a>
+    <h2 class="section-title">Planos simples, sem surpresas</h2>
+    <p style="color:var(--text-2);margin:-24px 0 0;font-size:15px">Todos os planos pagos incluem membros, músicas e repertórios ilimitados.</p>
+
+    <div class="pricing-grid">
+
+      <!-- GRATUITO -->
+      <div class="price-card">
+        <div class="price-name">Gratuito</div>
+        <div class="price-tag">R$0</div>
+        <div class="price-period">para sempre</div>
+        <div class="price-economy"></div>
+        <hr class="price-divider">
+        <ul class="price-features">
+          <li class="limit">Até 10 músicas</li>
+          <li class="limit">1 repertório</li>
+          <li>Modo ao vivo</li>
+          <li>Funciona offline</li>
+          <li class="limit">Sem membros adicionais</li>
+        </ul>
+        <a href="/register.php" class="btn-plan btn-plan-outline">Começar grátis</a>
+      </div>
+
+      <!-- MENSAL -->
+      <div class="price-card">
+        <div class="price-name">Mensal</div>
+        <div class="price-tag">R$9<span>,90/mês</span></div>
+        <div class="price-period">cobrado mensalmente</div>
+        <div class="price-economy"></div>
+        <hr class="price-divider">
+        <ul class="price-features">
+          <li>Músicas ilimitadas</li>
+          <li>Repertórios e roteiros</li>
+          <li>Modo ao vivo</li>
+          <li>Funciona offline</li>
+          <li>Membros ilimitados</li>
+        </ul>
+        <a href="/register.php" class="btn-plan btn-plan-outline">Criar conta grátis</a>
+      </div>
+
+      <!-- SEMESTRAL -->
+      <div class="price-card featured">
+        <div class="price-badge">✦ Mais popular</div>
+        <div class="price-name">Semestral</div>
+        <div class="price-tag">R$49<span>,90/6 meses</span></div>
+        <div class="price-period">≈ R$8,32/mês</div>
+        <div class="price-economy">Economize R$9,50 vs mensal</div>
+        <hr class="price-divider">
+        <ul class="price-features">
+          <li>Músicas ilimitadas</li>
+          <li>Repertórios e roteiros</li>
+          <li>Modo ao vivo</li>
+          <li>Funciona offline</li>
+          <li>Membros ilimitados</li>
+        </ul>
+        <a href="/register.php" class="btn-plan btn-plan-primary">Criar conta grátis</a>
+      </div>
+
+      <!-- ANUAL -->
+      <div class="price-card">
+        <div class="price-name">Anual</div>
+        <div class="price-tag">R$89<span>,90/ano</span></div>
+        <div class="price-period">≈ R$7,49/mês</div>
+        <div class="price-economy">Economize R$28,90 vs mensal</div>
+        <hr class="price-divider">
+        <ul class="price-features">
+          <li>Músicas ilimitadas</li>
+          <li>Repertórios e roteiros</li>
+          <li>Modo ao vivo</li>
+          <li>Funciona offline</li>
+          <li>Membros ilimitados</li>
+        </ul>
+        <a href="/register.php" class="btn-plan btn-plan-outline">Criar conta grátis</a>
+      </div>
+
     </div>
+    <p style="color:var(--text-3);font-size:13px;margin-top:24px">Comece no plano gratuito · Sem cartão de crédito</p>
   </section>
 
   <!-- FINAL CTA -->
@@ -194,7 +270,7 @@ if (isset($_SESSION['autenticado']) && $_SESSION['autenticado'] === true) {
   </section>
 
   <footer>
-    StageBox - Cifras &nbsp;·&nbsp; <a href="mailto:contato@stagebox.com.br" style="color:var(--text-3)">contato@stagebox.com.br</a>
+    Cifrô &nbsp;·&nbsp; <a href="mailto:contato@cifro.online" style="color:var(--text-3)">contato@cifro.online</a>
   </footer>
 
 </body>

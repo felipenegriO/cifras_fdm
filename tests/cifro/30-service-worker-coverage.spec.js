@@ -2,7 +2,7 @@ import { test, expect } from '../fixtures/coverage.js';
 import { chromium } from '@playwright/test';
 import { addCoverageReport } from 'monocart-reporter';
 import { spawn } from 'node:child_process';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -44,8 +44,11 @@ class CdpConnection {
   }
 }
 
-async function waitForDebugger(port) {
+async function waitForDebugger(port, getSpawnError) {
   for (let attempt = 0; attempt < 150; attempt++) {
+    if (getSpawnError()) {
+      throw new Error(`Chromium de cobertura falhou ao iniciar: ${getSpawnError().message}`);
+    }
     try {
       const response = await fetch(`http://127.0.0.1:${port}/json/version`);
       if (response.ok) return response.json();
@@ -55,9 +58,10 @@ async function waitForDebugger(port) {
   throw new Error('Chromium de cobertura não iniciou.');
 }
 
-test('service worker executa instalação, cache, mensagens e recuperação offline reais', async ({}, testInfo) => {
+test('service worker executa instalação, cache, mensagens e recuperação offline reais', async ({ request }, testInfo) => {
+  test.setTimeout(120000);
   test.skip(process.env.PHP_COVERAGE === '1', 'Cobertura JS do service worker; no PHP instrumentado passa de 1 minuto sem aumentar cobertura PHP relevante.');
-  const appOrigin = process.env.PHP_COVERAGE === '1' ? 'http://localhost:8091' : 'http://localhost:8090';
+  const appOrigin = process.env.PHP_COVERAGE === '1' ? 'http://127.0.0.1:8091' : 'http://127.0.0.1:8090';
   const port = 9300 + Math.floor(Math.random() * 500);
   const profile = await mkdtemp(path.join(tmpdir(), 'cifro-sw-'));
   const chrome = spawn(chromium.executablePath(), [
@@ -67,11 +71,23 @@ test('service worker executa instalação, cache, mensagens e recuperação offl
     '--no-first-run',
     '--disable-gpu',
   ], { stdio: 'ignore', windowsHide: true });
+  // IMPORTANTE (root cause do crash de pipeline documentado na Iteracao 36/37
+  // de .superpowers/sdd/coverage-100-log.md): `chrome` é um ChildProcess
+  // (EventEmitter). Sem um listener para o evento 'error', uma falha do
+  // subprocesso (ex.: ENOENT, EMFILE/ENOMEM sob contenção de recursos da
+  // suite completa) lança uma exceção não capturada que derruba o processo
+  // Node do Playwright inteiro (exit code 2, sem nenhum teste marcado como
+  // falho, sem relatório de cobertura) - reproduzido de forma determinística
+  // só sob a suite completa, nunca isolado, exatamente o padrão observado.
+  // Capturamos aqui para converter em falha normal do teste em vez de crash
+  // do processo.
+  let spawnError = null;
+  chrome.on('error', error => { spawnError = error; });
   let browser;
   let cdp;
 
   try {
-    const version = await waitForDebugger(port);
+    const version = await waitForDebugger(port, () => spawnError);
     cdp = new CdpConnection(version.webSocketDebuggerUrl);
     await cdp.open();
     let serviceWorkerSession;
@@ -92,10 +108,18 @@ test('service worker executa instalação, cache, mensagens e recuperação offl
 
     browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`);
     const context = browser.contexts()[0];
-    const storage = JSON.parse(await readFile('tests/.auth/user.json', 'utf8'));
-    await context.addCookies(storage.cookies);
+    const storage = await request.storageState();
+    await context.addCookies(storage.cookies.map(cookie => ({
+      name: cookie.name,
+      value: cookie.value,
+      url: appOrigin + (cookie.path || '/'),
+      httpOnly: cookie.httpOnly,
+      secure: cookie.secure,
+      sameSite: cookie.sameSite,
+    })));
     const page = await context.newPage();
     await page.goto(`${appOrigin}/index.php`);
+    expect(await page.content()).toContain('CIFRO_USER_ID');
     await page.evaluate(async appOrigin => {
       const registrations = await navigator.serviceWorker.getRegistrations();
       await Promise.all(registrations.map(registration => registration.unregister()));
@@ -111,6 +135,19 @@ test('service worker executa instalação, cache, mensagens e recuperação offl
     await cdp.send('Profiler.enable', {}, sessionId);
     await cdp.send('Profiler.startPreciseCoverage', { callCount: true, detailed: true }, sessionId);
     await cdp.send('Runtime.runIfWaitingForDebugger', {}, sessionId);
+    await cdp.send('Runtime.evaluate', {
+      expression: `new Promise((resolve, reject) => {
+        const started = Date.now();
+        const check = () => {
+          if (!self.registration.installing) return resolve();
+          if (Date.now() - started > 15000) return reject(new Error('Service worker não concluiu a instalação.'));
+          setTimeout(check, 50);
+        };
+        check();
+      })`,
+      awaitPromise: true,
+      returnByValue: true,
+    }, sessionId);
     const helpers = await cdp.send('Runtime.evaluate', {
       expression: `(async () => {
         const appOrigin = ${JSON.stringify(appOrigin)};
@@ -127,10 +164,10 @@ test('service worker executa instalação, cache, mensagens e recuperação offl
           validAsset(new Response('', { status: 500 })),
           // validStagePage: resposta que não é validAsset (não-html) retorna false direto (linha 30, branch de curto-circuito).
           await validStagePage(new Response('', { status: 200, headers: { 'content-type': 'application/json' } })),
-          // validStagePage: html valido mas sem marcador FDM_USER_ID nem loginForm - cai no false final.
+          // validStagePage: html valido mas sem marcador CIFRO_USER_ID nem loginForm - cai no false final.
           await validStagePage(new Response('<html></html>', { status: 200, headers: { 'content-type': 'text/html' } })),
           // pageKey com caracteres especiais no userId, força o encodeURIComponent (linha 48 implícita).
-          typeof pageKey === 'function' ? pageKey('/index.php', 'a b&c') : 'no-pageKey',
+          typeof pageKey === 'function' ? pageKey('/index.php', { userId: 'a b&c', bandId: 'x y' }) : 'no-pageKey',
         ];
         await setContext('');
         checks.push(await getContext());
@@ -152,7 +189,7 @@ test('service worker executa instalação, cache, mensagens e recuperação offl
           const originalFetch = self.fetch;
           self.fetch = async () => new Response('', { status: 200, headers: { 'content-type': 'application/octet-stream' } });
           try {
-            await populateStatic(await caches.open('cifro-static-3.1.0'));
+            await populateStatic(await caches.open('cifro-static-3.4.0'));
             checks.push('no-throw-static');
           } catch (error) {
             checks.push(error.message);
@@ -167,7 +204,7 @@ test('service worker executa instalação, cache, mensagens e recuperação offl
           const originalFetch = self.fetch;
           self.fetch = async () => new Response('<html></html>', { status: 200, headers: { 'content-type': 'text/html' } });
           try {
-            await preparePages('usuario-com-pagina-invalida');
+            await preparePages('usuario-com-pagina-invalida', 'banda-com-pagina-invalida');
             checks.push('no-throw-pages');
           } catch (error) {
             checks.push(error.message);
@@ -176,16 +213,16 @@ test('service worker executa instalação, cache, mensagens e recuperação offl
           }
         }
         await setContext('');
-        checks.push(await preparePages('').then(() => '', error => error.message));
+        checks.push(await preparePages('', '').then(() => '', error => error.message));
         return checks;
       })()`,
       awaitPromise: true,
       returnByValue: true,
     }, sessionId);
     const helperChecks = helpers.result.value;
-    expect(helperChecks.at(-1)).toBe('Usuário não identificado');
+    expect(helperChecks.at(-1)).toBe('Usuário ou banda não identificados');
     // [4]=false (content-type não bate com expectedType), [5]=true (sem expectedType, html não é bloqueado por si só quando ok),
-    // [6]=false (status 500 => ok false), [7]=false (validStagePage em JSON não-html), [8]=false (html sem marcador FDM_USER_ID).
+    // [6]=false (status 500 => ok false), [7]=false (validStagePage em JSON não-html), [8]=false (html sem marcador CIFRO_USER_ID).
     expect(helperChecks[4]).toBe(false);
     expect(helperChecks[6]).toBe(false);
     expect(helperChecks[7]).toBe(false);
@@ -198,13 +235,28 @@ test('service worker executa instalação, cache, mensagens e recuperação offl
     expect(helperChecks[13]).toContain('Asset inválido:');
     expect(helperChecks[14]).toContain('Página inválida:');
 
-    await page.evaluate(async appOrigin => {
-      const registration = await navigator.serviceWorker.ready;
-      const worker = registration.active || registration.waiting || registration.installing;
-      if (worker && worker.state !== 'activated') {
-        await new Promise(resolve => worker.addEventListener('statechange', () => {
-          if (worker.state === 'activated') resolve();
-        }));
+    await page.evaluate(async () => {
+      const registration = await navigator.serviceWorker.getRegistration();
+      let worker = registration?.active || registration?.waiting || registration?.installing;
+      if (!worker) throw new Error('Service worker não registrado.');
+      if (worker.state === 'installing') {
+        await Promise.race([
+          new Promise(resolve => worker.addEventListener('statechange', () => {
+            if (worker.state !== 'installing') resolve();
+          })),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Service worker não concluiu a instalação.')), 10000)),
+        ]);
+      }
+      worker = registration.active || registration.waiting || worker;
+      if (worker.state === 'redundant') throw new Error('Instalação do service worker falhou.');
+      if (worker.state !== 'activated') {
+        worker.postMessage({ type: 'SKIP_WAITING' });
+        await Promise.race([
+          new Promise(resolve => worker.addEventListener('statechange', () => {
+            if (worker.state === 'activated' || worker.state === 'redundant') resolve();
+          })),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Service worker não ativou.')), 10000)),
+        ]);
       }
     });
     await page.reload({ waitUntil: 'domcontentloaded' });
@@ -215,18 +267,18 @@ test('service worker executa instalação, cache, mensagens e recuperação offl
       const worker = navigator.serviceWorker.controller || registration.active || registration.waiting;
       worker.postMessage({ type: 'SKIP_WAITING' });
       worker.postMessage({ type: 'UNKNOWN' });
-      worker.postMessage({ type: 'SET_CONTEXT', userId: 'playwright-sw' });
+      worker.postMessage({ type: 'SET_CONTEXT', userId: 'playwright-sw', bandId: 'band-sw' });
       await new Promise(resolve => setTimeout(resolve, 100));
       const prepared = await new Promise(resolve => {
         const channel = new MessageChannel();
         channel.port1.onmessage = event => resolve(event.data);
-        worker.postMessage({ type: 'PREPARE_OFFLINE', userId: 'playwright-sw' }, [channel.port2]);
+        worker.postMessage({ type: 'PREPARE_OFFLINE', userId: 'playwright-sw', bandId: 'band-sw', songIds: [] }, [channel.port2]);
       });
       if (!prepared.ok) throw new Error(prepared.error);
       const rejected = await new Promise(resolve => {
         const channel = new MessageChannel();
         channel.port1.onmessage = event => resolve(event.data);
-        worker.postMessage({ type: 'PREPARE_OFFLINE', userId: '' }, [channel.port2]);
+        worker.postMessage({ type: 'PREPARE_OFFLINE', userId: '', bandId: '', songIds: [] }, [channel.port2]);
       });
       if (rejected.ok) throw new Error('Preparação sem usuário deveria falhar.');
       await fetch('/music.php?id=0');
@@ -234,7 +286,7 @@ test('service worker executa instalação, cache, mensagens e recuperação offl
       await fetch('/src/backend/topnav.php');
       await fetch('/arquivo-inexistente.txt');
       await fetch('/index.php', { method: 'POST', body: 'x' });
-      await fetch(appOrigin.replace('localhost', '127.0.0.1') + '/index.php', { mode: 'no-cors' }).catch(() => null);
+      await fetch(appOrigin.replace('127.0.0.1', 'localhost') + '/index.php', { mode: 'no-cors' }).catch(() => null);
     }, appOrigin);
     await cdp.send('Network.enable', {}, sessionId);
     await cdp.send('Network.emulateNetworkConditions', { offline: true, latency: 0, downloadThroughput: 0, uploadThroughput: 0 }, sessionId);

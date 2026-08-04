@@ -1,4 +1,4 @@
-# Fontes FDM
+# Fontes CIFRO
 
 Por padrão o app usa Google Fonts via CDN (cacheado no primeiro acesso online).
 Para hospedar 100% local:

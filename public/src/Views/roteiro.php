@@ -3,10 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>Roteiro — StageBox</title>
-  <script src="/src/js/fdm-theme.js"></script>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <title>Roteiro — Cifrô</title>
+  <script src="/src/js/cifro-theme.js"></script>
   <link href="/src/css/fonts.css" rel="stylesheet">
   <link href="/src/css/bootstrap.min.css" rel="stylesheet" defer>
   <link href="/src/css/theme.css" rel="stylesheet">
@@ -61,12 +59,12 @@
   "></div>
   <div class="btn-group" style="position: fixed; right: 10px; top: 10px; z-index: 999;" role="group" aria-label="Ações do roteiro">
     <button type="button" class="btn btn-primary" id="btnPrintRoteiro" aria-label="Imprimir roteiro" title="Imprimir" onclick="window.print()"><i class="fa-solid fa-print" aria-hidden="true"></i></button>
-    <button type="button" class="btn btn-primary" id="playlistButton" aria-label="Abrir playlists"><i class="fa-solid fa-music" aria-hidden="true"></i></button>
+    <button type="button" class="btn btn-primary" id="playlistButton" aria-label="Abrir repertórios"><i class="fa-solid fa-music" aria-hidden="true"></i></button>
   </div>
 
   <div id="sideMenu">
     <button id="closeButton" onclick="document.getElementById('sideMenu').style.right = '-300px';">×</button>
-    <h2>PlayLists</h2>
+    <h2>Repertórios</h2>
     <ul id="lista-playlists" style="display: block; overflow: hidden; height: 100%; border: none;"></ul>
   </div>
 
@@ -88,17 +86,18 @@
 
   <script src="/src/js/jquery-3.5.1.min.js"></script>
   <script src="/src/js/bootstrap.min.js" defer></script>
-  <script src="/src/js/06215d6691.js" defer></script>
+  <script src="<?= asset_url('/src/js/chords.js') ?>"></script>
   <script src="<?= asset_url('/src/js/script.js') ?>" defer></script>
-  <script>window.FDM_BAND_ID = '<?= e(current_band_id()) ?>';</script>
-  <script src="<?= asset_url('/src/js/fdm-sync.js') ?>"></script>
-  <script>document.addEventListener('DOMContentLoaded', () => fdmSync.load(window.FDM_BAND_ID));</script>
+  <script>window.CIFRO_USER_ID = '<?= e($_SESSION['usuario']['id'] ?? '') ?>'; window.CIFRO_BAND_ID = '<?= e(current_band_id()) ?>';</script>
+  <script src="<?= asset_url('/src/js/cifro-connectivity.js') ?>"></script>
+  <script src="<?= asset_url('/src/js/cifro-sync.js') ?>"></script>
   <script src="<?= asset_url('/src/js/playlists.js') ?>" defer></script>
   <script src="<?= asset_url('/src/js/offline-tools.js') ?>"></script>
   <script src="<?= asset_url('/src/js/roteiros.js') ?>" defer></script>
 
   <script>
-    window.addEventListener('DOMContentLoaded', function () {
+    window.addEventListener('DOMContentLoaded', async function () {
+      await cifroSync.load(window.CIFRO_BAND_ID);
       function getQueryParam(param) {
         const urlParams = new URLSearchParams(window.location.search);
         return urlParams.get(param);
@@ -107,11 +106,11 @@
       const roteiroId = getQueryParam('id');
       if (typeof getRoteiroById !== 'function') return;
 
-      const roteiro = getRoteiroById(roteiroId);
-
-      if (!roteiro) {
-        document.getElementById('roteiro-title').textContent = 'Roteiro nao encontrado';
-      } else {
+      function renderCurrentRoteiro() {
+        const roteiro = getRoteiroById(roteiroId);
+        if (!roteiro) {
+          document.getElementById('roteiro-title').textContent = 'Roteiro nao encontrado';
+        } else {
         if (!isRoteiroVisible(roteiro)) {
           document.getElementById('roteiro-title').textContent = 'Roteiro indisponivel';
           document.getElementById('roteiro-date').textContent = formatRoteiroDate(roteiro.visivel_ate);
@@ -121,7 +120,10 @@
           document.getElementById('roteiro-date').textContent = formatRoteiroDate(roteiro.visivel_ate);
           renderRoteiro('roteiro-body', roteiro.conteudo || '');
         }
+        }
       }
+      renderCurrentRoteiro();
+      document.addEventListener('cifro:sync', renderCurrentRoteiro);
     });
   </script>
 </body>

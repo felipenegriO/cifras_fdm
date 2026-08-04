@@ -25,18 +25,25 @@ class RegisterController {
 
         require_csrf();
 
-        if (fdm_rate_limit('register', 5, 300)) {
+        $email = strtolower(trim($_POST['email'] ?? ''));
+        if (cifro_rate_limit('register', 5, 300, $email)) {
             $erro = 'Muitas tentativas. Aguarde alguns minutos e tente novamente.';
             render_view('register', compact('erro', 'success'));
             return;
         }
 
         $nome      = trim($_POST['nome']       ?? '');
-        $email     = strtolower(trim($_POST['email']     ?? ''));
         $bandaNome = trim($_POST['banda_nome'] ?? '');
+        $legalAccepted = ($_POST['legal_acceptance'] ?? '') === '1';
 
         if (!$nome || !$email || !$bandaNome) {
             $erro = 'Todos os campos são obrigatórios.';
+            render_view('register', compact('erro', 'success'));
+            return;
+        }
+
+        if (!$legalAccepted) {
+            $erro = 'Você precisa aceitar os Termos de Uso e a Política de Privacidade.';
             render_view('register', compact('erro', 'success'));
             return;
         }
@@ -47,12 +54,7 @@ class RegisterController {
             return;
         }
 
-        // Username = part before @ of email
-        $username = preg_replace('/[^a-zA-Z0-9._-]/', '', explode('@', $email)[0]);
-        if (!$username) $username = 'user' . bin2hex(random_bytes(3));
-
-        // Check duplicates
-        if ($this->userRepo->findByEmail($email) || $this->userRepo->findByUsername($username)) {
+        if ($this->userRepo->findByEmail($email)) {
             $erro = 'Este e-mail já está cadastrado.';
             render_view('register', compact('erro', 'success'));
             return;
@@ -64,33 +66,36 @@ class RegisterController {
 
             $userId  = bin2hex(random_bytes(16));
             $bandaId = bin2hex(random_bytes(16));
-            $trialExpira = date('Y-m-d', strtotime('+30 days'));
 
             // Create user (inactive until password is set)
             $this->userRepo->save([
                 'id'             => $userId,
                 'nome'           => $nome,
-                'username'       => $username,
                 'email'          => $email,
                 'senha_hash'     => null,
                 'perfil'         => 'usuario',
                 'ativo'          => 0,
                 'validade'       => null,
-                'plano'          => 'trial',
-                'trial_expira_em'=> $trialExpira,
             ]);
 
-            // Create band on gratuito plan (30-day free, with resource limits)
             $this->bandaRepo->save([
                 'id'             => $bandaId,
                 'nome'           => $bandaNome,
                 'ativo'          => 1,
                 'plano'          => 'gratuito',
-                'trial_expira_em'=> $trialExpira,
+                'trial_expira_em'=> null,
             ]);
 
             // Link user → band as administrator
             $this->userRepo->importToBanda($userId, $bandaId, 'administrador');
+
+            $ip = (string) ($_SERVER['REMOTE_ADDR'] ?? '');
+            $this->userRepo->recordLegalAcceptance(
+                $userId,
+                (string) env('LEGAL_TERMS_VERSION', '2026-08-03'),
+                (string) env('LEGAL_PRIVACY_VERSION', '2026-08-03'),
+                $ip === '' ? null : hash_hmac('sha256', $ip, (string) env('ENCRYPTION_KEY', 'local-test-key'))
+            );
 
             // Create activation token (48h)
             $token = $this->userRepo->createToken($userId, 172800);
@@ -106,7 +111,7 @@ class RegisterController {
         // Send welcome email
         try {
             MailService::sendWelcome(
-                ['nome' => $nome, 'email' => $email, 'username' => $username],
+                ['nome' => $nome, 'email' => $email],
                 ['nome' => $bandaNome],
                 $token
             );
@@ -115,6 +120,8 @@ class RegisterController {
         }
 
         $success = true;
-        render_view('register', compact('erro', 'success', 'email'));
+        $activationToken = env('APP_ENV', 'production') === 'test' ? $token : null;
+        OperationalLogger::log('info', 'activation.registration_completed', ['operation' => 'register', 'result' => 'success']);
+        render_view('register', compact('erro', 'success', 'email', 'activationToken'));
     }
 }

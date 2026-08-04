@@ -69,7 +69,12 @@
       "Bash(curl -s -b \"PHPSESSID=85ecc9e48pprprjoc2cvpmr9pa\" \"http://localhost:8090/api/sync/data.php\")",
       "Bash(start //B \"C:/xampp/php/php.exe\" -S localhost:8090 -t public router.php)",
       "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('plano:', d.get\\('plano'\\), 'autenticado:', 'musicas' in d\\)\")",
-      "Bash(taskkill //F //PID 56380)"
+      "Bash(taskkill //F //PID 56380)",
+      "Bash(curl -s http://localhost:8090/landing.php -o /dev/null -w \"%{http_code}\")",
+      "Bash(curl -s http://localhost:8090/login.php)",
+      "Bash(curl -si http://localhost:8090/login.php)",
+      "Bash(curl -s \"http://localhost:8090/login.php\")",
+      "Bash(git -C C:/Projetos/cifras_fdm log --oneline -15)"
     ]
   }
 }

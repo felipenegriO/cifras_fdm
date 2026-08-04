@@ -14,11 +14,9 @@ if (!empty($_GET['logout'])) {
 
 $appDebug = strtolower((string) env('APP_DEBUG', 'false')) === 'true';
 
-$usuariosFile = $_SERVER['DOCUMENT_ROOT'] . '/src/backend/users/usuarios.json';
-
-$userRepository = new UserRepository($usuariosFile);
+$userRepository = new UserRepository();
 $authService = new AuthService($userRepository);
-$authController = new AuthController($authService, $userRepository, $usuariosFile, $appDebug);
+$authController = new AuthController($authService, $userRepository, $appDebug);
 $erro = $authController->handleLogin();
 
 render_view('login', ['erro' => $erro]);

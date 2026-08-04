@@ -19,6 +19,13 @@ if ($bandaId === '') {
     exit;
 }
 
+if (!ClosedBetaPolicy::fromEnvironment()->allows($bandaId)) {
+    OperationalLogger::log('warning', 'beta.band_selection_denied', ['result' => 'blocked', 'http_status' => 403]);
+    http_response_code(403);
+    echo json_encode(['sucesso' => false, 'error' => 'beta_not_invited', 'mensagem' => 'Esta banda não participa do beta fechado.']);
+    exit;
+}
+
 $userId  = $_SESSION['usuario']['id'] ?? null;
 $bandaRepo = new BandaRepository();
 $banda   = $bandaRepo->findById($bandaId);
@@ -29,26 +36,33 @@ if (!$banda) {
 }
 
 // Verify user is linked to this banda (or is master)
+// Always query DB — session may be stale (e.g. band just created)
 if (!is_master()) {
-    $userBandas = $_SESSION['usuario']['bandas'] ?? [];
-    $linked = array_filter($userBandas, fn($b) => $b['id'] === $bandaId);
-    if (empty($linked)) {
+    $pdo  = Database::getConnection();
+    $stmt = $pdo->prepare(
+        'SELECT perfil FROM usuario_banda WHERE usuario_id = ? AND banda_id = ?'
+    );
+    $stmt->execute([$userId, $bandaId]);
+    $row = $stmt->fetch();
+    if (!$row) {
         echo json_encode(['sucesso' => false, 'mensagem' => 'Acesso negado a esta banda.']);
         exit;
     }
-    $perfil = array_values($linked)[0]['perfil'];
+    $perfil = $row['perfil'];
+
+    // Keep session bandas array in sync
+    $userBandas = $_SESSION['usuario']['bandas'] ?? [];
+    if (!BandaSelectionHelper::isBandaJaNaLista($userBandas, $bandaId)) {
+        $_SESSION['usuario']['bandas'][] = ['id' => $bandaId, 'perfil' => $perfil];
+    }
 } else {
     $perfil = 'administrador';
 }
 
 // Update session
-$_SESSION['banda_atual'] = [
-    'id'             => $banda['id'],
-    'nome'           => $banda['nome'],
-    'perfil'         => $perfil,
-    'plano'          => $banda['plano'] ?? 'ativo',
-    'trial_expira_em'=> $banda['trial_expira_em'] ?? null,
-];
+if (session_status() === PHP_SESSION_ACTIVE && !headers_sent()) {
+}
+$_SESSION['banda_atual'] = BandaSelectionHelper::buildBandaAtualSession($banda, $perfil);
 
 // Persist choice in user config
 (new UserRepository())->updateConfig($userId, ['banda_atual' => $bandaId]);

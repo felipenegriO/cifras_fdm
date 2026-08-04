@@ -1,12 +1,12 @@
 {
-    "name": "StageBox - Cifras",
-    "short_name": "StageBox",
+    "name": "Cifrô",
+    "short_name": "Cifrô",
     "description": "Cifras, setlists e modo ao vivo para sua banda. Funciona offline.",
     "start_url": "./index.php",
     "display": "standalone",
     "background_color": "#0f0f0f",
     "theme_color": "#7c3aed",
-    "version": "2.2.0",
+    "version": "2.3.0",
     "icons": [
   {
    "src": "\/src/images/android-icon-36x36.png",
@@ -42,7 +42,14 @@
    "src": "\/src/images/android-icon-192x192.png",
    "sizes": "192x192",
    "type": "image\/png",
-   "density": "4.0"
+   "density": "4.0",
+   "purpose": "any maskable"
+  },
+  {
+   "src": "\/src/images/android-icon-512x512.png",
+   "sizes": "512x512",
+   "type": "image\/png",
+   "purpose": "any maskable"
   }
  ]
 }

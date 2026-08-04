@@ -62,7 +62,6 @@ const ensureAuthenticated = async (page) => {
 test.describe('Music Layout', () => {
   for (const viewport of VIEWPORTS) {
     test(`layout fits viewport (${viewport.name})`, async ({ page }) => {
-      test.setTimeout(240000);
       const consoleErrors = [];
 
       const isBenignConsoleError = (message) => {

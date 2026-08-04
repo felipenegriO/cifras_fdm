@@ -2,14 +2,12 @@
 class AuthController {
     private $authService;
     private $userRepository;
-    private $usersFile;
-    private $appDebug;
+    private $bandaRepository;
 
-    public function __construct(AuthService $authService, UserRepository $userRepository, $usersFile, $appDebug) {
+    public function __construct(AuthService $authService, UserRepository $userRepository, $appDebug = false, ?BandaRepository $bandaRepository = null) {
         $this->authService = $authService;
         $this->userRepository = $userRepository;
-        $this->usersFile = $usersFile;
-        $this->appDebug = (bool) $appDebug;
+        $this->bandaRepository = $bandaRepository;
     }
 
     public function handleLogin() {
@@ -19,7 +17,7 @@ class AuthController {
             return null;
         }
 
-        $login = Validator::username($_POST['username'] ?? '');
+        $login = Validator::login($_POST['email'] ?? '');
         $senha = (string) ($_POST['senha'] ?? '');
 
         if ($_SESSION['login_attempts']['count'] >= 8) {
@@ -27,25 +25,23 @@ class AuthController {
         }
 
         if ($login === '' || $senha === '') {
-            return 'Informe usuário e senha.';
+            return 'Informe e-mail e senha.';
         }
 
-        if ($this->appDebug && isset($_GET['debug']) && $_GET['debug'] === '1') {
-            $this->renderDebugInfo($login);
-        }
-
-        $user = $this->userRepository->findByUsername($login);
-
-        if ($this->appDebug && isset($_GET['debug']) && $_GET['debug'] === '2') {
-            $this->renderPasswordDebug($user, $senha);
+        if (cifro_rate_limit('login', 8, 300, $login)) {
+            OperationalLogger::log('warning', 'auth.rate_limited', ['result' => 'blocked']);
+            return 'Muitas tentativas. Tente novamente em alguns minutos.';
         }
 
         $result = $this->authService->authenticate($login, $senha);
         if ($result['error']) {
             $_SESSION['login_attempts']['count']++;
+            OperationalLogger::log('warning', 'auth.login_failed', ['result' => 'denied']);
             return $result['error'];
         }
 
+        cifro_rate_limit_reset('login', $login);
+        OperationalLogger::log('info', 'auth.login_succeeded', ['result' => 'success']);
         $this->finalizeLogin($result['user']);
         return null;
     }
@@ -61,39 +57,72 @@ class AuthController {
         }
     }
 
+    /**
+     * Picks the band a user should land in after login: the band recorded
+     * in their config (if it still exists in their band list), or their
+     * first band, or null if they belong to none.
+     */
+    public function resolveBandaAtual(array $bandas, $configBandaAtual): ?array {
+        if ($configBandaAtual) {
+            foreach ($bandas as $b) {
+                if ($b['id'] === $configBandaAtual) {
+                    return $b;
+                }
+            }
+        }
+        return !empty($bandas) ? $bandas[0] : null;
+    }
+
+    /**
+     * master: single band → go directly; no bands → index
+     * normal: single band → go directly; multiple → select-banda.php
+     */
+    public function resolveRedirectTarget(array $user, array $bandas, $urlcallback): string {
+        if ($urlcallback && $this->isSafeLocalRedirect((string) $urlcallback)) {
+            return (string) $urlcallback;
+        }
+        $isMaster = ($user['perfil'] ?? '') === 'master';
+        if (!$isMaster && count($bandas) > 1) {
+            return '/select-banda.php';
+        }
+        return 'index.php';
+    }
+
+    private function isSafeLocalRedirect(string $target): bool {
+        if ($target === '' || str_starts_with($target, '//') || str_contains($target, "\r") || str_contains($target, "\n")) {
+            return false;
+        }
+        $parts = parse_url($target);
+        return $parts !== false && !isset($parts['scheme']) && !isset($parts['host']);
+    }
+
+    /** Isolated seam so tests can observe the redirect without exit() killing the process. */
+    protected function redirect(string $location): void {
+        header('Location: ' . $location);
+        exit;
+    }
+
     public function finalizeLogin($user) {
-        session_regenerate_id(true);
+        if (session_status() === PHP_SESSION_ACTIVE && !headers_sent()) {
+            session_regenerate_id(true);
+        }
         $_SESSION['autenticado'] = true;
         $_SESSION['usuario'] = [
             'id'       => $user['id'] ?? null,
             'nome'     => $user['nome'] ?? '',
-            'username' => $user['username'] ?? '',
+            'email'    => $user['email'] ?? '',
             'perfil'   => $user['perfil'] ?? 'usuario',
             'validade' => $user['validade'] ?? '',
             'config'   => $user['config'] ?? [],
             'bandas'   => $user['bandas'] ?? [],
         ];
 
-        // Resolve which band to start in
         $bandas = $user['bandas'] ?? [];
         $configBandaAtual = ($user['config'] ?? [])['banda_atual'] ?? null;
-
-        $bandaAtual = null;
-        if ($configBandaAtual) {
-            foreach ($bandas as $b) {
-                if ($b['id'] === $configBandaAtual) {
-                    $bandaAtual = $b;
-                    break;
-                }
-            }
-        }
-        if (!$bandaAtual && !empty($bandas)) {
-            $bandaAtual = $bandas[0];
-        }
+        $bandaAtual = $this->resolveBandaAtual($bandas, $configBandaAtual);
 
         if ($bandaAtual) {
-            // Load banda details from DB
-            $bandaRepo = new BandaRepository();
+            $bandaRepo = $this->bandaRepository ?? new BandaRepository();
             $bandaInfo = $bandaRepo->findById($bandaAtual['id']);
             $_SESSION['banda_atual'] = [
                 'id'    => $bandaAtual['id'],
@@ -101,57 +130,15 @@ class AuthController {
                 'perfil'=> $bandaAtual['perfil'],
                 'plano' => $bandaInfo['plano'] ?? 'ativo',
                 'trial_expira_em' => $bandaInfo['trial_expira_em'] ?? null,
+                'logo'            => $bandaInfo['logo'] ?? null,
             ];
         }
 
         $_SESSION['login_attempts'] = ['count' => 0, 'time' => time()];
 
-        // master: single band → go directly; no bands → index
-        // normal: single band → go directly; multiple → select-banda.php
-        $redirect = $_GET['urlcallback'] ?? null;
-        if (!$redirect) {
-            $isMaster = ($user['perfil'] ?? '') === 'master';
-            if (!$isMaster && count($bandas) > 1) {
-                $redirect = '/select-banda.php';
-            } else {
-                $redirect = 'index.php';
-            }
-        }
+        $redirect = $this->resolveRedirectTarget($user, $bandas, $_GET['urlcallback'] ?? null);
 
-        header('Location: ' . $redirect);
-        exit;
+        $this->redirect($redirect);
     }
 
-    private function renderDebugInfo($login) {
-        $usuarios = $this->userRepository->getAll();
-        $uDebug = $this->userRepository->findByUsername($login);
-
-        echo "<pre style='background:#111;color:#0f0;padding:10px'>";
-        echo "usuariosFile: " . htmlspecialchars($this->usersFile) . "\n";
-        echo "file_exists: " . (file_exists($this->usersFile) ? "SIM" : "NAO") . "\n";
-        echo "is_readable: " . (is_readable($this->usersFile) ? "SIM" : "NAO") . "\n";
-        echo "qtd_usuarios: " . count($usuarios) . "\n";
-        echo "login_digitado: " . htmlspecialchars($login) . "\n";
-        echo "usuario_encontrado: " . ($uDebug ? "SIM" : "NAO") . "\n";
-
-        if ($uDebug) {
-            echo "ativo: " . ((bool)($uDebug['ativo'] ?? false) ? "SIM" : "NAO") . "\n";
-            echo "tem_senhaHash: " . (!empty($uDebug['senhaHash']) ? "SIM" : "NAO") . "\n";
-            echo "username_no_json: " . htmlspecialchars($uDebug['username'] ?? '') . "\n";
-        }
-
-        echo "</pre>";
-        exit;
-    }
-
-    private function renderPasswordDebug($user, $senha) {
-        $hash = $user['senhaHash'] ?? null;
-
-        echo "<pre style='background:#111;color:#0f0;padding:10px'>";
-        echo "hash: " . substr((string) $hash, 0, 20) . "...\n";
-        echo "senha_digitada_len: " . strlen($senha) . "\n";
-        echo "verify: " . ($hash && password_verify($senha, $hash) ? "OK" : "FALHOU") . "\n";
-        echo "</pre>";
-        exit;
-    }
 }

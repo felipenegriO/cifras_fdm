@@ -1,9 +1,11 @@
 {
-    "name": "filhos-de-maria/cifras-fdm",
-    "description": "App de cifras e ensaios.",
+    "name": "cifro/cifras",
+    "description": "Cifrô: app de cifras, roteiros e modo ao vivo para bandas.",
     "type": "project",
     "require": {
-        "php": ">=7.4"
+        "php": ">=8.0",
+        "ext-mbstring": "*",
+        "phpmailer/phpmailer": "^6.9"
     },
     "require-dev": {
         "phpunit/phpunit": "^9.6"
@@ -13,10 +15,13 @@
             "Tests\\": "tests/php/"
         },
         "classmap": [
-            "src/Services/",
-            "src/Repositories/",
-            "src/Controllers/"
+            "public/src/Services/",
+            "public/src/Repositories/",
+            "public/src/Controllers/"
         ]
+    },
+    "config": {
+        "optimize-autoloader": true
     },
     "scripts": {
         "test": "phpunit"

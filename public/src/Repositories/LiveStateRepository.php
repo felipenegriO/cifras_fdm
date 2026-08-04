@@ -23,21 +23,21 @@ class LiveStateRepository {
 
         if (!$exists) {
             $stmt = $this->pdo->prepare(
-                'INSERT INTO live_state (banda_id, host_id, host_user_id, host_username, host_nome,
-                  cifra_atual, pagina_atual, scroll_top, scroll_percent, can_sync_scroll, version)
+                'INSERT INTO live_state (banda_id, host_id, host_user_id, host_nome,
+                  cifra_atual, pagina_atual, scroll_top, scroll_percent, can_sync_scroll, updated_at, version)
                  VALUES (?,?,?,?,?,?,?,?,?,?,?)'
             );
             $stmt->execute([
                 $bandaId,
                 $data['host_id'] ?? null,
                 $data['host_user_id'] ?? null,
-                $data['host_username'] ?? null,
                 $data['host_nome'] ?? null,
                 $data['cifra_atual'] ?? '',
                 $data['pagina_atual'] ?? 'index.php',
                 $data['scroll_top'] ?? 0,
                 $data['scroll_percent'] ?? 0,
                 isset($data['can_sync_scroll']) ? (int)$data['can_sync_scroll'] : 1,
+                $data['updated_at'] ?? gmdate('Y-m-d H:i:s'),
                 1,
             ]);
             return;
@@ -45,8 +45,8 @@ class LiveStateRepository {
 
         $sets = [];
         $params = [];
-        $allowed = ['host_id','host_user_id','host_username','host_nome','cifra_atual',
-                    'pagina_atual','scroll_top','scroll_percent','can_sync_scroll'];
+        $allowed = ['host_id','host_user_id','host_nome','cifra_atual',
+                    'pagina_atual','scroll_top','scroll_percent','can_sync_scroll','updated_at'];
         foreach ($allowed as $k) {
             if (array_key_exists($k, $data)) {
                 $sets[] = "$k=?";
@@ -66,7 +66,6 @@ class LiveStateRepository {
             'banda_id'       => $bandaId,
             'host_id'        => null,
             'host_user_id'   => null,
-            'host_username'  => null,
             'host_nome'      => null,
             'cifra_atual'    => '',
             'pagina_atual'   => 'index.php',

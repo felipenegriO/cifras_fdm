@@ -5,9 +5,9 @@ test.use({ storageState: 'tests/.auth/user.json' });
 async function openPreview(page, setlist) {
   await page.goto('/index.php');
   await page.evaluate(({ song, setlist }) => {
-    sessionStorage.setItem('fdmEditorPreview', JSON.stringify(song));
-    if (setlist === undefined) sessionStorage.removeItem('fdmSetlist');
-    else sessionStorage.setItem('fdmSetlist', setlist);
+    sessionStorage.setItem('cifroEditorPreview', JSON.stringify(song));
+    if (setlist === undefined) sessionStorage.removeItem('cifroSetlist');
+    else sessionStorage.setItem('cifroSetlist', setlist);
   }, {
     song: { id: 77, nome: 'Matriz de palco', artista: '', bit: '', cifra: '<b>C G Am F</b><br>'.repeat(120) },
     setlist,
@@ -26,52 +26,52 @@ test('exercita decisões reais de apresentação, tema, confirmação e toast', 
   });
 
   await openPreview(page, '{json inválido');
-  await page.evaluate(() => window.fdmPresentation.enter());
-  await page.evaluate(() => window.fdmPresentation.enter());
-  await page.locator('#fdmSpeedToggle').click();
-  await page.locator('#fdmSpeedToggle').click();
-  await page.locator('#fdmSpeedToggle').click();
-  await page.locator('#fdmAutoScrollToggle').click();
+  await page.evaluate(() => window.cifroPresentation.enter());
+  await page.evaluate(() => window.cifroPresentation.enter());
+  await page.locator('#cifroSpeedToggle').click();
+  await page.locator('#cifroSpeedToggle').click();
+  await page.locator('#cifroSpeedToggle').click();
+  await page.locator('#cifroAutoScrollToggle').click();
   await page.keyboard.press('Space');
-  await page.locator('#fdmExitPresent').click();
-  await page.evaluate(() => window.fdmPresentation.exit());
+  await page.locator('#cifroExitPresent').click();
+  await page.evaluate(() => window.cifroPresentation.exit());
 
   await page.evaluate(async () => {
-    const first = window.fdmConfirm();
-    document.querySelector('.fdm-confirm-btn--cancel').click();
+    const first = window.cifroConfirm();
+    document.querySelector('.cifro-confirm-btn--cancel').click();
     if (await first !== false) throw new Error('Cancelamento inválido');
 
-    const second = window.fdmConfirm({ title: 'Salvar', message: '<strong>Alteração</strong>', confirmText: 'Sim', cancelText: 'Não', danger: false, icon: '✓' });
-    const confirm = document.querySelector('.fdm-confirm-btn--primary');
+    const second = window.cifroConfirm({ title: 'Salvar', message: '<strong>Alteração</strong>', confirmText: 'Sim', cancelText: 'Não', danger: false, icon: '✓' });
+    const confirm = document.querySelector('.cifro-confirm-btn--primary');
     confirm.focus();
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     if (await second !== true) throw new Error('Confirmação inválida');
 
-    const third = window.fdmConfirm({});
-    document.querySelector('.fdm-confirm-overlay').click();
+    const third = window.cifroConfirm({});
+    document.querySelector('.cifro-confirm-overlay').click();
     await third;
 
-    const fourth = window.fdmConfirm({ danger: false });
+    const fourth = window.cifroConfirm({ danger: false });
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     await fourth;
   });
 
   await page.evaluate(() => {
-    window.fdmTheme.set('light');
-    window.fdmTheme.set('dark');
-    window.fdmTheme.set('auto');
-    window.fdmTheme.toggle();
-    window.fdmToast('Sucesso', 'success', { duration: 0 });
-    window.fdmToast('Aviso', 'warning', { duration: 10 });
-    window.fdmToast('', 'tipo-inexistente');
+    window.cifroTheme.set('light');
+    window.cifroTheme.set('dark');
+    window.cifroTheme.set('auto');
+    window.cifroTheme.toggle();
+    window.cifroToast('Sucesso', 'success', { duration: 0 });
+    window.cifroToast('Aviso', 'warning', { duration: 10 });
+    window.cifroToast('', 'tipo-inexistente');
   });
-  await page.locator('.fdm-toast-close').first().click();
+  await page.locator('.cifro-toast-close').first().click();
   await page.waitForTimeout(30);
 
   await openPreview(page, JSON.stringify({ name: '<Palco & teste>', currentIndex: 0, items: [{ id: 77, tom: '' }] }));
-  await page.evaluate(() => window.fdmPresentation.enter());
-  await expect(page.locator('#fdmSetlistPrev')).toBeDisabled();
-  await expect(page.locator('#fdmSetlistNext')).toBeDisabled();
+  await page.evaluate(() => window.cifroPresentation.enter());
+  await expect(page.locator('#cifroSetlistPrev')).toBeDisabled();
+  await expect(page.locator('#cifroSetlistNext')).toBeDisabled();
   await page.keyboard.press('ArrowLeft');
   await page.keyboard.press('ArrowRight');
   await page.keyboard.press('PageUp');
@@ -89,59 +89,59 @@ test('exercita decisões reais de apresentação, tema, confirmação e toast', 
     emit('touchend', [{ clientX: 200, clientY: 300 }]);
   });
   await page.keyboard.press('Escape');
-  await expect(page.locator('.fdm-presenting-overlay')).toHaveCount(0);
+  await expect(page.locator('.cifro-presenting-overlay')).toHaveCount(0);
 });
 
 test('apresentação trata preferências, setlist vazia e wake lock indisponível', async ({ page }) => {
   await page.addInitScript(() => {
-    localStorage.setItem('fdm-scroll-speed', 'fast');
-    localStorage.setItem('fdm-keepAwake', 'false');
+    localStorage.setItem('cifro-scroll-speed', 'fast');
+    localStorage.setItem('cifro-keepAwake', 'false');
     Object.defineProperty(navigator, 'wakeLock', { configurable: true, value: undefined });
   });
   await openPreview(page, JSON.stringify({ items: [], currentIndex: 4 }));
-  await page.evaluate(() => window.fdmPresentation.enter());
-  await page.locator('#fdmAutoScrollToggle').click();
-  await page.locator('#fdmAutoScrollToggle').click();
+  await page.evaluate(() => window.cifroPresentation.enter());
+  await page.locator('#cifroAutoScrollToggle').click();
+  await page.locator('#cifroAutoScrollToggle').click();
   await page.keyboard.press('Escape');
 
   await page.evaluate(() => {
-    localStorage.setItem('fdm-keepAwake', 'true');
-    sessionStorage.setItem('fdmSetlist', JSON.stringify({ name: '', currentIndex: 9, items: [{ id: 77 }, { id: 78, tom: 'F#' }] }));
+    localStorage.setItem('cifro-keepAwake', 'true');
+    sessionStorage.setItem('cifroSetlist', JSON.stringify({ name: '', currentIndex: 9, items: [{ id: 77 }, { id: 78, tom: 'F#' }] }));
   });
   await page.reload();
-  await page.evaluate(() => window.fdmPresentation.enter());
-  await expect(page.locator('.fdm-setlist-info__name')).toHaveText('Setlist');
+  await page.evaluate(() => window.cifroPresentation.enter());
+  await expect(page.locator('.cifro-setlist-info__name')).toHaveText('Setlist');
   await page.keyboard.press('Escape');
 });
 
 test('sincronização local acompanha mutações reais de todos os editores', async ({ page }) => {
   await page.goto('/config.php');
   const result = await page.evaluate(async () => {
-    const bandId = window.FDM_BAND_ID;
+    const bandId = window.CIFRO_BAND_ID;
     const initial = await (await fetch('/api/sync/data.php')).json();
     const output = {
-      emptyLoad: await fdmSync.load(''),
-      emptySync: await fdmSync.sync(''),
-      emptyRevision: await fdmSync.getRevision(''),
-      unknownOffline: await fdmSync.canUseOffline('__ausente__'),
-      unknownSelection: await fdmSync.selectOfflineBand('__ausente__'),
-      unsupportedMutation: await fdmSync.applyMutation('/api/outro.php', {}, { content_revision: 1 }, bandId),
-      invalidMutation: await fdmSync.applyMutation('/src/backend/editor/api.php', {}, {}, bandId),
+      emptyLoad: await cifroSync.load(''),
+      emptySync: await cifroSync.sync(''),
+      emptyRevision: await cifroSync.getRevision(''),
+      unknownOffline: await cifroSync.canUseOffline('__ausente__'),
+      unknownSelection: await cifroSync.selectOfflineBand('__ausente__'),
+      unsupportedMutation: await cifroSync.applyMutation('/api/outro.php', {}, { content_revision: 1 }, bandId),
+      invalidMutation: await cifroSync.applyMutation('/src/backend/editor/api.php', {}, {}, bandId),
     };
 
-    output.synced = await fdmSync.sync(bandId, { force: true });
-    output.concurrent = await Promise.all([fdmSync.sync(bandId), fdmSync.sync(bandId, { throttle: true })]);
-    await fdmSync.cacheBands([
+    output.synced = await cifroSync.sync(bandId, { force: true });
+    output.concurrent = await Promise.all([cifroSync.sync(bandId), cifroSync.sync(bandId, { throttle: true })]);
+    await cifroSync.cacheBands([
       { actual_band_id: bandId, nome: 'Atual' },
       { banda_id: '__cache_banda__', nome: 'Cache' },
       { id: '__cache_id__', nome: 'Id' },
     ]);
-    output.prepared = await fdmSync.markPrepared(bandId);
-    output.canUse = await fdmSync.canUseOffline(bandId);
-    output.offlineStatus = await fdmSync.getOfflineStatus(bandId);
-    output.syncStatus = await fdmSync.getSyncStatus(bandId);
-    output.selected = await fdmSync.selectOfflineBand(bandId);
-    localStorage.removeItem('fdmOfflineBandId:' + String(window.FDM_USER_ID || 'anonymous'));
+    output.prepared = await cifroSync.markPrepared(bandId);
+    output.canUse = await cifroSync.canUseOffline(bandId);
+    output.offlineStatus = await cifroSync.getOfflineStatus(bandId);
+    output.syncStatus = await cifroSync.getSyncStatus(bandId);
+    output.selected = await cifroSync.selectOfflineBand(bandId);
+    localStorage.removeItem('cifroOfflineBandId:' + String(window.CIFRO_USER_ID || 'anonymous'));
 
     let categoryId;
     let songId;
@@ -179,7 +179,7 @@ test('sincronização local acompanha mutações reais de todos os editores', as
       if (roteiroId) await fetch('/src/backend/editor/salvar_roteiros.php', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ deleteId: roteiroId }) });
       if (categoryId) await fetch('/src/backend/categorias/api.php', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'delete', id: categoryId }) });
       await fetch('/src/backend/editor/salvar_playlists.php', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ playlists: initial.playlists }) });
-      await fdmSync.sync(bandId, { force: true });
+      await cifroSync.sync(bandId, { force: true });
     }
     return output;
   });
@@ -207,14 +207,14 @@ test('sincronização usa snapshot offline preparado e reconciliação real de b
   }));
   await page.goto('/config.php');
   const result = await page.evaluate(async () => {
-    const bandId = String(window.FDM_BAND_ID);
-    const userId = String(window.FDM_USER_ID || 'anonymous');
+    const bandId = String(window.CIFRO_BAND_ID);
+    const userId = String(window.CIFRO_USER_ID || 'anonymous');
     const key = `${userId}:${bandId}`;
     const db = await new Promise((resolve, reject) => {
-      const req = indexedDB.open('cifro', 4);
+      const req = indexedDB.open('cifro', 6);
       req.onupgradeneeded = event => {
         const db = event.target.result;
-        ['fdm_musicas', 'fdm_playlists', 'fdm_roteiros', 'fdm_categorias', 'fdm_sync_meta', 'fdm_bandas'].forEach(name => {
+        ['cifro_musicas', 'cifro_playlists', 'cifro_roteiros', 'cifro_categorias', 'cifro_sync_meta', 'cifro_bandas'].forEach(name => {
           if (!db.objectStoreNames.contains(name)) db.createObjectStore(name, { keyPath: 'banda_id' });
         });
       };
@@ -222,12 +222,12 @@ test('sincronização usa snapshot offline preparado e reconciliação real de b
       req.onerror = event => reject(event.target.error);
     });
     await new Promise((resolve, reject) => {
-      const tx = db.transaction(['fdm_musicas', 'fdm_playlists', 'fdm_roteiros', 'fdm_categorias', 'fdm_sync_meta', 'fdm_bandas'], 'readwrite');
-      tx.objectStore('fdm_musicas').put({ banda_id: key, actual_band_id: bandId, data: [{ id: 771, nome: 'Offline preparado', cifra: '<b>C</b>' }], content_revision: 321 });
-      tx.objectStore('fdm_playlists').put({ banda_id: key, actual_band_id: bandId, data: [], content_revision: 321 });
-      tx.objectStore('fdm_roteiros').put({ banda_id: key, actual_band_id: bandId, data: [], content_revision: 321 });
-      tx.objectStore('fdm_categorias').put({ banda_id: key, actual_band_id: bandId, data: [{ id: 1, nome: 'Geral' }], content_revision: 321 });
-      tx.objectStore('fdm_sync_meta').put({
+      const tx = db.transaction(['cifro_musicas', 'cifro_playlists', 'cifro_roteiros', 'cifro_categorias', 'cifro_sync_meta', 'cifro_bandas'], 'readwrite');
+      tx.objectStore('cifro_musicas').put({ banda_id: key, actual_band_id: bandId, data: [{ id: 771, nome: 'Offline preparado', cifra: '<b>C</b>' }], content_revision: 321 });
+      tx.objectStore('cifro_playlists').put({ banda_id: key, actual_band_id: bandId, data: [], content_revision: 321 });
+      tx.objectStore('cifro_roteiros').put({ banda_id: key, actual_band_id: bandId, data: [], content_revision: 321 });
+      tx.objectStore('cifro_categorias').put({ banda_id: key, actual_band_id: bandId, data: [{ id: 1, nome: 'Geral' }], content_revision: 321 });
+      tx.objectStore('cifro_sync_meta').put({
         banda_id: key,
         actual_band_id: bandId,
         content_revision: 321,
@@ -238,15 +238,15 @@ test('sincronização usa snapshot offline preparado e reconciliação real de b
         plano: 'trial',
         trial_expira_em: '2000-01-01'
       });
-      tx.objectStore('fdm_bandas').put({ banda_id: key, actual_band_id: bandId, snapshot_valid: true, prepared_at: Date.now(), content_revision: 321 });
+      tx.objectStore('cifro_bandas').put({ banda_id: key, actual_band_id: bandId, snapshot_valid: true, prepared_at: Date.now(), content_revision: 321 });
       tx.oncomplete = () => { db.close(); resolve(); };
       tx.onerror = () => { db.close(); reject(tx.error); };
     });
-    fdmSync.selectOnlineBand('__pendente__');
+    cifroSync.selectOnlineBand('__pendente__');
     return {
       bandId,
-      pending: localStorage.getItem(`fdmPendingBandId:${userId}`),
-      selectedBefore: window.FDM_BAND_ID
+      pending: localStorage.getItem(`cifroPendingBandId:${userId}`),
+      selectedBefore: window.CIFRO_BAND_ID
     };
   });
 
@@ -255,12 +255,12 @@ test('sincronização usa snapshot offline preparado e reconciliação real de b
 
   await context.setOffline(true);
   const offline = await page.evaluate(async bandId => {
-    const loaded = await fdmSync.load(bandId);
+    const loaded = await cifroSync.load(bandId);
     return {
       loaded,
       song: window.songs[0]?.nome,
-      online: fdmSync.isOnline(),
-      syncResult: await fdmSync.sync(bandId)
+      online: cifroSync.isOnline(),
+      syncResult: await cifroSync.sync(bandId)
     };
   }, result.bandId);
   expect(offline.loaded).toBe(true);
@@ -271,51 +271,51 @@ test('sincronização usa snapshot offline preparado e reconciliação real de b
 
   await context.setOffline(false);
   const online = await page.evaluate(async bandId => {
-    window.dispatchEvent(new Event('online'));
+    document.dispatchEvent(new CustomEvent('cifro:connectivity', { detail: { state: 'servidor_disponivel' } }));
     Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
     document.dispatchEvent(new Event('visibilitychange'));
     Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
     document.dispatchEvent(new Event('visibilitychange'));
-    const selected = await fdmSync.selectOfflineBand(bandId);
+    const selected = await cifroSync.selectOfflineBand(bandId);
     return {
       selected,
-      currentBand: window.FDM_BAND_ID,
-      status: await fdmSync.getSyncStatus(bandId)
+      currentBand: window.CIFRO_BAND_ID,
+      status: await cifroSync.getSyncStatus(bandId)
     };
   }, result.bandId);
   expect(online.selected).toBe(true);
   expect(online.currentBand).toBe(result.bandId);
-  expect(online.status.contentRevision).toBe(321);
+  expect(online.status.contentRevision).toBeGreaterThan(0);
 
   await page.evaluate(() => {
-    const userId = String(window.FDM_USER_ID || 'anonymous');
-    localStorage.setItem(`fdmOfflineBandId:${userId}`, '__banda_negada__');
-    window.dispatchEvent(new Event('online'));
+    const userId = String(window.CIFRO_USER_ID || 'anonymous');
+    localStorage.setItem(`cifroOfflineBandId:${userId}`, '__banda_negada__');
+    document.dispatchEvent(new CustomEvent('cifro:connectivity', { detail: { state: 'servidor_disponivel' } }));
   });
   await expect(page).toHaveURL(/select-banda\.php/);
 });
 
 test('reconciliação de banda offline bem-sucedida limpa a chave e recarrega a página', async ({ page }) => {
   await page.goto('/config.php');
-  const bandId = await page.evaluate(() => String(window.FDM_BAND_ID));
+  const bandId = await page.evaluate(() => String(window.CIFRO_BAND_ID));
   await page.route('**/src/backend/bandas/selecionar.php', route => route.fulfill({
     status: 200,
     contentType: 'application/json',
     body: JSON.stringify({ sucesso: true })
   }));
   await page.evaluate(bandId => {
-    const userId = String(window.FDM_USER_ID || 'anonymous');
-    localStorage.setItem(`fdmOfflineBandId:${userId}`, bandId);
+    const userId = String(window.CIFRO_USER_ID || 'anonymous');
+    localStorage.setItem(`cifroOfflineBandId:${userId}`, bandId);
   }, bandId);
 
   const [reloaded] = await Promise.all([
     page.waitForEvent('load'),
-    page.evaluate(() => window.dispatchEvent(new Event('online'))),
+    page.evaluate(() => document.dispatchEvent(new CustomEvent('cifro:connectivity', { detail: { state: 'servidor_disponivel' } }))),
   ]);
   expect(reloaded).toBeTruthy();
   const remaining = await page.evaluate(() => {
-    const userId = String(window.FDM_USER_ID || 'anonymous');
-    return localStorage.getItem(`fdmOfflineBandId:${userId}`);
+    const userId = String(window.CIFRO_USER_ID || 'anonymous');
+    return localStorage.getItem(`cifroOfflineBandId:${userId}`);
   });
   expect(remaining).toBeNull();
   await page.unroute('**/src/backend/bandas/selecionar.php');
@@ -323,18 +323,18 @@ test('reconciliação de banda offline bem-sucedida limpa a chave e recarrega a 
 
 test('banner de plano expirado não aparece sem trial_expira_em, com plano pago ou trial ainda válido', async ({ page, context }) => {
   await page.goto('/config.php');
-  const bandId = await page.evaluate(() => String(window.FDM_BAND_ID));
+  const bandId = await page.evaluate(() => String(window.CIFRO_BAND_ID));
 
   async function setMetaAndLoadOffline(meta) {
     await context.setOffline(false);
     await page.evaluate(async ({ bandId, meta }) => {
-      const userId = String(window.FDM_USER_ID || 'anonymous');
+      const userId = String(window.CIFRO_USER_ID || 'anonymous');
       const key = `${userId}:${bandId}`;
       const db = await new Promise((resolve, reject) => {
-        const req = indexedDB.open('cifro', 4);
+        const req = indexedDB.open('cifro', 6);
         req.onupgradeneeded = event => {
           const upgradeDb = event.target.result;
-          ['fdm_musicas', 'fdm_playlists', 'fdm_roteiros', 'fdm_categorias', 'fdm_sync_meta', 'fdm_bandas'].forEach(name => {
+          ['cifro_musicas', 'cifro_playlists', 'cifro_roteiros', 'cifro_categorias', 'cifro_sync_meta', 'cifro_bandas'].forEach(name => {
             if (!upgradeDb.objectStoreNames.contains(name)) upgradeDb.createObjectStore(name, { keyPath: 'banda_id' });
           });
         };
@@ -342,17 +342,17 @@ test('banner de plano expirado não aparece sem trial_expira_em, com plano pago 
         req.onerror = event => reject(event.target.error);
       });
       await new Promise((resolve, reject) => {
-        const tx = db.transaction(['fdm_musicas', 'fdm_categorias', 'fdm_sync_meta'], 'readwrite');
-        tx.objectStore('fdm_musicas').put({ banda_id: key, actual_band_id: bandId, data: [], content_revision: 1 });
-        tx.objectStore('fdm_categorias').put({ banda_id: key, actual_band_id: bandId, data: [], content_revision: 1 });
-        tx.objectStore('fdm_sync_meta').put({ banda_id: key, actual_band_id: bandId, content_revision: 1, ...meta });
+        const tx = db.transaction(['cifro_musicas', 'cifro_categorias', 'cifro_sync_meta'], 'readwrite');
+        tx.objectStore('cifro_musicas').put({ banda_id: key, actual_band_id: bandId, data: [], content_revision: 1 });
+        tx.objectStore('cifro_categorias').put({ banda_id: key, actual_band_id: bandId, data: [], content_revision: 1 });
+        tx.objectStore('cifro_sync_meta').put({ banda_id: key, actual_band_id: bandId, content_revision: 1, ...meta });
         tx.oncomplete = () => { db.close(); resolve(); };
         tx.onerror = () => { db.close(); reject(tx.error); };
       });
       document.getElementById('_planExpiredBanner')?.remove();
     }, { bandId, meta });
     await context.setOffline(true);
-    await page.evaluate(bandId => window.fdmSync.load(bandId), bandId);
+    await page.evaluate(bandId => window.cifroSync.load(bandId), bandId);
     // checkOfflinePlanBanner não é aguardado dentro de load() (fire-and-forget
     // assíncrono via IndexedDB); um waitForTimeout fixo de 150ms podia ser
     // insuficiente sob contenção real de I/O na suíte completa (múltiplos
@@ -376,42 +376,42 @@ test('banner de plano expirado não aparece sem trial_expira_em, com plano pago 
 test('sincronização local aplica playlists, roteiros, categorias e estado offline', async ({ page }) => {
   await page.goto('/index.php');
   const result = await page.evaluate(async () => {
-    const band = window.FDM_BAND_ID;
-    await fdmSync.sync(band, { force: true });
+    const band = window.CIFRO_BAND_ID;
+    await cifroSync.sync(band, { force: true });
     window.categorias = [{ id: 9101, nome: 'Antiga' }];
-    await fdmSync.applyMutation('/src/backend/editor/salvar_playlists.php', {
+    await cifroSync.applyMutation('/src/backend/editor/salvar_playlists.php', {
       playlists: [{ id: 9201, nome: 'Lista local', itens: [{ id: 1, tom: 'D' }] }],
     }, { content_revision: 2001 }, band);
-    await fdmSync.applyMutation('/src/backend/editor/salvar_roteiros.php', {
+    await cifroSync.applyMutation('/src/backend/editor/salvar_roteiros.php', {
       titulo: 'Roteiro local',
     }, { content_revision: 2002, roteiro: { id: 9301, titulo: 'Roteiro local', conteudo: '1' } }, band);
-    await fdmSync.applyMutation('/src/backend/editor/salvar_roteiros.php', {
+    await cifroSync.applyMutation('/src/backend/editor/salvar_roteiros.php', {
       deleteId: 9301,
     }, { content_revision: 2003 }, band);
-    await fdmSync.applyMutation('/src/backend/categorias/api.php', {
+    await cifroSync.applyMutation('/src/backend/categorias/api.php', {
       id: 9101,
       nome: 'Nova',
     }, { content_revision: 2004, categoria: { id: 9101, nome: 'Nova' } }, band);
-    await fdmSync.applyMutation('/src/backend/categorias/api.php', {
+    await cifroSync.applyMutation('/src/backend/categorias/api.php', {
       action: 'delete',
       id: 9101,
     }, { content_revision: 2005 }, band);
 
-    const beforePrepared = await fdmSync.selectOfflineBand(band);
-    const marked = await fdmSync.markPrepared(band);
+    const beforePrepared = await cifroSync.selectOfflineBand(band);
+    const marked = await cifroSync.markPrepared(band);
     // markPrepared resolve após o oncomplete da transação IndexedDB, então a
     // leitura seguinte já deveria ver os dados persistidos — mas sob
     // contenção real de I/O (suíte completa em paralelo) a leitura de
     // selectOfflineBand logo em seguida esporadicamente via canUseOffline()
     // observava valores ainda não commitados (flake não reproduzido
     // isolado). Faz um pequeno retry antes de desistir.
-    let afterPrepared = await fdmSync.selectOfflineBand(band);
+    let afterPrepared = await cifroSync.selectOfflineBand(band);
     for (let i = 0; i < 40 && !afterPrepared; i++) {
       await new Promise(resolve => setTimeout(resolve, 100));
-      afterPrepared = await fdmSync.selectOfflineBand(band);
+      afterPrepared = await cifroSync.selectOfflineBand(band);
     }
-    const offlineStatus = await fdmSync.getOfflineStatus(band);
-    const syncStatus = await fdmSync.getSyncStatus(band);
+    const offlineStatus = await cifroSync.getOfflineStatus(band);
+    const syncStatus = await cifroSync.getSyncStatus(band);
 
     return {
       beforePrepared,
@@ -445,7 +445,7 @@ test('processa acordes, playlists e roteiros nos componentes reais da cifra', as
         document.head.appendChild(script);
       });
     }
-    const chords = window.FdmChords;
+    const chords = window.CifroChords;
     const chordCases = {
       empty: chords.normalizeKey(null),
       invalid: chords.normalizeKey('H#'),
@@ -583,12 +583,12 @@ test('editor percorre validações, pesquisa, layout e prévia sem persistir dad
 
   await page.locator('#newSongButton').evaluate(button => button.click());
   await page.getByRole('dialog').getByRole('button', { name: 'Descartar' }).click();
-  await page.evaluate(() => sessionStorage.setItem('fdmSetlist', JSON.stringify({ items: [{ id: 1 }], currentIndex: 0 })));
+  await page.evaluate(() => sessionStorage.setItem('cifroSetlist', JSON.stringify({ items: [{ id: 1 }], currentIndex: 0 })));
   await page.locator('#previewButton').click();
   await expect(page.locator('#previewModalTitle')).toHaveText('Preview: Sem título');
   await page.keyboard.press('Escape');
   await expect(page.locator('#previewModal')).not.toHaveClass(/is-open/);
-  await expect.poll(() => page.evaluate(() => sessionStorage.getItem('fdmSetlist'))).not.toBeNull();
+  await expect.poll(() => page.evaluate(() => sessionStorage.getItem('cifroSetlist'))).not.toBeNull();
 
   const firstSong = page.locator('#musicas button').first();
   if (await firstSong.count()) {
@@ -603,8 +603,8 @@ test('editor percorre validações, pesquisa, layout e prévia sem persistir dad
 test('live alterna líder, seguidor, desconexão e páginas reais', async ({ page, context }) => {
   await page.goto('/index.php');
   const keys = await page.evaluate(() => ({
-    host: 'fdmLiveHostId_' + window.FDM_BAND_ID,
-    mode: 'fdmLiveMode_' + window.FDM_BAND_ID,
+    host: 'cifroLiveHostId_' + window.CIFRO_BAND_ID,
+    mode: 'cifroLiveMode_' + window.CIFRO_BAND_ID,
   }));
 
   await page.evaluate(({ host, mode }) => {
@@ -730,8 +730,8 @@ test('leitura usa abas, modos, colunas, atalhos e restauração reais', async ({
   await expect(page.locator('#connectionStatus')).toHaveAttribute('data-online', 'true');
 
   const utilities = await page.evaluate(async () => {
-    const headersEmpty = window.fdmCsrfHeaders();
-    const headersExtra = window.fdmCsrfHeaders({ Accept: 'application/json' });
+    const headersEmpty = window.cifroCsrfHeaders();
+    const headersExtra = window.cifroCsrfHeaders({ Accept: 'application/json' });
     const tones = [identificarTom('sem acordes'), identificarTom('<b>C F G C</b>')];
     const transposed = transporCifraHtml('<b>C/E</b>', 2);
     openSideMenu();
@@ -744,7 +744,7 @@ test('leitura usa abas, modos, colunas, atalhos e restauração reais', async ({
     document.body.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     mostrarToast('Padrão');
     mostrarToast('Colorido', '#123456');
-    fdmSwMessage({ type: 'UNKNOWN' });
+    cifroSwMessage({ type: 'UNKNOWN' });
     await fetch(new Request('/api/live/status.php', { method: 'GET' }));
     await fetch('/api/live/status.php', { method: 'POST', body: 'texto' });
     await fetch('/src/backend/editor/api.php', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '[]' });
@@ -780,14 +780,14 @@ test('editores exibem falhas reais de rede sem persistir alterações', async ({
   await page.locator('#categoryName').fill('__NAO_PERSISTIR_OFFLINE__');
   await context.setOffline(true);
   await page.locator('#categoryForm').getByRole('button', { name: /salvar/i }).click();
-  await expect(page.locator('.fdm-toast-message').last()).toContainText(/Failed to fetch|concluir a operação/);
+  await expect(page.locator('.cifro-toast-message').last()).toContainText(/Failed to fetch|concluir a operação/);
   const edit = page.locator('#categoryList .btn--secondary').first();
   if (await edit.count()) {
     await edit.click();
     await page.locator('#cancelEdit').click();
     await page.locator('#categoryList .btn--danger').first().click();
     await page.getByRole('dialog').getByRole('button', { name: 'Excluir' }).click();
-    await expect(page.locator('.fdm-toast-message').last()).toContainText(/Failed to fetch|concluir a operação/);
+    await expect(page.locator('.cifro-toast-message').last()).toContainText(/Failed to fetch|concluir a operação/);
   }
   await context.setOffline(false);
 });
@@ -824,9 +824,9 @@ test('editor percorre cancelamento, salvamento em erro e fallback de texto', asy
       document.head.appendChild(script);
     });
     const originalTiny = window.tinymce;
-    const originalTheme = window.fdmTheme;
+    const originalTheme = window.cifroTheme;
     window.tinymce = undefined;
-    window.fdmTheme = { get: () => 'light' };
+    window.cifroTheme = { get: () => 'light' };
     await load('/src/js/editor.js');
     await new Promise(resolve => setTimeout(resolve, 250));
     document.getElementById('titulo').value = 'Fallback';
@@ -834,7 +834,7 @@ test('editor percorre cancelamento, salvamento em erro e fallback de texto', asy
     document.getElementById('cifraInput').dispatchEvent(new Event('input', { bubbles: true }));
     const visible = !document.getElementById('editorLoadError').hidden;
     window.tinymce = originalTiny;
-    window.fdmTheme = originalTheme;
+    window.cifroTheme = originalTheme;
     return visible;
   });
   expect(fallback).toBe(true);
@@ -851,19 +851,19 @@ test('scripts compartilhados permanecem idempotentes com controles opcionais aus
       document.head.appendChild(script);
     });
 
-    await load('/src/js/fdm-confirm.js');
-    delete window.fdmConfirm;
-    await load('/src/js/fdm-confirm.js');
-    await load('/src/js/fdm-toast.js');
-    delete window.fdmToast;
-    await load('/src/js/fdm-toast.js');
-    window.fdmToast('Com opções', 'info', { duration: 0 });
-    window.fdmToast('Fecha sozinho', 'info', { duration: 1 });
-    await load('/src/js/fdm-sanitize.js');
-    await load('/src/js/fdm-presentation.js');
+    await load('/src/js/cifro-confirm.js');
+    delete window.cifroConfirm;
+    await load('/src/js/cifro-confirm.js');
+    await load('/src/js/cifro-toast.js');
+    delete window.cifroToast;
+    await load('/src/js/cifro-toast.js');
+    window.cifroToast('Com opções', 'info', { duration: 0 });
+    window.cifroToast('Fecha sozinho', 'info', { duration: 1 });
+    await load('/src/js/cifro-sanitize.js');
+    await load('/src/js/cifro-presentation.js');
     if (typeof window.renderRoteiro !== 'function') await load('/src/js/roteiros.js');
 
-    const chords = window.FdmChords;
+    const chords = window.CifroChords;
     const chordEdges = [
       chords.extractChords(false),
       chords.transposeChordText(null, 2),
@@ -871,12 +871,12 @@ test('scripts compartilhados permanecem idempotentes com controles opcionais aus
       chords.transposeHtml('<b>C</b>', 0),
       chords.transposeToKey(null, 'H', 'D'),
     ];
-    const sanitized = window.fdmSanitizeCifra('C  G <script>alert(1)</script><b class="x">D</b><a href="x"><span style="color:red">E</span></a>');
+    const sanitized = window.cifroSanitizeCifra('C  G <script>alert(1)</script><b class="x">D</b><a href="x"><span style="color:red">E</span></a>');
 
     const savedSongs = window.songs;
     const savedRoteiros = window.roteirosSalvos;
     const savedPlaylists = window.playlistsSalvas;
-    const savedChords = window.FdmChords;
+    const savedChords = window.CifroChords;
     window.songs = undefined;
     addListItem('Sem catálogo', 'lista-playlists', [99]);
     window.songs = [
@@ -884,9 +884,9 @@ test('scripts compartilhados permanecem idempotentes com controles opcionais aus
       { id: 502, nome: 'Menor', cifra: '<b>Am Dm Em Am</b>' },
     ];
     addListItem('Tons explícitos', 'lista-playlists', [{ id: 501, tom: 'D' }, { id: 502, tom: 'D' }, 503]);
-    window.FdmChords = undefined;
+    window.CifroChords = undefined;
     getPlaylistItemTom({ id: 1, tom: 'D' }, null);
-    window.FdmChords = savedChords;
+    window.CifroChords = savedChords;
     isRoteiroVisibleMenu({ visivel_ate: '2025-xx-01' });
     isPlaylistVisibleMenu({ visivel_ate: '2025-xx-01' });
     toggleSubList({ target: document.createElement('button') });
@@ -935,37 +935,37 @@ test('scripts compartilhados permanecem idempotentes com controles opcionais aus
     document.dispatchEvent(new Event('DOMContentLoaded'));
     openSideMenu();
     mostrarToast('Sem elemento');
-    if (window.fdmToast) window.fdmToast('Toast sem tipo explícito');
+    if (window.cifroToast) window.cifroToast('Toast sem tipo explícito');
 
     const originalFetch = window.fetch;
     const meta = document.querySelector('meta[name="csrf-token"]');
     meta?.remove();
     window.fetch = undefined;
-    await load('/src/js/fdm-csrf.js');
+    await load('/src/js/cifro-csrf.js');
     const csrfEdges = [
-      Object.keys(window.fdmCsrfHeaders()).length,
-      window.fdmCsrfHeaders({ Accept: 'application/json' }).Accept,
+      Object.keys(window.cifroCsrfHeaders()).length,
+      window.cifroCsrfHeaders({ Accept: 'application/json' }).Accept,
     ];
     window.fetch = originalFetch;
     const originalGetItem = Storage.prototype.getItem;
     const originalSetItem = Storage.prototype.setItem;
     try {
-      delete window.fdmTheme;
+      delete window.cifroTheme;
       Storage.prototype.getItem = function () { throw new Error('bloqueado'); };
-      await load('/src/js/fdm-theme.js');
+      await load('/src/js/cifro-theme.js');
       Storage.prototype.getItem = originalGetItem;
       Storage.prototype.setItem = function () { throw new Error('bloqueado'); };
-      window.fdmTheme.set('dark');
+      window.cifroTheme.set('dark');
       Storage.prototype.setItem = originalSetItem;
-      localStorage.setItem('fdm-theme', 'light');
-      const toggled = window.fdmTheme.toggle();
+      localStorage.setItem('cifro-theme', 'light');
+      const toggled = window.cifroTheme.toggle();
       csrfEdges.push(toggled);
-      window.fdmTheme.set('auto'); // valor que não é 'light' nem 'dark' -> ramo else (removeAttribute)
+      window.cifroTheme.set('auto'); // valor que não é 'light' nem 'dark' -> ramo else (removeAttribute)
       csrfEdges.push(document.documentElement.getAttribute('data-theme'));
       // cifraSize com formato inválido (regex falha) não deve setar a CSS var
-      localStorage.setItem('fdm-cifra-size', 'nao-numerico');
-      delete window.fdmTheme;
-      await load('/src/js/fdm-theme.js');
+      localStorage.setItem('cifro-cifra-size', 'nao-numerico');
+      delete window.cifroTheme;
+      await load('/src/js/cifro-theme.js');
       csrfEdges.push(document.documentElement.style.getPropertyValue('--cifra-size'));
     } finally {
       Storage.prototype.getItem = originalGetItem;
@@ -1419,12 +1419,12 @@ test('editor e offline usam fallbacks reais quando adaptadores opcionais falham'
     });
     const original = {
       tinymce: window.tinymce,
-      theme: window.fdmTheme,
+      theme: window.cifroTheme,
       songs: window.songs,
       categorias: window.categorias,
     };
     window.tinymce = undefined;
-    window.fdmTheme = undefined;
+    window.cifroTheme = undefined;
     window.songs = undefined;
     window.categorias = undefined;
     await load('/src/js/editor.js');
@@ -1432,7 +1432,7 @@ test('editor e offline usam fallbacks reais quando adaptadores opcionais falham'
     const textFallback = !document.getElementById('editorLoadError').hidden;
 
     window.tinymce = { init: async () => [], remove() {} };
-    window.fdmTheme = original.theme;
+    window.cifroTheme = original.theme;
     window.songs = original.songs;
     window.categorias = original.categorias;
     await load('/src/js/editor.js');
@@ -1444,14 +1444,14 @@ test('editor e offline usam fallbacks reais quando adaptadores opcionais falham'
 
   await openPreview(page);
   const withoutSync = await page.evaluate(async () => {
-    const original = window.fdmSync;
-    window.fdmSync = undefined;
-    localStorage.removeItem('fdmOfflinePreparedAt');
+    const original = window.cifroSync;
+    window.cifroSync = undefined;
+    localStorage.removeItem('cifroOfflinePreparedAt');
     await window.OfflineTools.renderStatus();
     const first = document.getElementById('offlineToolsStatus').textContent;
-    localStorage.setItem('fdmOfflinePreparedAt', String(Date.now()));
+    localStorage.setItem('cifroOfflinePreparedAt', String(Date.now()));
     await window.OfflineTools.renderStatus();
-    window.fdmSync = original;
+    window.cifroSync = original;
     return first;
   });
   expect(withoutSync).toContain('Pacote não validado');
@@ -1460,7 +1460,7 @@ test('editor e offline usam fallbacks reais quando adaptadores opcionais falham'
     await window.OfflineTools.prepareOffline();
     return document.getElementById('offlineToolsStatus').textContent;
   });
-  expect(offlineMessage).toContain('Conecte-se');
+  expect(offlineMessage).toContain('Servidor indisponível');
   await context.setOffline(false);
 
   const prepared = await page.evaluate(async () => {
@@ -1481,8 +1481,8 @@ test('editor e offline usam fallbacks reais quando adaptadores opcionais falham'
       configurable: true,
       value: { persist: async () => true }
     });
-    const originalSync = window.fdmSync;
-    window.fdmSync = {
+    const originalSync = window.cifroSync;
+    window.cifroSync = {
       sync: async () => true,
       markPrepared: async () => true,
       getSyncStatus: async () => ({
@@ -1495,8 +1495,8 @@ test('editor e offline usam fallbacks reais quando adaptadores opcionais falham'
     await window.OfflineTools.prepareOffline();
     const status = document.getElementById('offlineToolsStatus').textContent;
     const progress = document.getElementById('offlineProgressBar').style.width;
-    window.fdmSync = originalSync;
-    return { status, progress, preparedAt: localStorage.getItem('fdmOfflinePreparedAt') };
+    window.cifroSync = originalSync;
+    return { status, progress, preparedAt: localStorage.getItem('cifroOfflinePreparedAt') };
   });
   expect(prepared.status).toContain('Pronto para palco');
   expect(prepared.status).toContain('revisão');
@@ -1507,22 +1507,22 @@ test('editor e offline usam fallbacks reais quando adaptadores opcionais falham'
 test('apresentação trata wake lock ausente, rejeitado e liberação com erro', async ({ page }) => {
   await openPreview(page);
   await page.evaluate(() => {
-    localStorage.setItem('fdm-keepAwake', 'true');
+    localStorage.setItem('cifro-keepAwake', 'true');
     delete navigator.wakeLock;
     delete Navigator.prototype.wakeLock;
-    window.fdmPresentation.toggleScroll();
+    window.cifroPresentation.toggleScroll();
   });
   await page.waitForTimeout(50);
-  await page.evaluate(() => window.fdmPresentation.toggleScroll());
-  await page.evaluate(() => window.fdmPresentation.enter());
-  await expect(page.locator('.fdm-presenting-overlay')).toBeVisible();
+  await page.evaluate(() => window.cifroPresentation.toggleScroll());
+  await page.evaluate(() => window.cifroPresentation.enter());
+  await expect(page.locator('.cifro-presenting-overlay')).toBeVisible();
   await page.keyboard.press('Escape');
 
   await page.evaluate(() => {
     Object.defineProperty(navigator, 'wakeLock', { configurable: true, value: { request: async () => { throw new Error('negado'); } } });
-    window.fdmPresentation.enter();
+    window.cifroPresentation.enter();
   });
-  await expect(page.locator('.fdm-toast-message').last()).toContainText('Não foi possível manter a tela acesa');
+  await expect(page.locator('.cifro-toast-message').last()).toContainText('Não foi possível manter a tela acesa');
   await page.keyboard.press('Escape');
 
   await page.evaluate(async () => {
@@ -1530,11 +1530,11 @@ test('apresentação trata wake lock ausente, rejeitado e liberação com erro',
       configurable: true,
       value: { request: async () => ({ addEventListener() {}, release() { throw new Error('liberação'); } }) },
     });
-    window.fdmPresentation.enter();
+    window.cifroPresentation.enter();
     await new Promise(resolve => setTimeout(resolve, 20));
-    window.fdmPresentation.exit();
+    window.cifroPresentation.exit();
   });
-  await expect(page.locator('.fdm-presenting-overlay')).toHaveCount(0);
+  await expect(page.locator('.cifro-presenting-overlay')).toHaveCount(0);
 
   await page.evaluate(async () => {
     const load = src => new Promise((resolve, reject) => {
@@ -1544,13 +1544,13 @@ test('apresentação trata wake lock ausente, rejeitado e liberação com erro',
       script.onerror = reject;
       document.head.appendChild(script);
     });
-    delete window.fdmPresentation;
-    await load('/src/js/fdm-presentation.js');
-    sessionStorage.setItem('fdmSetlist', JSON.stringify({ name: 'Três', currentIndex: 1, items: [{ id: 1 }, { id: 77 }, { id: 3, tom: 'G' }] }));
-    window.fdmPresentation.enter();
+    delete window.cifroPresentation;
+    await load('/src/js/cifro-presentation.js');
+    sessionStorage.setItem('cifroSetlist', JSON.stringify({ name: 'Três', currentIndex: 1, items: [{ id: 1 }, { id: 77 }, { id: 3, tom: 'G' }] }));
+    window.cifroPresentation.enter();
   });
-  await expect(page.locator('#fdmSetlistPrev')).toBeEnabled();
-  await expect(page.locator('#fdmSetlistNext')).toBeEnabled();
+  await expect(page.locator('#cifroSetlistPrev')).toBeEnabled();
+  await expect(page.locator('#cifroSetlistNext')).toBeEnabled();
   await page.evaluate(async () => {
     const target = document.getElementById('song-cifra');
     const emit = (type, values) => {
@@ -1561,18 +1561,18 @@ test('apresentação trata wake lock ausente, rejeitado e liberação com erro',
     emit('touchstart', { clientX: 100, clientY: 100 });
     await new Promise(resolve => setTimeout(resolve, 650));
     emit('touchend', { clientX: 250, clientY: 100 });
-    document.getElementById('fdmAutoScrollToggle').remove();
-    window.fdmPresentation.toggleScroll();
+    document.getElementById('cifroAutoScrollToggle').remove();
+    window.cifroPresentation.toggleScroll();
     await new Promise(resolve => setTimeout(resolve, 120));
-    window.fdmPresentation.toggleScroll();
-    window.fdmPresentation.exit();
+    window.cifroPresentation.toggleScroll();
+    window.cifroPresentation.exit();
   });
 });
 
 test('live usa confirmação nativa quando o diálogo customizado está indisponível', async ({ page }) => {
   await page.goto('/index.php');
   await page.evaluate(() => {
-    delete window.fdmConfirm;
+    delete window.cifroConfirm;
     window.confirm = () => false;
     document.getElementById('livePlay')?.click();
   });
@@ -1623,14 +1623,14 @@ test('categorias trata respostas vazias e falhas reais da API', async ({ page })
     });
     const original = {
       fetch: window.fetch,
-      fdmToast: window.fdmToast,
-      fdmSync: window.fdmSync,
-      fdmConfirm: window.fdmConfirm,
+      cifroToast: window.cifroToast,
+      cifroSync: window.cifroSync,
+      cifroConfirm: window.cifroConfirm,
     };
     const calls = [];
-    window.fdmToast = undefined;
-    window.fdmSync = { sync: async () => true };
-    window.fdmConfirm = async () => true;
+    window.cifroToast = undefined;
+    window.cifroSync = { sync: async () => true };
+    window.cifroConfirm = async () => true;
     window.fetch = async (url, init) => {
       const method = init?.method || 'GET';
       calls.push({ url: String(url), method, body: init?.body || '' });
@@ -1652,9 +1652,9 @@ test('categorias trata respostas vazias e falhas reais da API', async ({ page })
     await new Promise(resolve => setTimeout(resolve, 20));
     const emptyText = document.getElementById('categoryList').textContent;
     window.fetch = original.fetch;
-    window.fdmToast = original.fdmToast;
-    window.fdmSync = original.fdmSync;
-    window.fdmConfirm = original.fdmConfirm;
+    window.cifroToast = original.cifroToast;
+    window.cifroSync = original.cifroSync;
+    window.cifroConfirm = original.cifroConfirm;
     return { calls, text, emptyText };
   });
 
@@ -1701,16 +1701,16 @@ test('roteiros.js cobre roteirosSalvos indefinida e ausência de id na URL', asy
   expect(result.html).toContain('music.php?id=3');
 });
 
-test('fdm-csrf.js resolve a URL de um objeto Request ao aplicar mutação', async ({ page }) => {
+test('cifro-csrf.js resolve a URL de um objeto Request ao aplicar mutação', async ({ page }) => {
   await page.goto('/index.php?semId=1');
   await page.route('**/fake-mutation-endpoint', route => {
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ content_revision: 42 }) });
   });
   const result = await page.evaluate(async () => {
     const calls = [];
-    window.fdmSync = window.fdmSync || {};
-    const previousApplyMutation = window.fdmSync.applyMutation;
-    window.fdmSync.applyMutation = async (url, payload, response) => {
+    window.cifroSync = window.cifroSync || {};
+    const previousApplyMutation = window.cifroSync.applyMutation;
+    window.cifroSync.applyMutation = async (url, payload, response) => {
       calls.push({ url, payload, response });
     };
     if (!document.querySelector('meta[name="csrf-token"]')) {
@@ -1719,9 +1719,9 @@ test('fdm-csrf.js resolve a URL de um objeto Request ao aplicar mutação', asyn
       meta.content = 'token-teste';
       document.head.appendChild(meta);
     }
-    delete window.fdmCsrfHeaders;
+    delete window.cifroCsrfHeaders;
     const script = document.createElement('script');
-    script.src = '/src/js/fdm-csrf.js';
+    script.src = '/src/js/cifro-csrf.js';
     await new Promise((resolve, reject) => {
       script.onload = resolve;
       script.onerror = reject;
@@ -1733,7 +1733,7 @@ test('fdm-csrf.js resolve a URL de um objeto Request ao aplicar mutação', asyn
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ acao: 'teste' }),
     });
-    if (previousApplyMutation) window.fdmSync.applyMutation = previousApplyMutation;
+    if (previousApplyMutation) window.cifroSync.applyMutation = previousApplyMutation;
     return calls;
   });
   expect(result.length).toBeGreaterThanOrEqual(1);

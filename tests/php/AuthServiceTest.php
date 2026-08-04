@@ -3,52 +3,48 @@ use PHPUnit\Framework\TestCase;
 
 final class AuthServiceTest extends TestCase
 {
-    private string $tmpFile;
-
-    protected function setUp(): void
-    {
-        $this->tmpFile = tempnam(sys_get_temp_dir(), 'fdm_users_');
-    }
-
-    protected function tearDown(): void
-    {
-        if (file_exists($this->tmpFile)) {
-            unlink($this->tmpFile);
-        }
-    }
-
     private function makeService(array $users): AuthService
     {
-        file_put_contents($this->tmpFile, json_encode($users));
-        return new AuthService(new UserRepository($this->tmpFile));
+        $repo = $this->createMock(UserRepository::class);
+        $repo->method('findByEmail')->willReturnCallback(
+            static function (string $email) use ($users): ?array {
+                foreach ($users as $user) {
+                    if (strcasecmp($user['email'], $email) === 0) {
+                        return $user;
+                    }
+                }
+                return null;
+            }
+        );
+
+        return new AuthService($repo);
     }
 
     private function userFixture(array $overrides = []): array
     {
         return array_merge([
             'id' => 'u1',
-            'username' => 'felipe',
+            'email' => 'felipe@e2e.local',
             'nome' => 'Felipe',
             'ativo' => true,
             'senhaHash' => password_hash('s3nha', PASSWORD_DEFAULT),
-            'perfil' => 'administrador',
-            'validade' => ''
+            'perfil' => 'usuario',
+            'validade' => '',
         ], $overrides);
     }
 
     public function testAuthenticatesValidCredentials(): void
     {
-        $svc = $this->makeService([$this->userFixture()]);
-        $result = $svc->authenticate('felipe', 's3nha');
+        $result = $this->makeService([$this->userFixture()])
+            ->authenticate('felipe@e2e.local', 's3nha');
 
         self::assertNull($result['error']);
-        self::assertSame('felipe', $result['user']['username']);
+        self::assertSame('felipe@e2e.local', $result['user']['email']);
     }
 
     public function testRejectsUnknownUser(): void
     {
-        $svc = $this->makeService([$this->userFixture()]);
-        $result = $svc->authenticate('zezinho', 'qualquer');
+        $result = $this->makeService([])->authenticate('zezinho@e2e.local', 'qualquer');
 
         self::assertNull($result['user']);
         self::assertSame('Usuário ou senha inválidos.', $result['error']);
@@ -56,8 +52,8 @@ final class AuthServiceTest extends TestCase
 
     public function testRejectsWrongPassword(): void
     {
-        $svc = $this->makeService([$this->userFixture()]);
-        $result = $svc->authenticate('felipe', 'errada');
+        $result = $this->makeService([$this->userFixture()])
+            ->authenticate('felipe@e2e.local', 'errada');
 
         self::assertNull($result['user']);
         self::assertSame('Usuário ou senha inválidos.', $result['error']);
@@ -65,37 +61,44 @@ final class AuthServiceTest extends TestCase
 
     public function testRejectsInactiveUser(): void
     {
-        $svc = $this->makeService([$this->userFixture(['ativo' => false])]);
-        $result = $svc->authenticate('felipe', 's3nha');
+        $result = $this->makeService([$this->userFixture(['ativo' => false])])
+            ->authenticate('felipe@e2e.local', 's3nha');
 
         self::assertNull($result['user']);
         self::assertSame('Usuário inativo.', $result['error']);
     }
 
-    public function testRejectsExpiredExternalUser(): void
+    public function testRejectsExpiredUser(): void
     {
         $ontem = (new DateTimeImmutable('yesterday', new DateTimeZone('America/Sao_Paulo')))->format('Y-m-d');
-        $svc = $this->makeService([$this->userFixture(['perfil' => 'externo', 'validade' => $ontem])]);
-        $result = $svc->authenticate('felipe', 's3nha');
+        $result = $this->makeService([$this->userFixture(['validade' => $ontem])])
+            ->authenticate('felipe@e2e.local', 's3nha');
 
         self::assertNull($result['user']);
         self::assertSame('Usuario temporario expirado.', $result['error']);
     }
 
-    public function testAcceptsExternalUserValidToday(): void
+    public function testAcceptsUserValidToday(): void
     {
         $hoje = (new DateTimeImmutable('today', new DateTimeZone('America/Sao_Paulo')))->format('Y-m-d');
-        $svc = $this->makeService([$this->userFixture(['perfil' => 'externo', 'validade' => $hoje])]);
-        $result = $svc->authenticate('felipe', 's3nha');
+        $result = $this->makeService([$this->userFixture(['validade' => $hoje])])
+            ->authenticate('felipe@e2e.local', 's3nha');
 
         self::assertNull($result['error']);
-        self::assertSame('felipe', $result['user']['username']);
+    }
+
+    public function testAcceptsInvalidExpirationAsUnspecified(): void
+    {
+        $result = $this->makeService([$this->userFixture(['validade' => 'data-invalida'])])
+            ->authenticate('felipe@e2e.local', 's3nha');
+
+        self::assertNull($result['error']);
     }
 
     public function testRejectsExternalUserWithoutExpiration(): void
     {
-        $svc = $this->makeService([$this->userFixture(['perfil' => 'externo', 'validade' => ''])]);
-        $result = $svc->authenticate('felipe', 's3nha');
+        $result = $this->makeService([$this->userFixture(['perfil' => 'externo'])])
+            ->authenticate('felipe@e2e.local', 's3nha');
 
         self::assertNull($result['user']);
         self::assertSame('Usuario externo sem validade configurada.', $result['error']);
@@ -103,8 +106,8 @@ final class AuthServiceTest extends TestCase
 
     public function testRejectsUserWithoutPasswordHash(): void
     {
-        $svc = $this->makeService([$this->userFixture(['senhaHash' => null])]);
-        $result = $svc->authenticate('felipe', 's3nha');
+        $result = $this->makeService([$this->userFixture(['senhaHash' => null])])
+            ->authenticate('felipe@e2e.local', 's3nha');
 
         self::assertNull($result['user']);
         self::assertSame('Usuário ou senha inválidos.', $result['error']);

@@ -7,6 +7,8 @@ $_multiband   = is_master() || count($_userBandas) > 1;
 $_canEdit     = function_exists('can_edit_content')     && can_edit_content();
 $_canUsers    = function_exists('can_manage_band_users') && can_manage_band_users();
 $_isMaster    = function_exists('is_master')            && is_master();
+$_planoAtual  = $_bandaAtual['plano'] ?? '';
+$_showUpgrade = in_array($_planoAtual, ['trial', 'gratuito', 'bloqueado'], true);
 ?>
 <style>
   .topnav {
@@ -29,8 +31,7 @@ $_isMaster    = function_exists('is_master')            && is_master();
     font-weight: var(--fw-semibold); font-size: var(--text-base); flex-shrink: 0;
   }
   .topnav__brand-mark {
-    width: 28px; height: 28px; border-radius: var(--radius-sm);
-    background: var(--brand-soft);
+    width: 30px; height: 30px;
     display: inline-flex; align-items: center; justify-content: center;
   }
 
@@ -68,6 +69,15 @@ $_isMaster    = function_exists('is_master')            && is_master();
   }
   .topnav__link:hover { background: var(--bg-2); color: var(--text-1); }
 
+  .topnav__upgrade {
+    display: inline-flex; align-items: center; gap: 6px;
+    min-height: 34px; padding: 0 12px; border-radius: var(--radius-sm);
+    background: var(--brand); color: #fff; text-decoration: none;
+    font-size: var(--text-xs); font-weight: 800; white-space: nowrap;
+    box-shadow: 0 6px 18px rgba(124,58,237,.2);
+  }
+  .topnav__upgrade:hover { opacity: .9; color: #fff; }
+
   .topnav__menu-btn {
     display: none; width: 40px; height: 40px;
     align-items: center; justify-content: center;
@@ -82,14 +92,25 @@ $_isMaster    = function_exists('is_master')            && is_master();
     .topnav__menu-btn { display: inline-flex; }
     .topnav__band-chip span.band-name { display: none; }
   }
-  #playlistButtonTop { display: inline-flex; }
+  #playlistButtonTop { display: none; }
+  @media (max-width: 720px) {
+    .topnav { gap: 6px; padding-inline: 8px; }
+    .topnav__menu-btn, .topnav__sync { width: 44px; height: 44px; min-width: 44px; padding: 0; justify-content: center; }
+    .topnav__sync > span:last-child { display: none; }
+    .topnav__upgrade { width: 44px; min-width: 44px; height: 44px; padding: 0; justify-content: center; font-size: 0; }
+    .topnav__upgrade::before { content: '↑'; font-size: 20px; line-height: 1; }
+    #playlistButtonTop { display: inline-flex; }
+  }
+  @media (max-width: 360px) {
+    .topnav__sync { display: none; }
+  }
 </style>
 
 <nav class="topnav" role="navigation">
-  <a href="/index.php" class="topnav__brand" aria-label="Início — StageBox">
+  <a href="/index.php" class="topnav__brand" aria-label="Início — Cifrô">
     <span class="topnav__brand-mark">
-      <img src="/src/images/imagemlogofdm.webp" alt="" aria-hidden="true"
-           style="width:24px;height:24px;object-fit:contain;background:transparent;">
+      <img src="/src/images/cifro-mark.svg" alt="" aria-hidden="true"
+           style="width:30px;height:30px;object-fit:contain;background:transparent;">
     </span>
   </a>
 
@@ -98,11 +119,7 @@ $_isMaster    = function_exists('is_master')            && is_master();
        class="topnav__band-chip"
        title="<?= e($_bandaNome) ?><?= $_multiband ? ' · trocar banda' : '' ?>"
        <?= !$_multiband ? 'style="pointer-events:none;cursor:default"' : '' ?>>
-      <?php if ($_multiband): ?>
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-      <?php else: ?>
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
-      <?php endif; ?>
+      <img src="<?= e(!empty($_bandaAtual['logo']) ? $_bandaAtual['logo'] : '/src/images/cifro-mark.svg') ?>" alt="" aria-hidden="true" style="width:16px;height:16px;object-fit:contain">
       <span class="band-name"><?= e($_bandaNome) ?></span>
       <?php if ($_multiband): ?>
         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
@@ -117,13 +134,21 @@ $_isMaster    = function_exists('is_master')            && is_master();
     <span id="topnavSyncLabel">—</span>
   </button>
 
+  <?php if ($_showUpgrade): ?>
+    <a href="/plano.php#planos" class="topnav__upgrade"
+       aria-label="<?= $_planoAtual === 'bloqueado' ? 'Regularizar plano' : 'Fazer upgrade' ?>"
+       title="Ver planos">
+      <?= $_planoAtual === 'bloqueado' ? 'Regularizar plano' : 'Fazer upgrade' ?>
+    </a>
+  <?php endif; ?>
+
   <div class="topnav__links">
-    <a href="/index.php" class="topnav__link">Músicas</a>
+    <a href="/index.php" class="topnav__link">Início</a>
 
     <?php if ($_canEdit): ?>
-      <a href="/src/backend/editor/editorplaylist.php" class="topnav__link">Setlists</a>
-      <a href="/src/backend/editor/editor.php" class="topnav__link">Editor</a>
-      <a href="/src/backend/editor/roteiro.php" class="topnav__link">Roteiros</a>
+      <a href="/categorias.php" class="topnav__link">Categorias</a>
+      <a href="/src/backend/editor/editor.php" class="topnav__link">Músicas</a>
+      <a href="/src/backend/editor/editorplaylist.php" class="topnav__link">Repertórios</a>
     <?php endif; ?>
 
     <?php if ($_canUsers): ?>
@@ -145,7 +170,7 @@ $_isMaster    = function_exists('is_master')            && is_master();
 
   <!-- Mobile: playlist menu button -->
   <button class="topnav__menu-btn" type="button" id="playlistButtonTop"
-          aria-label="Abrir setlists" aria-expanded="false" aria-controls="sideMenu"
+          aria-label="Abrir repertórios" aria-expanded="false" aria-controls="sideMenu"
           style="margin-right:0">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
          stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -183,16 +208,21 @@ $_isMaster    = function_exists('is_master')            && is_master();
     var label = document.getElementById('topnavSyncLabel');
     function updateSync() {
       if (!dot || !label) return;
-      if (navigator.onLine) {
+      var state = window.CifroConnectivity?.current() || 'verificando';
+      if (state === 'servidor_disponivel') {
         dot.className   = 'sync-dot sync-dot--online';
-        label.textContent = 'Online';
+        label.textContent = 'Servidor disponível';
+      } else if (state === 'verificando') {
+        dot.className = 'sync-dot sync-dot--syncing';
+        label.textContent = 'Verificando';
       } else {
         dot.className   = 'sync-dot sync-dot--offline';
-        label.textContent = 'Offline';
+        label.textContent = 'Usando versão local';
       }
     }
     updateSync();
     window.addEventListener('online',  updateSync);
     window.addEventListener('offline', updateSync);
+    document.addEventListener('cifro:connectivity', updateSync);
   })();
 </script>

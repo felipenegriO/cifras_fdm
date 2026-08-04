@@ -126,6 +126,19 @@
         async function handleAudioFile(file) {
             if (!file) return;
 
+            const maxBytes = 50 * 1024 * 1024;
+            const allowedTypes = new Set(['audio/mpeg', 'audio/wav', 'audio/x-wav', 'audio/ogg', 'audio/webm', 'audio/mp4', 'audio/x-m4a']);
+            const extension = (file.name.split('.').pop() || '').toLowerCase();
+            const allowedExtensions = new Set(['mp3', 'wav', 'ogg', 'webm', 'm4a', 'mp4']);
+            if (file.size <= 0 || file.size > maxBytes) {
+                uiModule.showMessage('O áudio deve ter no máximo 50 MB.', 'error');
+                return;
+            }
+            if (!allowedTypes.has(file.type) || !allowedExtensions.has(extension)) {
+                uiModule.showMessage('Formato inválido. Use MP3, WAV, OGG, WebM ou M4A.', 'error');
+                return;
+            }
+
             try {
                 if (!player) {
                     player = pitchModule.createPitchPlayer({
@@ -217,7 +230,7 @@
         }
 
         function getPlayer() {
-            return player || window.mockPlayer;
+            return player;
         }
 
         function handlePitchDown() {

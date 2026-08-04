@@ -22,7 +22,9 @@ class RoteiroRepository {
     }
 
     public function delete(int $id, string $bandaId): void {
-        $this->pdo->prepare('DELETE FROM roteiros WHERE id=? AND banda_id=?')->execute([$id, $bandaId]);
+        $stmt = $this->pdo->prepare('DELETE FROM roteiros WHERE id=? AND banda_id=?');
+        $stmt->execute([$id, $bandaId]);
+        if ($stmt->rowCount() !== 1) throw new RuntimeException('Roteiro não encontrado.');
     }
 
     public function saveAll(array $roteiros, string $bandaId): void {

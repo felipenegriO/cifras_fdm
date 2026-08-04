@@ -23,8 +23,14 @@ const envLocalPath = path.resolve(__dirname, '../../.env.local');
  */
 async function withExtraEnv(extraVars, run) {
   const original = fs.readFileSync(envLocalPath, 'utf8');
-  const extra = Object.entries(extraVars).map(([k, v]) => `${k}=${v}`).join('\n');
-  fs.writeFileSync(envLocalPath, `${original}\n${extra}\n`);
+  let updated = original;
+  for (const [key, value] of Object.entries(extraVars)) {
+    const pattern = new RegExp(`^${key}=.*$`, 'm');
+    updated = pattern.test(updated)
+      ? updated.replace(pattern, `${key}=${value}`)
+      : `${updated.replace(/\s*$/, '')}\n${key}=${value}\n`;
+  }
+  fs.writeFileSync(envLocalPath, updated);
   try {
     await run();
   } finally {
@@ -39,7 +45,8 @@ async function getCsrf(page) {
 }
 
 async function sendSignedWebhook(page, event) {
-  const payload = JSON.stringify(event);
+  const now = Date.now();
+  const payload = JSON.stringify({ id: `evt_${now}_${Math.random().toString(16).slice(2)}`, created: Math.floor(now / 1000), ...event });
   const timestamp = Math.floor(Date.now() / 1000);
   const signature = createHmac('sha256', 'whsec_playwright').update(`${timestamp}.${payload}`).digest('hex');
   return page.request.post('/api/stripe/webhook.php', {
@@ -344,7 +351,7 @@ test.describe('Topnav — link de plano', () => {
 
 // ── Limite de músicas no plano gratuito ───────────────────────────────────────
 test.describe('Limite do plano — músicas', () => {
-  test('fdm_require_plan_limit bloqueia 11ª música no plano gratuito (API retorna 403 com plano_limit)', async ({ page }) => {
+  test('cifro_require_plan_limit bloqueia 11ª música no plano gratuito (API retorna 403 com plano_limit)', async ({ page }) => {
     const csrf = await getCsrf(page);
 
     // Cria músicas até o limite (10) — pode já existir algumas, então
@@ -393,7 +400,7 @@ test.describe('Limite do plano — músicas', () => {
   });
 
   test('resposta de limite tem campo plano_limit:true e mensagem', async ({ page }) => {
-    // Simula chamada direta ao fdm_require_plan_limit via mock de contagem
+    // Simula chamada direta ao cifro_require_plan_limit via mock de contagem
     // Verificamos que a estrutura JSON do erro de limite está correta chamando
     // o endpoint com plano bloqueado (sem sessão válida de banda)
     const csrf = await getCsrf(page);

@@ -2,8 +2,7 @@
 class UserRepository {
     private $pdo;
 
-    /** @param string|null $usersFile kept for backwards-compat but ignored */
-    public function __construct($usersFile = null) {
+    public function __construct() {
         $this->pdo = Database::getConnection();
     }
 
@@ -13,14 +12,14 @@ class UserRepository {
         return (int)$stmt->fetchColumn();
     }
 
-    public function findByUsername(string $username): ?array {
+    public function findByEmail(string $email): ?array {
         $stmt = $this->pdo->prepare(
             'SELECT u.*, ub.perfil AS banda_perfil, ub.banda_id
              FROM usuarios u
              LEFT JOIN usuario_banda ub ON u.id = ub.usuario_id
-             WHERE LOWER(u.username) = LOWER(?)'
+             WHERE LOWER(u.email) = LOWER(?)'
         );
-        $stmt->execute([$username]);
+        $stmt->execute([$email]);
         $rows = $stmt->fetchAll();
 
         if (empty($rows)) return null;
@@ -114,7 +113,7 @@ class UserRepository {
             );
             $stmt->execute([
                 $user['nome'],
-                $user['email'] ?? null,
+                $user['email'],
                 $senha_hash,
                 $user['perfil'] ?? 'usuario',
                 (int)($user['ativo'] ?? 1),
@@ -131,7 +130,7 @@ class UserRepository {
             $stmt->execute([
                 $user['id'],
                 $user['nome'],
-                $user['email'] ?? null,
+                $user['email'],
                 $senha_hash,
                 $user['perfil'] ?? 'usuario',
                 (int)($user['ativo'] ?? 1),
@@ -180,7 +179,7 @@ class UserRepository {
 
     public function getByBanda(string $bandaId): array {
         $stmt = $this->pdo->prepare(
-            'SELECT u.id, u.nome, u.username, u.ativo, u.validade, u.perfil,
+            'SELECT u.id, u.nome, u.email, u.ativo, u.validade, u.perfil,
                     ub.perfil AS banda_perfil
              FROM usuarios u
              JOIN usuario_banda ub ON u.id = ub.usuario_id
@@ -189,6 +188,29 @@ class UserRepository {
         );
         $stmt->execute([$bandaId]);
         return $stmt->fetchAll();
+    }
+
+    public function recordLegalAcceptance(string $userId, string $termsVersion, string $privacyVersion, ?string $ipHash): void {
+        $this->pdo->prepare(
+            'INSERT INTO user_legal_acceptances (usuario_id, terms_version, privacy_version, ip_hash) VALUES (?,?,?,?)'
+        )->execute([$userId, $termsVersion, $privacyVersion, $ipHash]);
+    }
+
+    public function findByIdInBanda(string $userId, string $bandaId): ?array {
+        $stmt = $this->pdo->prepare(
+            'SELECT u.* FROM usuarios u
+             INNER JOIN usuario_banda ub ON ub.usuario_id=u.id
+             WHERE u.id=? AND ub.banda_id=? LIMIT 1'
+        );
+        $stmt->execute([$userId, $bandaId]);
+        $row = $stmt->fetch();
+        return $row ?: null;
+    }
+
+    public function belongsToBanda(string $userId, string $bandaId): bool {
+        $stmt = $this->pdo->prepare('SELECT 1 FROM usuario_banda WHERE usuario_id=? AND banda_id=? LIMIT 1');
+        $stmt->execute([$userId, $bandaId]);
+        return (bool) $stmt->fetchColumn();
     }
 
     public function saveToBanda(array $userData, string $bandaId, string $bandaPerfil): string {
@@ -205,17 +227,17 @@ class UserRepository {
         $existing = $this->findById($id);
         if ($existing) {
             if ($senhaHash) {
-                $this->pdo->prepare('UPDATE usuarios SET nome=?, username=?, email=?, ativo=?, validade=?, senha_hash=? WHERE id=?')
-                    ->execute([$userData['nome'], $userData['username'], $email, (int)($userData['ativo'] ?? 1), ($userData['validade'] ?? '') ?: null, $senhaHash, $id]);
+                $this->pdo->prepare('UPDATE usuarios SET nome=?, email=?, ativo=?, validade=?, senha_hash=? WHERE id=?')
+                    ->execute([$userData['nome'], $email, (int)($userData['ativo'] ?? 1), ($userData['validade'] ?? '') ?: null, $senhaHash, $id]);
             } else {
-                $this->pdo->prepare('UPDATE usuarios SET nome=?, username=?, email=?, ativo=?, validade=? WHERE id=?')
-                    ->execute([$userData['nome'], $userData['username'], $email, (int)($userData['ativo'] ?? 1), ($userData['validade'] ?? '') ?: null, $id]);
+                $this->pdo->prepare('UPDATE usuarios SET nome=?, email=?, ativo=?, validade=? WHERE id=?')
+                    ->execute([$userData['nome'], $email, (int)($userData['ativo'] ?? 1), ($userData['validade'] ?? '') ?: null, $id]);
             }
         } else {
             $this->pdo->prepare(
-                'INSERT INTO usuarios (id, nome, username, email, senha_hash, perfil, ativo, validade) VALUES (?,?,?,?,?,?,?,?)'
+                'INSERT INTO usuarios (id, nome, email, senha_hash, perfil, ativo, validade) VALUES (?,?,?,?,?,?,?)'
             )->execute([
-                $id, $userData['nome'], $userData['username'], $email,
+                $id, $userData['nome'], $email,
                 $senhaHash, 'usuario',
                 (int)($userData['ativo'] ?? 1),
                 ($userData['validade'] ?? '') ?: null,
@@ -238,10 +260,10 @@ class UserRepository {
     public function searchNotInBanda(string $bandaId, string $search): array {
         $like = '%' . $search . '%';
         $stmt = $this->pdo->prepare(
-            'SELECT u.id, u.nome, u.username, u.ativo
+            'SELECT u.id, u.nome, u.email, u.ativo
              FROM usuarios u
              WHERE u.id NOT IN (SELECT usuario_id FROM usuario_banda WHERE banda_id=?)
-               AND (u.nome LIKE ? OR u.username LIKE ?)
+               AND (u.nome LIKE ? OR u.email LIKE ?)
              ORDER BY u.nome LIMIT 20'
         );
         $stmt->execute([$bandaId, $like, $like]);
@@ -255,66 +277,60 @@ class UserRepository {
         )->execute([$userId, $bandaId, $perfil, $perfil]);
     }
 
-    public function findByEmail(string $email): ?array {
-        $stmt = $this->pdo->prepare('SELECT * FROM usuarios WHERE LOWER(email) = LOWER(?)');
-        $stmt->execute([$email]);
-        $row = $stmt->fetch();
-        if (!$row) return null;
-        $row['senhaHash'] = $row['senha_hash'] ?? null;
-        $row['config']    = $row['config'] ? json_decode($row['config'], true) : [];
-        return $row;
-    }
-
-    public function findByUsernameOrEmail(string $q): ?array {
-        $stmt = $this->pdo->prepare(
-            'SELECT * FROM usuarios WHERE LOWER(username)=LOWER(?) OR LOWER(email)=LOWER(?)'
-        );
-        $stmt->execute([$q, $q]);
-        $row = $stmt->fetch();
-        if (!$row) return null;
-        $row['senhaHash'] = $row['senha_hash'] ?? null;
-        $row['config']    = $row['config'] ? json_decode($row['config'], true) : [];
-        return $row;
-    }
-
     public function activate(string $userId, string $senhaHash): void {
         $this->pdo->prepare(
             'UPDATE usuarios SET ativo=1, senha_hash=? WHERE id=?'
         )->execute([$senhaHash, $userId]);
+        $this->revokeTokens($userId);
     }
 
     public function updatePassword(string $userId, string $senhaHash): void {
         $this->pdo->prepare('UPDATE usuarios SET senha_hash=? WHERE id=?')
             ->execute([$senhaHash, $userId]);
+        $this->revokeTokens($userId);
     }
 
     // ── Token management ─────────────────────────────────────────────────────
 
     public function createToken(string $userId, int $ttlSeconds = 172800): string {
-        $token    = bin2hex(random_bytes(32)); // 64-char hex
+        $token    = bin2hex(random_bytes(32));
         $expiraEm = date('Y-m-d H:i:s', time() + $ttlSeconds);
+        $this->revokeTokens($userId);
         $this->pdo->prepare(
             'INSERT INTO password_reset_tokens (token, usuario_id, expira_em, usado) VALUES (?,?,?,0)'
-        )->execute([$token, $userId, $expiraEm]);
+        )->execute([$this->hashToken($token), $userId, $expiraEm]);
         return $token;
     }
 
     /** Returns userId if token is valid and unused; null otherwise. Marks token as used. */
     public function consumeToken(string $token): ?string {
-        $stmt = $this->pdo->prepare(
-            'SELECT usuario_id, expira_em, usado FROM password_reset_tokens WHERE token=?'
-        );
-        $stmt->execute([$token]);
-        $row = $stmt->fetch();
-
-        if (!$row) return null;
-        if ($row['usado']) return null;
-        if (strtotime($row['expira_em']) < time()) return null;
-
-        $this->pdo->prepare('UPDATE password_reset_tokens SET usado=1 WHERE token=?')
-            ->execute([$token]);
-
-        return $row['usuario_id'];
+        $tokenHash = $this->hashToken($token);
+        $ownsTransaction = !$this->pdo->inTransaction();
+        if ($ownsTransaction) $this->pdo->beginTransaction();
+        try {
+            $stmt = $this->pdo->prepare(
+                'SELECT usuario_id, expira_em, usado FROM password_reset_tokens WHERE token=? FOR UPDATE'
+            );
+            $stmt->execute([$tokenHash]);
+            $row = $stmt->fetch();
+            if (!$row || $row['usado'] || strtotime($row['expira_em']) < time()) {
+                if ($ownsTransaction) $this->pdo->commit();
+                return null;
+            }
+            $updated = $this->pdo->prepare(
+                'UPDATE password_reset_tokens SET usado=1 WHERE token=? AND usado=0'
+            );
+            $updated->execute([$tokenHash]);
+            if ($updated->rowCount() !== 1) {
+                if ($ownsTransaction) $this->pdo->commit();
+                return null;
+            }
+            if ($ownsTransaction) $this->pdo->commit();
+            return $row['usuario_id'];
+        } catch (Throwable $e) {
+            if ($ownsTransaction && $this->pdo->inTransaction()) $this->pdo->rollBack();
+            throw $e;
+        }
     }
 
     /** Peek at token without consuming it — returns userId or null. */
@@ -322,9 +338,18 @@ class UserRepository {
         $stmt = $this->pdo->prepare(
             'SELECT usuario_id, expira_em, usado FROM password_reset_tokens WHERE token=?'
         );
-        $stmt->execute([$token]);
+        $stmt->execute([$this->hashToken($token)]);
         $row = $stmt->fetch();
         if (!$row || $row['usado'] || strtotime($row['expira_em']) < time()) return null;
         return $row['usuario_id'];
+    }
+
+    private function revokeTokens(string $userId): void {
+        $this->pdo->prepare('DELETE FROM password_reset_tokens WHERE usuario_id=?')
+            ->execute([$userId]);
+    }
+
+    private function hashToken(string $token): string {
+        return hash('sha256', $token);
     }
 }

@@ -1,5 +1,8 @@
 # Arquivo de environment com dados sensiveis
 .env
+.env.local
+*.env
+!.env.example
 
 # Logs
 *.log
@@ -13,6 +16,9 @@ src/backend/data/live-state.json
 # Uploads temporarios
 uploads/tmp/
 
+# Lista de espera (dados pessoais - e-mails)
+storage/waitlist.csv
+
 # Configuracoes do editor
 .vscode/
 .idea/
@@ -25,3 +31,17 @@ uploads/tmp/
 # OS generated files
 .DS_Store
 Thumbs.db
+
+# Node / Playwright
+node_modules/
+test-results/
+tests-results/
+playwright-report/
+coverage/
+tests-results.txt
+test-results-full.log
+tests/.auth/
+
+# Composer binário local
+composer.phar
+docs/evidencias-auditoria/

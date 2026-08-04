@@ -309,7 +309,7 @@ test.describe('Live — módulo cliente (window.LiveMode)', () => {
     await expect(page.locator('#liveStatus')).toHaveText('Voce e o host');
 
     // Segunda chamada: getMode() já é 'host', então assumirHostComConfirmacao
-    // deve ir direto para assumirHost() sem passar por fdmConfirm/confirm().
+    // deve ir direto para assumirHost() sem passar por cifroConfirm/confirm().
     await page.evaluate(() => window.LiveMode.assumirHost !== undefined);
     await page.evaluate(() => {
       // assumirHostComConfirmacao não é exposto em window.LiveMode diretamente,
@@ -324,7 +324,7 @@ test.describe('Live — módulo cliente (window.LiveMode)', () => {
     await page.goto('/index.php');
     await page.evaluate((key) => {
       sessionStorage.setItem(key, 'host');
-    }, 'fdmLiveMode_default');
+    }, 'cifroLiveMode_default');
     await page.evaluate(() => window.LiveMode.atualizarPaginaHost(false));
     await expect(page.locator('#liveStatus')).toHaveText('Live desconectada');
   });
@@ -336,7 +336,7 @@ test.describe('Live — módulo cliente (window.LiveMode)', () => {
     await page.evaluate((keys) => {
       sessionStorage.setItem(keys.modeKey, 'host');
       localStorage.setItem(keys.hostIdKey, 'host-offline');
-    }, { modeKey: 'fdmLiveMode_default', hostIdKey: 'fdmLiveHostId_default' });
+    }, { modeKey: 'cifroLiveMode_default', hostIdKey: 'cifroLiveHostId_default' });
     await context.setOffline(true);
     await page.evaluate(() => window.LiveMode.atualizarPaginaHost(false));
     await expect(page.locator('#liveStatus')).toHaveText('Live desconectada');
@@ -358,8 +358,8 @@ test.describe('Live — módulo cliente (window.LiveMode)', () => {
         return 'defineProperty-failed: ' + e.message;
       }
       window.LiveMode.entrarOuSairLive();
-      const salaId = (window.FDM_BAND_ID && window.FDM_BAND_ID !== '') ? window.FDM_BAND_ID : 'default';
-      return sessionStorage.getItem('fdmLiveMode_' + salaId);
+      const salaId = (window.CIFRO_BAND_ID && window.CIFRO_BAND_ID !== '') ? window.CIFRO_BAND_ID : 'default';
+      return sessionStorage.getItem('cifroLiveMode_' + salaId);
     });
     // Não deve lançar erro e o modo deve estar em 'follow' mesmo sem timer ativo.
     expect(result).toBe('follow');
@@ -492,8 +492,8 @@ test.describe('Live — módulo cliente (window.LiveMode)', () => {
     await expect(page.locator('#liveStatus')).toHaveText('Seguindo live');
   });
 
-  test('salaId usa window.FDM_BAND_ID real do servidor (chave de storage não é "default" para usuário com banda)', async ({ page }) => {
-    // O IIFE de live.js lê `window.FDM_BAND_ID` na primeira execução, e o
+  test('salaId usa window.CIFRO_BAND_ID real do servidor (chave de storage não é "default" para usuário com banda)', async ({ page }) => {
+    // O IIFE de live.js lê `window.CIFRO_BAND_ID` na primeira execução, e o
     // inline <script> do próprio index.php (que roda antes, no <head>/body)
     // já define esse valor a partir de current_band_id() no servidor — não é
     // possível sobrescrever via addInitScript porque a ordem de scripts do
@@ -505,9 +505,9 @@ test.describe('Live — módulo cliente (window.LiveMode)', () => {
       body: JSON.stringify({ success: true, hasHost: false }),
     }));
     await page.goto('/index.php');
-    const bandId = await page.evaluate(() => window.FDM_BAND_ID);
+    const bandId = await page.evaluate(() => window.CIFRO_BAND_ID);
     await page.evaluate(() => window.LiveMode.entrarOuSairLive());
-    const expectedKey = bandId ? `fdmLiveMode_${bandId}` : 'fdmLiveMode_default';
+    const expectedKey = bandId ? `cifroLiveMode_${bandId}` : 'cifroLiveMode_default';
     const mode = await page.evaluate((key) => sessionStorage.getItem(key), expectedKey);
     expect(mode).toBe('follow');
   });
@@ -687,12 +687,12 @@ test.describe('Live — módulo cliente (window.LiveMode)', () => {
     expect(updateCalls).toBe(afterFirst);
   });
 
-  test('assumirHostComConfirmacao cancelado via fdmConfirm não chama assumirHost', async ({ page }) => {
+  test('assumirHostComConfirmacao cancelado via cifroConfirm não chama assumirHost', async ({ page }) => {
     let hostCalled = false;
     await page.route('**/api/live/host.php', route => { hostCalled = true; route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, hostId: 'x' }) }); });
     await page.goto('/index.php');
     await page.evaluate(() => {
-      window.fdmConfirm = () => Promise.resolve(false);
+      window.cifroConfirm = () => Promise.resolve(false);
     });
     await page.evaluate(() => {
       const btn = document.getElementById('livePlay') || document.getElementById('liveHostButton');

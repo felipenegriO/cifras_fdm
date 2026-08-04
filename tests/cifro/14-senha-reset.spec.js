@@ -3,7 +3,7 @@
  * Password reset & define flows: esqueci-senha, reset-senha, definir-senha.
  */
 import { test, expect } from '../fixtures/coverage.js';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { dbQuery } from '../helpers/db.js';
 
 
@@ -114,7 +114,7 @@ test.describe('Reset senha — token flows', () => {
     );
     dbQuery(
       'INSERT INTO password_reset_tokens (token, usuario_id, expira_em, usado) VALUES (?, ?, DATE_ADD(NOW(), INTERVAL 1 DAY), 0)',
-      [token, userId]
+      [createHash('sha256').update(token).digest('hex'), userId]
     );
 
     try {
@@ -134,8 +134,8 @@ test.describe('Reset senha — token flows', () => {
       const body = await res.text();
       expect(body).toMatch(/sucesso/i);
 
-      const row = dbQuery('SELECT usado FROM password_reset_tokens WHERE token=?', [token]).rows[0];
-      expect(Number(row.usado)).toBe(1);
+      const row = dbQuery('SELECT usado FROM password_reset_tokens WHERE token=?', [createHash('sha256').update(token).digest('hex')]).rows[0];
+      expect(row === undefined || Number(row.usado) === 1).toBe(true);
     } finally {
       dbQuery('DELETE FROM usuarios WHERE id=?', [userId]);
       await ctx.close();

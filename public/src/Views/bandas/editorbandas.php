@@ -4,11 +4,11 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <?php csrf_meta(); ?>
-  <script src="<?= asset_url('/src/js/fdm-csrf.js') ?>"></script>
-  <script src="<?= asset_url('/src/js/fdm-confirm.js') ?>"></script>
-  <script src="<?= asset_url('/src/js/fdm-toast.js') ?>"></script>
+  <script src="<?= asset_url('/src/js/cifro-csrf.js') ?>"></script>
+  <script src="<?= asset_url('/src/js/cifro-confirm.js') ?>"></script>
+  <script src="<?= asset_url('/src/js/cifro-toast.js') ?>"></script>
   <title>Gerenciar Bandas</title>
-  <script src="/src/js/fdm-theme.js"></script>
+  <script src="/src/js/cifro-theme.js"></script>
   <link href="/src/css/fonts.css" rel="stylesheet">
   <link href="/src/css/theme.css" rel="stylesheet">
   <style>
@@ -23,11 +23,11 @@
     .banda-nome { font-size: var(--text-base); font-weight: var(--fw-medium); color: var(--text-1); }
     .banda-meta { font-size: var(--text-xs); color: var(--text-2); margin-top: 3px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
     .banda-actions { display: flex; gap: 6px; flex-shrink: 0; }
+    .banda-logo { width: 38px; height: 38px; border-radius: var(--radius-sm); background: var(--brand-soft); object-fit: contain; padding: 5px; flex-shrink: 0; }
 
     .tag { font-size: 11px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border-2); display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; color: var(--text-2); background: var(--bg-3); }
     .tag-banda     { border-color: #22c55e; color: #22c55e; background: rgba(34,197,94,.1); }
     .tag-basico    { border-color: #a78bfa; color: #a78bfa; background: rgba(167,139,250,.1); }
-    .tag-trial     { border-color: var(--warning); color: var(--warning); background: rgba(245,158,11,.1); }
     .tag-gratuito  { border-color: #38bdf8; color: #38bdf8; background: rgba(56,189,248,.1); }
     .tag-bloqueado { border-color: var(--danger); color: var(--danger); background: rgba(239,68,68,.1); }
     .tag-ativo     { border-color: #22c55e; color: #22c55e; background: rgba(34,197,94,.1); }
@@ -52,9 +52,7 @@
     .btn-icon-sm:hover { background: var(--bg-elevated); color: var(--text-1); }
     .btn-icon-sm.danger:hover { background: var(--danger); color: #fff; border-color: var(--danger); }
 
-    .plan-select { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
-    .plan-btn { padding: 4px 12px; border-radius: 999px; border: 1px solid var(--border-2); background: var(--bg-3); color: var(--text-2); font-size: 12px; cursor: pointer; transition: all var(--t-fast); }
-    .plan-btn:hover, .plan-btn.active { background: var(--brand); color: #fff; border-color: var(--brand); }
+    .plan-summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid var(--border-1); border-radius: var(--radius-sm); background: var(--bg-1); }
   </style>
 </head>
 <body>
@@ -63,7 +61,7 @@
   <div class="page-body">
     <div class="toolbar">
       <button type="button" class="btn btn--primary" onclick="abrirModalNova()">
-        <?= fdm_icon('plus', 16) ?> Nova Banda
+        <?= cifro_icon('plus', 16) ?> Nova Banda
       </button>
     </div>
 
@@ -93,30 +91,17 @@
 
       <div class="form-group">
         <label>Plano</label>
-        <div class="plan-select" id="planSelect">
-          <button type="button" class="plan-btn" data-plano="trial"     onclick="selecionarPlano('trial')">Trial</button>
-          <button type="button" class="plan-btn" data-plano="gratuito"  onclick="selecionarPlano('gratuito')">Gratuito</button>
-          <button type="button" class="plan-btn" data-plano="basico"    onclick="selecionarPlano('basico')">Básico</button>
-          <button type="button" class="plan-btn" data-plano="banda"     onclick="selecionarPlano('banda')">Banda</button>
-          <button type="button" class="plan-btn" data-plano="bloqueado" onclick="selecionarPlano('bloqueado')">Bloqueado</button>
+        <div class="plan-summary">
+          <strong id="bandaPlanoLabel">Gratuito</strong>
+          <button type="button" class="btn btn--secondary btn--sm" id="btnGerenciarPlano" onclick="gerenciarPlano()">Planos e pagamento</button>
         </div>
-        <input type="hidden" id="bandaPlano" value="trial">
         <div class="plan-hint" id="planHint"></div>
-      </div>
-
-      <div class="form-group">
-        <label for="bandaTrial">Expiração do trial / gratuito (opcional)</label>
-        <div style="display:flex;gap:8px;align-items:center">
-          <input id="bandaTrial" type="date" style="flex:1">
-          <button type="button" class="btn btn--secondary btn--sm" id="btnExtenderTrial" onclick="extenderTrial()" title="+30 dias a partir de hoje ou da data atual">+30 dias</button>
-        </div>
-        <div class="form-hint">Deixe em branco para sem expiração.</div>
       </div>
 
       <div class="modal-footer">
         <button type="button" class="btn btn--ghost" onclick="fecharModal()">Cancelar</button>
-        <button type="button" class="btn btn--danger" id="btnDeletar" onclick="deletarBanda()"><?= fdm_icon('trash', 16) ?> Deletar</button>
-        <button type="button" class="btn btn--primary" onclick="salvarBanda()"><?= fdm_icon('check', 16) ?> Salvar</button>
+        <button type="button" class="btn btn--danger" id="btnDeletar" onclick="deletarBanda()"><?= cifro_icon('trash', 16) ?> Deletar</button>
+        <button type="button" class="btn btn--primary" onclick="salvarBanda()"><?= cifro_icon('check', 16) ?> Salvar banda</button>
       </div>
     </div>
   </div>
@@ -126,13 +111,13 @@ const API = '/src/backend/bandas/salvar_banda.php';
 let bandas = [];
 let bandaAtualId = null;
 
-const PLANO_LABELS = { trial: 'Trial', gratuito: 'Gratuito', basico: 'Básico', banda: 'Banda', bloqueado: 'Bloqueado', ativo: 'Ativo' };
-const PLANO_TAG    = { trial: 'tag-trial', gratuito: 'tag-gratuito', basico: 'tag-basico', banda: 'tag-banda', bloqueado: 'tag-bloqueado', ativo: 'tag-banda' };
+const PLANO_LABELS = { trial: 'Gratuito', gratuito: 'Gratuito', mensal: 'Mensal', semestral: 'Semestral', anual: 'Anual', bloqueado: 'Bloqueado', ativo: 'Mensal' };
+const PLANO_TAG    = { trial: 'tag-gratuito', gratuito: 'tag-gratuito', mensal: 'tag-banda', semestral: 'tag-banda', anual: 'tag-banda', bloqueado: 'tag-bloqueado', ativo: 'tag-banda' };
 const PLANO_LIMITES = {
-  trial:    '✓ Ilimitado (30 dias)',
-  gratuito: '1 usuário · 10 músicas · sem playlists · expira em 30 dias',
-  basico:   '1 usuário · 50 músicas · 1 playlist · R$5/mês',
-  banda:    '✓ Ilimitado',
+  gratuito: '1 banda · 10 músicas',
+  mensal:   '✓ Ilimitado',
+  semestral:'✓ Ilimitado',
+  anual:    '✓ Ilimitado',
   bloqueado:'✗ Acesso bloqueado',
   ativo:    '✓ Ilimitado',
 };
@@ -156,15 +141,16 @@ function renderListaBandas() {
     return;
   }
   bandas.forEach(b => {
-    const plano = b.plano || 'trial';
+    const plano = b.plano === 'trial' ? 'gratuito' : (b.plano || 'gratuito');
     const li = document.createElement('li');
     li.className = 'banda-row';
+    const logo = b.logo || '/src/images/cifro-mark.svg';
     li.innerHTML = `
+      <img class="banda-logo" src="${escapeHtml(logo)}" alt="">
       <div class="banda-info">
         <div class="banda-nome">${escapeHtml(b.nome)}</div>
         <div class="banda-meta">
           <span class="tag ${PLANO_TAG[plano] || ''}">${PLANO_LABELS[plano] || plano}</span>
-          ${b.trial_expira_em ? `<span class="tag">expira ${formatarData(b.trial_expira_em)}</span>` : ''}
           ${!b.ativo || String(b.ativo) === '0' ? '<span class="tag">Inativa</span>' : ''}
         </div>
       </div>
@@ -180,28 +166,17 @@ function renderListaBandas() {
   });
 }
 
-function extenderTrial() {
-  const input = document.getElementById('bandaTrial');
-  const base = input.value ? new Date(input.value + 'T00:00:00') : new Date();
-  base.setDate(base.getDate() + 30);
-  input.value = base.toISOString().slice(0, 10);
-}
-
 function escapeHtml(str) {
   return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-function formatarData(data) {
-  if (!data || !/^\d{4}-\d{2}-\d{2}$/.test(data)) return data;
-  const [a, m, d] = data.split('-');
-  return `${d}/${m}/${a}`;
-}
-
-function selecionarPlano(plano) {
-  document.getElementById('bandaPlano').value = plano;
-  document.querySelectorAll('.plan-btn').forEach(b => b.classList.toggle('active', b.dataset.plano === plano));
-  const hint = document.getElementById('planHint');
-  if (hint) hint.textContent = PLANO_LIMITES[plano] || '';
+function mostrarPlano(plano, novaBanda = false) {
+  const normalizado = plano === 'trial' ? 'gratuito' : (plano || 'gratuito');
+  document.getElementById('bandaPlanoLabel').textContent = PLANO_LABELS[normalizado] || normalizado;
+  document.getElementById('planHint').textContent = novaBanda
+    ? 'A nova banda começa no plano gratuito. A contratação será feita na tela de pagamento.'
+    : (PLANO_LIMITES[normalizado] || '');
+  document.getElementById('btnGerenciarPlano').style.display = novaBanda ? 'none' : '';
 }
 
 function abrirModalNova() {
@@ -209,9 +184,8 @@ function abrirModalNova() {
   document.getElementById('modalTitle').textContent = 'Nova Banda';
   document.getElementById('bandaNome').value = '';
   document.getElementById('bandaAtivo').value = '1';
-  document.getElementById('bandaTrial').value = '';
   document.getElementById('btnDeletar').style.display = 'none';
-  selecionarPlano('trial');
+  mostrarPlano('gratuito', true);
   document.getElementById('modalOverlay').classList.add('open');
   document.getElementById('bandaNome').focus();
 }
@@ -223,9 +197,8 @@ function abrirModalEditar(id) {
   document.getElementById('modalTitle').textContent = 'Editar Banda';
   document.getElementById('bandaNome').value = b.nome || '';
   document.getElementById('bandaAtivo').value = (!!b.ativo && String(b.ativo) !== '0') ? '1' : '0';
-  document.getElementById('bandaTrial').value = b.trial_expira_em || '';
   document.getElementById('btnDeletar').style.display = '';
-  selecionarPlano(b.plano || 'trial');
+  mostrarPlano(b.plano);
   document.getElementById('modalOverlay').classList.add('open');
   document.getElementById('bandaNome').focus();
 }
@@ -240,33 +213,51 @@ document.getElementById('modalOverlay').addEventListener('click', function(e) {
 
 async function salvarBanda() {
   const nome = document.getElementById('bandaNome').value.trim();
-  if (!nome) { fdmToast('Nome é obrigatório.', 'error'); return; }
+  if (!nome) { cifroToast('Nome é obrigatório.', 'error'); return; }
 
   const payload = {
     action: 'save',
     id: bandaAtualId || undefined,
     nome,
     ativo: parseInt(document.getElementById('bandaAtivo').value, 10),
-    plano: document.getElementById('bandaPlano').value,
-    trial_expira_em: document.getElementById('bandaTrial').value || null,
+    trial_expira_em: null,
   };
 
   try {
-    const res = await fdmFetch(API, payload);
+    const res = await cifroFetch(API, payload);
     if (res.sucesso) {
-      fdmToast('Banda salva!', 'success');
+      cifroToast('Banda salva!', 'success');
       fecharModal();
+      if (!bandaAtualId && res.id) {
+        await selecionarBandaParaPagamento(res.id);
+        return;
+      }
       await carregarBandas();
     } else {
-      fdmToast(res.mensagem || 'Erro ao salvar.', 'error');
+      cifroToast(res.mensagem || 'Erro ao salvar.', 'error');
     }
   } catch (e) {
-    fdmToast('Erro ao salvar.', 'error');
+    cifroToast('Erro ao salvar.', 'error');
+  }
+}
+
+async function selecionarBandaParaPagamento(id) {
+  const res = await cifroFetch('/src/backend/bandas/selecionar.php', { bandaId: id });
+  if (!res.sucesso) throw new Error(res.mensagem || 'Não foi possível selecionar a banda.');
+  window.location.href = '/plano.php#planos';
+}
+
+async function gerenciarPlano() {
+  if (!bandaAtualId) return;
+  try {
+    await selecionarBandaParaPagamento(bandaAtualId);
+  } catch (e) {
+    cifroToast(e.message || 'Não foi possível abrir o pagamento.', 'error');
   }
 }
 
 async function confirmarDeletar(id, nome) {
-  const ok = await fdmConfirm({
+  const ok = await cifroConfirm({
     title: 'Deletar banda',
     message: 'A banda <strong>' + escapeHtml(nome) + '</strong> e todos os seus dados serão removidos permanentemente.',
     confirmText: 'Sim, deletar',
@@ -275,15 +266,15 @@ async function confirmarDeletar(id, nome) {
   });
   if (!ok) return;
   try {
-    const res = await fdmFetch(API, { action: 'delete', id });
+    const res = await cifroFetch(API, { action: 'delete', id });
     if (res.sucesso) {
-      fdmToast('Banda deletada.', 'success');
+      cifroToast('Banda deletada.', 'success');
       await carregarBandas();
     } else {
-      fdmToast(res.mensagem || 'Erro ao deletar.', 'error');
+      cifroToast(res.mensagem || 'Erro ao deletar.', 'error');
     }
   } catch (e) {
-    fdmToast('Erro ao deletar.', 'error');
+    cifroToast('Erro ao deletar.', 'error');
   }
 }
 
@@ -294,7 +285,7 @@ function deletarBanda() {
   if (b) confirmarDeletar(b.id, b.nome);
 }
 
-async function fdmFetch(url, payload) {
+async function cifroFetch(url, payload) {
   const res = await fetch(url, {
     method: 'POST',
     headers: {

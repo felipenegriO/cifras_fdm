@@ -5,7 +5,7 @@ test.use({ storageState: 'tests/.auth/user.json' });
 async function openMusicPreview(page) {
   await page.goto('/index.php');
   await page.evaluate(() => {
-    sessionStorage.setItem('fdmEditorPreview', JSON.stringify({
+    sessionStorage.setItem('cifroEditorPreview', JSON.stringify({
       id: 990001,
       nome: 'Cobertura do modo ensaio',
       artista: 'Teste E2E',
@@ -152,7 +152,7 @@ test('usuário recebe retorno quando metadados ou download do vídeo falham', as
 test('bootstrap não faz nada quando a página não tem id de música', async ({ page }) => {
   await page.goto('/index.php');
   await page.evaluate(() => {
-    sessionStorage.setItem('fdmEditorPreview', JSON.stringify({
+    sessionStorage.setItem('cifroEditorPreview', JSON.stringify({
       id: 990002,
       nome: 'Sem id na URL',
       artista: 'Teste E2E',
@@ -236,7 +236,7 @@ test('controles de reprodução sem áudio carregado não quebram e usam mockPla
   await page.locator('#btnPitchReset').click();
   await expect(page.locator('#pitchLabel')).toContainText('0');
 
-  // Define um mockPlayer global: getPlayer() passa a retornar window.mockPlayer nos botões de pitch.
+  // Um objeto global não substitui o player interno: os controles continuam inertes sem áudio.
   await page.evaluate(() => {
     let semitones = 0;
     window.mockPlayer = {
@@ -245,7 +245,7 @@ test('controles de reprodução sem áudio carregado não quebram e usam mockPla
     };
   });
   await page.locator('#btnPitchUp').click();
-  await expect(page.locator('#pitchLabel')).toContainText('+1');
+  await expect(page.locator('#pitchLabel')).toContainText('0');
 });
 
 test('carrega um segundo arquivo de áudio reutilizando o player e cobre fallback de nome', async ({ page }) => {
@@ -270,14 +270,14 @@ test('carrega um segundo arquivo de áudio reutilizando o player e cobre fallbac
     input.files = dt.files;
     input.dispatchEvent(new Event('change', { bubbles: true }));
   }, [Array.from(tone.buffer)]);
-  await expect(page.locator('#audioFileName')).toContainText('uploaded', { timeout: 10000 });
+  await expect(page.locator('#audioFileName')).toContainText('segundo.wav', { timeout: 10000 });
 
   // Evento "change" sem nenhum arquivo selecionado -> handleAudioFile(null) retorna cedo.
   await page.evaluate(() => {
     const input = document.getElementById('inputAudio');
     input.dispatchEvent(new Event('change', { bubbles: true }));
   });
-  await expect(page.locator('#audioFileName')).toContainText('uploaded');
+  await expect(page.locator('#audioFileName')).toContainText('segundo.wav');
 });
 
 test('ordena região A/B em ambas as direções cobrindo os ramos de comparação', async ({ page }) => {

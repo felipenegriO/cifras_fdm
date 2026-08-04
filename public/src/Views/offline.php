@@ -32,7 +32,7 @@
 <body>
   <div class="card">
     <h1>Sem conexao</h1>
-    <p>Voce esta offline. As musicas e playlists que ja foram abertas continuam disponiveis.</p>
+    <p>O servidor está indisponível. As músicas e repertórios salvos continuam disponíveis; sincronize novamente quando a conexão voltar.</p>
   </div>
 </body>
 </html>

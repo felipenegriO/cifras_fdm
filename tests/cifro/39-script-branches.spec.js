@@ -3,7 +3,7 @@
  * Cobertura de branches residuais de public/src/js/script.js:
  * openSideMenu sem window.renderPlaylistsMenu, handlers de
  * menu/menuTop/menuClose/close com elementos ausentes, o listener de
- * clique fora fechando sideMenu de fato, fdmSwMessage com controller
+ * clique fora fechando sideMenu de fato, cifroSwMessage com controller
  * ativo, e o registro de service worker quando 'serviceWorker' não
  * está em navigator.
  */
@@ -14,8 +14,8 @@ test.use({ storageState: 'tests/.auth/user.json' });
 async function openPreview(page) {
   await page.goto('/index.php');
   await page.evaluate((song) => {
-    sessionStorage.setItem('fdmEditorPreview', JSON.stringify(song));
-    sessionStorage.removeItem('fdmSetlist');
+    sessionStorage.setItem('cifroEditorPreview', JSON.stringify(song));
+    sessionStorage.removeItem('cifroSetlist');
   }, { id: 80, nome: 'Matriz script.js', artista: '', bit: '', cifra: '<b>C G Am F</b><br>' });
   await page.goto('/music.php?id=80&editorPreview=1');
   await expect(page.locator('#song-cifra')).toBeVisible();
@@ -132,7 +132,7 @@ test('script.js — clique dentro do próprio sideMenu não fecha o painel', asy
   await expect(page.locator('#sideMenu')).toHaveCSS('right', '0px');
 });
 
-test('script.js — fdmSwMessage envia mensagem quando há controller ativo', async ({ page }) => {
+test('script.js — cifroSwMessage envia mensagem quando há controller ativo', async ({ page }) => {
   await openPreview(page);
   const posted = await page.evaluate(() => {
     let received = null;
@@ -140,7 +140,7 @@ test('script.js — fdmSwMessage envia mensagem quando há controller ativo', as
       configurable: true,
       value: { controller: { postMessage: (msg) => { received = msg; } } },
     });
-    fdmSwMessage({ type: 'TESTE_CONTROLLER' });
+    cifroSwMessage({ type: 'TESTE_CONTROLLER' });
     return received;
   });
   expect(posted).toEqual({ type: 'TESTE_CONTROLLER' });

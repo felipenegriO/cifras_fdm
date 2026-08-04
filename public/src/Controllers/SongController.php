@@ -6,11 +6,11 @@ class SongController {
         $this->songsFile = $songsFile;
     }
 
-    public function save() {
+    public function save(?string $requestBody = null) {
         require_admin();
-        header('Content-Type: application/json');
+        if (!headers_sent()) header('Content-Type: application/json');
 
-        $raw = file_get_contents('php://input');
+        $raw = $requestBody ?? file_get_contents('php://input');
         $data = json_decode($raw, true);
 
         if (json_last_error() !== JSON_ERROR_NONE) {
@@ -96,9 +96,9 @@ class SongController {
         );
 
         $novoConteudo = 'var songs = ' . $novoConteudo . ';';
-        fdm_backup_file($this->songsFile);
+        cifro_backup_file($this->songsFile);
         file_put_contents($this->songsFile, $novoConteudo);
-        fdm_bump_cache_version();
+        cifro_bump_cache_version();
 
         echo json_encode(['ok' => true]);
     }

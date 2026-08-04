@@ -69,6 +69,25 @@ final class GoogleAuthServiceTest extends TestCase
         self::assertCount(1, $result['bandas']);
     }
 
+    public function testResolveOrCreateUserUsaEmailQuandoNomeGoogleVazio(): void
+    {
+        $users = $this->createMock(UserRepository::class);
+        $users->method('findByGoogleSub')->willReturn(null);
+        $users->method('findByEmail')->willReturn(null);
+        $users->expects(self::once())->method('save')->with(self::callback(
+            fn(array $user): bool => $user['nome'] === 'user@example.com'
+        ));
+
+        $bandas = $this->createMock(BandaRepository::class);
+        $bandas->expects(self::once())->method('save')->with(self::callback(
+            fn(array $banda): bool => $banda['nome'] === 'Minha Banda'
+        ));
+
+        $result = (new GoogleAuthService($users, $bandas))->resolveOrCreateUser($this->payload(['name' => '   ']));
+
+        self::assertSame('user@example.com', $result['nome']);
+    }
+
     public function testResolveOrCreateUserRejeitaEmailNaoVerificado(): void
     {
         $users = $this->createMock(UserRepository::class);
@@ -97,5 +116,34 @@ final class GoogleAuthServiceTest extends TestCase
         $service = new GoogleAuthService($this->createMock(UserRepository::class), $this->createMock(BandaRepository::class));
         $this->expectException(\RuntimeException::class);
         $service->exchangeCodeForIdToken('code', 'id', 'secret', 'uri', fn($url, $fields) => ['error' => 'invalid_grant']);
+    }
+
+    /** Exercises the real default postFormReal() without touching the network. */
+    private function callPostFormReal(GoogleAuthService $service, string $url): array
+    {
+        $ref = new ReflectionMethod(GoogleAuthService::class, 'postFormReal');
+        $ref->setAccessible(true);
+        return $ref->invoke($service, $url, ['a' => 'b']);
+    }
+
+    public function testPostFormRealDecodificaRespostaJsonValida(): void
+    {
+        $service = new GoogleAuthService($this->createMock(UserRepository::class), $this->createMock(BandaRepository::class));
+        $url = 'data://text/plain,' . rawurlencode(json_encode(['id_token' => 'xyz']));
+        $result = $this->callPostFormReal($service, $url);
+        self::assertSame(['id_token' => 'xyz'], $result);
+    }
+
+    public function testPostFormRealRetornaArrayVazioParaRespostaNaoJson(): void
+    {
+        $service = new GoogleAuthService($this->createMock(UserRepository::class), $this->createMock(BandaRepository::class));
+        $url = 'data://text/plain,' . rawurlencode('not json');
+        self::assertSame([], $this->callPostFormReal($service, $url));
+    }
+
+    public function testPostFormRealRetornaArrayVazioQuandoUrlInvalida(): void
+    {
+        $service = new GoogleAuthService($this->createMock(UserRepository::class), $this->createMock(BandaRepository::class));
+        self::assertSame([], $this->callPostFormReal($service, 'http://url-invalida.invalid.test.local/x'));
     }
 }

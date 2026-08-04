@@ -14,6 +14,6 @@ require_csrf();
 $input = json_decode(file_get_contents('php://input'), true);
 if (!is_array($input)) $input = $_POST;
 
-$salaId  = current_band_id() ?: ($input['salaId'] ?? 'default');
+$salaId  = require_current_band_json();
 $service = new LiveStateService(new LiveStateRepository());
 echo json_encode($service->assumirHost($salaId, $_SESSION['usuario'] ?? []));

@@ -65,7 +65,7 @@ test.describe('Headers HTTP de segurança', () => {
   test('index.php tem X-Frame-Options', async ({ page }) => {
     const res = await page.request.get('/index.php');
     const header = res.headers()['x-frame-options'];
-    expect(header?.toLowerCase()).toBe('deny');
+    expect(header?.toLowerCase()).toBe('sameorigin');
   });
 
   test('landing.php tem Referrer-Policy', async ({ page }) => {

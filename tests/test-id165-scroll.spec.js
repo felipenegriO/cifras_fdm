@@ -1,17 +1,18 @@
-import { test } from '@playwright/test';
+import { test } from './fixtures/coverage.js';
 import { fazerLogin } from './helpers/auth';
 
-test('id 165 should NOT have double vertical scroll', async ({ page, context, viewport }) => {
-  test.setTimeout(60000);
-  
-  // First do login to ensure authenticated
+test('cifra não deve ter rolagem vertical dupla', async ({ page }) => {
   await fazerLogin(page);
-  
-  // Navigate to id 165
-  await page.goto('http://localhost:8090/music.php?id=165', { waitUntil: 'domcontentloaded' });
-  
-  // Wait for the container to load
-  await page.waitForSelector('#song-cifra', { state: 'visible', timeout: 15000 });
+  await page.evaluate(song => sessionStorage.setItem('cifroEditorPreview', JSON.stringify(song)), {
+    id: 0,
+    nome: '__SCROLL_VISUAL_TEST__',
+    artista: 'Playwright',
+    bit: '120',
+    cifra: Array.from({ length: 40 }, (_, index) => `<p>C G Am F</p><p>Linha ${index + 1} para validar rolagem.</p>`).join(''),
+  });
+  await page.goto('/music.php?editorPreview=1', { waitUntil: 'domcontentloaded' });
+
+  await page.locator('#song-cifra').waitFor({ state: 'visible', timeout: 15000 });
 
   // Get container and check scrollbars
   const containerScroll = await page.evaluate(() => {
@@ -37,28 +38,10 @@ test('id 165 should NOT have double vertical scroll', async ({ page, context, vi
     };
   });
 
-  console.log('=== ID 165 Scroll Analysis ===');
-  console.log(JSON.stringify(containerScroll, null, 2));
-
-  // Should NOT have TWO separate scrollbars
   const containerHasScroll = containerScroll.hasContainerScroll;
   const bodyHasScroll = containerScroll.hasBodyScroll;
   const hasDoubleScroll = containerHasScroll && bodyHasScroll;
-
   if (hasDoubleScroll) {
-    console.warn('WARNING: Double scroll detected!');
-    console.warn(`  - Container scroll: ${containerScroll.scrollHeight} > ${containerScroll.clientHeight}`);
-    console.warn(`  - Body scroll: ${containerScroll.bodyScrollHeight} > ${containerScroll.bodyClientHeight}`);
-  }
-
-  // Expectations
-  console.log(`\nContainer has scroll: ${containerHasScroll}`);
-  console.log(`Body has scroll: ${bodyHasScroll}`);
-  console.log(`Double scroll issue: ${hasDoubleScroll}`);
-
-  // The test: we should NOT have BOTH container and body scroll active
-  // Either container scroll OR body scroll, but not both
-  if (hasDoubleScroll) {
-    throw new Error(`Double vertical scroll detected on id 165! Container overflow, Body scroll both active.`);
+    throw new Error('Rolagem vertical dupla detectada na prévia da música.');
   }
 });

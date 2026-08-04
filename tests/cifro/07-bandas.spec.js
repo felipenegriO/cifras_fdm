@@ -39,12 +39,11 @@ test.describe('Tela de Bandas (master)', () => {
     await expect(page.locator('#bandaNome')).toBeVisible();
   });
 
-  test('botões de plano estão presentes no modal', async ({ page }) => {
+  test('nova banda não permite ativar plano sem pagamento', async ({ page }) => {
     await page.click('button[onclick*="abrirModalNova"]');
-    const planBtns = page.locator('.plan-btn');
-    await expect(planBtns).toHaveCount(5);
-    await expect(page.locator('.plan-btn[data-plano="gratuito"]')).toBeVisible();
-    await expect(page.locator('.plan-btn[data-plano="trial"]')).toHaveCount(0);
+    await expect(page.locator('.plan-btn')).toHaveCount(0);
+    await expect(page.locator('#bandaPlanoLabel')).toHaveText('Gratuito');
+    await expect(page.locator('#planHint')).toContainText('tela de pagamento');
   });
 
   test('fecha modal ao clicar Cancelar', async ({ page }) => {
@@ -131,10 +130,10 @@ test.describe('API de Bandas', () => {
     });
     const missingBody = await missingToggle.json();
     expect(missingBody.sucesso).toBeFalsy();
-    expect(missingBody.mensagem).toContain('não encontrada');
+    expect(missingBody.mensagem).toContain('confirmação do pagamento');
   });
 
-  test('POST atualiza banda existente e normaliza plano trial para gratuito', async ({ page }) => {
+  test('POST atualiza banda sem permitir alteração direta do plano', async ({ page }) => {
     const id = `__BANDA_UPDATE_${Date.now()}__`;
     const create = await page.request.post(API, {
       data: JSON.stringify({ action: 'save', id, nome: '__BANDA_UPDATE__', logo: 'logo.svg', ativo: 1, plano: 'trial' }),
@@ -152,7 +151,7 @@ test.describe('API de Bandas', () => {
       data: JSON.stringify({ action: 'toggle_plano', id, plano: 'trial' }),
       headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
     });
-    expect((await toggle.json()).sucesso).toBeTruthy();
+    expect((await toggle.json()).sucesso).toBeFalsy();
 
     const all = await (await page.request.get(API)).json();
     const saved = all.find(banda => banda.id === id);

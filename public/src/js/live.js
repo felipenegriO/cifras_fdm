@@ -1,11 +1,10 @@
 (function () {
-    const salaId = (window.FDM_BAND_ID && window.FDM_BAND_ID !== '') ? window.FDM_BAND_ID : 'default';
+    const salaId = (window.CIFRO_BAND_ID && window.CIFRO_BAND_ID !== '') ? window.CIFRO_BAND_ID : 'default';
     const apiBase = '/api/live';
-    const hostIdKey = 'fdmLiveHostId_' + salaId;
-    const modeKey = 'fdmLiveMode_' + salaId;
-    const pollMs = 1800;
-    const keepAliveMs = 10000;
-    const scrollSyncMs = 700;
+    const hostIdKey = 'cifroLiveHostId_' + salaId;
+    const modeKey = 'cifroLiveMode_' + salaId;
+    const pollMs = 2500;
+    const keepAliveMs = 15000;
 
     let pollingTimer = null;
     let keepAliveTimer = null;
@@ -20,6 +19,9 @@
     let statusTicker = null;
     let ignoreFollowerScrollUntil = 0;
     let disconnectedActive = false;
+    let unchangedPolls = 0;
+    let lastPublishedScroll = '';
+    let scrollPublishTimer = null;
 
     function getMode() {
         return sessionStorage.getItem(modeKey) || '';
@@ -74,7 +76,7 @@
     }
 
     function hostDisplayName(data) {
-        const nome = data && (data.hostNome || data.hostUsername);
+        const nome = data && data.hostNome;
         return String(nome || '').trim();
     }
 
@@ -93,19 +95,19 @@
         if (hostBtn) {
             hostBtn.classList.toggle('active', mode === 'host');
             if (mode === 'host') {
-                hostBtn.innerHTML = '<i class="fa-solid fa-broadcast-tower"></i> VOCE E O HOST';
+                hostBtn.textContent = 'Você está transmitindo';
             } else if (Date.now() < hostConfirmUntil) {
-                hostBtn.innerHTML = '<i class="fa-solid fa-check"></i> CONFIRMAR HOST';
+                hostBtn.textContent = 'Confirmar início';
             } else {
-                hostBtn.innerHTML = '<i class="fa-solid fa-broadcast-tower"></i> VIRAR HOST';
+                hostBtn.textContent = 'Iniciar como líder';
             }
         }
 
         if (followBtn) {
             followBtn.classList.toggle('active', mode === 'follow');
-            followBtn.innerHTML = mode === 'follow'
-                ? '<i class="fa-solid fa-stop"></i> SAIR DO MODO LIVE'
-                : '<i class="fa-solid fa-play"></i> ENTRAR NO MODO LIVE';
+            followBtn.textContent = mode === 'follow'
+                ? 'Sair da sessão'
+                : 'Entrar na sessão';
         }
     }
 
@@ -221,8 +223,11 @@
             link.href = status.paginaAtual;
             link.innerHTML = '<i class="fa-solid fa-play"></i> IR PARA LIVE';
             wrapper.style.display = 'block';
+            wrapper.setAttribute('aria-hidden', 'false');
         } else {
             wrapper.style.display = 'none';
+            wrapper.setAttribute('aria-hidden', 'true');
+            link.removeAttribute('href');
         }
 
         if (window.__reflowCifra) {
@@ -248,7 +253,7 @@
     }
 
     async function assumirHost() {
-        if (!navigator.onLine) {
+        if (!window.CifroConnectivity?.isServerAvailable()) {
             setDisconnectedStatus();
             return;
         }
@@ -278,22 +283,22 @@
 
     async function assumirHostComConfirmacao() {
         if (getMode() === 'host') { assumirHost(); return; }
-        if (typeof fdmConfirm === 'function') {
-            fdmConfirm({
+        if (typeof cifroConfirm === 'function') {
+            const confirmed = await cifroConfirm({
                 title: 'Virar Host',
                 message: 'Você vai assumir o controle da música para todos os participantes.',
-                confirmLabel: 'Virar Host',
-                cancelLabel: 'Cancelar',
-                onConfirm: function () { assumirHost(); }
+                confirmText: 'Virar Host',
+                cancelText: 'Cancelar'
             });
+            if (confirmed) await assumirHost();
         } else {
-            if (confirm('Virar Host? Você vai controlar a música para todos.')) assumirHost();
+            if (confirm('Virar Host? Você vai controlar a música para todos.')) await assumirHost();
         }
     }
 
     async function atualizarHost(keepAlive) {
         if (getMode() !== 'host' || hostBusy) return;
-        if (!navigator.onLine) {
+        if (!window.CifroConnectivity?.isServerAvailable()) {
             setDisconnectedStatus();
             return;
         }
@@ -342,20 +347,12 @@
     function startKeepAlive() {
         stopKeepAlive();
         keepAliveTimer = setInterval(() => atualizarHost(true), keepAliveMs);
-        if (getMode() === 'host') {
-            window.clearInterval(window.__fdmLiveScrollTimer);
-            window.__fdmLiveScrollTimer = setInterval(() => atualizarHost(true), scrollSyncMs);
-        }
     }
 
     function stopKeepAlive() {
         if (keepAliveTimer) {
             clearInterval(keepAliveTimer);
             keepAliveTimer = null;
-        }
-        if (window.__fdmLiveScrollTimer) {
-            clearInterval(window.__fdmLiveScrollTimer);
-            window.__fdmLiveScrollTimer = null;
         }
     }
 
@@ -377,7 +374,7 @@
 
     function startPolling() {
         stopPolling();
-        pollingTimer = setInterval(consultarStatus, pollMs);
+        if (document.visibilityState !== 'hidden') pollingTimer = setTimeout(consultarStatus, pollMs);
     }
 
     function stopPolling() {
@@ -390,7 +387,7 @@
 
     async function consultarStatus() {
         if (pollingBusy) return;
-        if (!navigator.onLine) {
+        if (!window.CifroConnectivity?.isServerAvailable()) {
             setDisconnectedStatus();
             return;
         }
@@ -423,8 +420,11 @@
 
             if (getMode() === 'follow') {
                 setStatus('Seguindo live', 'follow');
-                const changed = lastVersion !== status.version || lastStatusPage !== status.paginaAtual;
-                lastVersion = status.version;
+                const incomingVersion = Number(status.version || 0);
+                const changed = lastVersion === null || incomingVersion > Number(lastVersion);
+                unchangedPolls = changed ? 0 : Math.min(unchangedPolls + 1, 5);
+                if (!changed) return;
+                lastVersion = incomingVersion;
                 lastStatusPage = status.paginaAtual;
 
                 if (changed && status.paginaAtual && status.paginaAtual !== 'index.php' && !samePage(status.paginaAtual)) {
@@ -437,7 +437,23 @@
             setDisconnectedStatus();
         } finally {
             pollingBusy = false;
+            if (getMode() === 'follow' && document.visibilityState !== 'hidden') {
+                clearTimeout(pollingTimer);
+                pollingTimer = setTimeout(consultarStatus, Math.min(8000, pollMs + unchangedPolls * 1100));
+            }
         }
+    }
+
+    function publishScrollIfChanged() {
+        if (getMode() !== 'host' || document.visibilityState === 'hidden') return;
+        clearTimeout(scrollPublishTimer);
+        scrollPublishTimer = setTimeout(function () {
+            const scroll = currentScrollState();
+            const signature = scroll.canSync ? `${Math.round(scroll.scrollTop)}:${Math.round(scroll.scrollPercent || 0)}` : 'none';
+            if (signature === lastPublishedScroll) return;
+            lastPublishedScroll = signature;
+            atualizarHost(false);
+        }, 350);
     }
 
     function bind() {
@@ -471,8 +487,6 @@
             setStatus('Seguindo live', 'follow');
             consultarStatus();
             startPolling();
-        } else {
-            consultarStatus();
         }
     }
 
@@ -486,11 +500,33 @@
         }
     }, 1000);
 
-    window.addEventListener('online', function () {
+    async function resumeAfterServerCheck() {
+        if (window.CifroConnectivity && !await window.CifroConnectivity.probe()) {
+            setDisconnectedStatus();
+            return;
+        }
         if (getMode() === 'host') {
             atualizarHost(false);
-        } else {
+        } else if (getMode() === 'follow') {
             consultarStatus();
+        }
+    }
+
+    window.addEventListener('online', function () {
+        resumeAfterServerCheck();
+    });
+
+    window.addEventListener('scroll', publishScrollIfChanged, { passive: true });
+    document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'hidden') {
+            stopPolling();
+            return;
+        }
+        if (getMode() === 'follow') {
+            resumeAfterServerCheck();
+            startPolling();
+        } else if (getMode() === 'host') {
+            resumeAfterServerCheck();
         }
     });
 

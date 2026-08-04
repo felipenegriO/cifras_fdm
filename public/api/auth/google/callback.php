@@ -11,18 +11,18 @@ $expectedState = $_SESSION['google_oauth_state'] ?? '';
 unset($_SESSION['google_oauth_state']);
 $receivedState = $_GET['state'] ?? '';
 
-if ($expectedState === '' || !is_string($receivedState) || !hash_equals($expectedState, $receivedState)) {
+if (!GoogleCallbackValidator::isStateValid($expectedState, $receivedState)) {
     googleLoginFailed('state mismatch');
 }
 
-if (!empty($_GET['error'])) {
+if (GoogleCallbackValidator::userCancelled($_GET)) {
     error_log('[google-auth] user cancelled: ' . $_GET['error']);
     header('Location: /login.php?erro=google');
     exit;
 }
 
-$code = $_GET['code'] ?? '';
-if (!is_string($code) || $code === '') {
+$code = GoogleCallbackValidator::extractCode($_GET);
+if ($code === null) {
     googleLoginFailed('missing code');
 }
 
@@ -30,7 +30,7 @@ $clientId = trim((string) env('GOOGLE_CLIENT_ID', ''));
 $clientSecret = trim((string) env('GOOGLE_CLIENT_SECRET', ''));
 $redirectUri = trim((string) env('GOOGLE_REDIRECT_URI', ''));
 
-if ($clientId === '' || $clientSecret === '' || $redirectUri === '') {
+if (!GoogleCallbackValidator::isConfigured($clientId, $clientSecret, $redirectUri)) {
     googleLoginFailed('not configured');
 }
 
@@ -42,8 +42,19 @@ try {
     $idToken = $googleAuth->exchangeCodeForIdToken($code, $clientId, $clientSecret, $redirectUri);
     $payload = GoogleJwtVerifier::verify($idToken, $clientId);
     $user = $googleAuth->resolveOrCreateUser($payload);
+    $legalAcceptance = $_SESSION['google_legal_acceptance'] ?? null;
+    unset($_SESSION['google_legal_acceptance']);
+    if (is_array($legalAcceptance)) {
+        $ip = (string) ($_SERVER['REMOTE_ADDR'] ?? '');
+        $userRepository->recordLegalAcceptance(
+            $user['id'],
+            (string) ($legalAcceptance['terms'] ?? ''),
+            (string) ($legalAcceptance['privacy'] ?? ''),
+            $ip === '' ? null : hash_hmac('sha256', $ip, (string) env('ENCRYPTION_KEY', 'local-test-key'))
+        );
+    }
 } catch (\Throwable $e) {
-    googleLoginFailed($e->getMessage());
+    googleLoginFailed('authentication failure type=' . get_class($e));
 }
 
 $appDebug = strtolower((string) env('APP_DEBUG', 'false')) === 'true';

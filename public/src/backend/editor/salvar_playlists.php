@@ -12,27 +12,70 @@ if (!$data) {
     exit;
 }
 
-if (isset($data['playlists']) && is_array($data['playlists'])) {
-    $playlists = $data['playlists'];
-} elseif (is_array($data)) {
-    $playlists = [];
-    foreach ($data as $nome => $itens) {
-        if (is_array($itens)) $playlists[] = ['nome' => $nome, 'itens' => $itens];
-    }
-} else {
+$playlists = PlaylistFormValidator::normalizarEntrada($data);
+if ($playlists === null) {
     http_response_code(400);
     echo json_encode(['sucesso' => false, 'mensagem' => 'Estrutura inválida.']);
     exit;
 }
 
+$musicIds = [];
+$playlistNames = [];
+foreach ($playlists as $playlist) {
+    if (!is_array($playlist)) {
+        http_response_code(422);
+        echo json_encode(['sucesso' => false, 'mensagem' => 'Playlist inválida.']);
+        exit;
+    }
+    $nome = trim((string)($playlist['nome'] ?? ''));
+    $itens = $playlist['itens'] ?? null;
+    $visivelAte = trim((string)($playlist['visivel_ate'] ?? ''));
+    if (!PlaylistFormValidator::isNomeEItensValidos($nome, $itens)) {
+        http_response_code(422);
+        echo json_encode(['sucesso' => false, 'mensagem' => 'Nome ou itens da playlist inválidos.']);
+        exit;
+    }
+    $normalizedName = mb_strtolower($nome);
+    if (isset($playlistNames[$normalizedName])) {
+        http_response_code(422);
+        echo json_encode(['sucesso' => false, 'mensagem' => 'Não é permitido repetir o nome da playlist.']);
+        exit;
+    }
+    $playlistNames[$normalizedName] = true;
+    if (!PlaylistFormValidator::isVisivelAteValido($visivelAte)) {
+        http_response_code(422);
+        echo json_encode(['sucesso' => false, 'mensagem' => 'Data de visibilidade inválida.']);
+        exit;
+    }
+    foreach ($itens as $item) {
+        $id = PlaylistFormValidator::validarItem($item);
+        if ($id === null) {
+            http_response_code(422);
+            echo json_encode(['sucesso' => false, 'mensagem' => 'Música ou tom inválido na playlist.']);
+            exit;
+        }
+        $musicIds[$id] = true;
+    }
+}
+
 $bandaId = current_band_id();
 
-$limits = fdm_plan_limits($_SESSION['banda_atual']['plano'] ?? 'bloqueado');
-$maxPlaylists = $limits['playlists'];
-if ($maxPlaylists !== -1 && count($playlists) > $maxPlaylists) {
-    $planoLabel = match($_SESSION['banda_atual']['plano'] ?? '') {
-        'gratuito' => 'Gratuito', 'basico' => 'Básico', default => 'atual',
-    };
+if ($musicIds) {
+    $ids = array_keys($musicIds);
+    $placeholders = implode(',', array_fill(0, count($ids), '?'));
+    $stmt = Database::getConnection()->prepare("SELECT COUNT(*) FROM musicas WHERE banda_id = ? AND id IN ($placeholders)");
+    $stmt->execute(array_merge([$bandaId], $ids));
+    if ((int)$stmt->fetchColumn() !== count($ids)) {
+        http_response_code(422);
+        echo json_encode(['sucesso' => false, 'mensagem' => 'A playlist contém música inexistente nesta banda.']);
+        exit;
+    }
+}
+
+$limits = cifro_plan_limits($_SESSION['banda_atual']['plano'] ?? 'bloqueado');
+$maxPlaylists = PlaylistFormValidator::computeMaxPlaylists(is_master(), $limits);
+if (PlaylistFormValidator::excedeLimite($maxPlaylists, count($playlists))) {
+    $planoLabel = PlaylistFormValidator::planoLabel($_SESSION['banda_atual']['plano'] ?? '');
     http_response_code(403);
     echo json_encode([
         'sucesso'     => false,
@@ -42,6 +85,15 @@ if ($maxPlaylists !== -1 && count($playlists) > $maxPlaylists) {
     exit;
 }
 
-(new PlaylistRepository())->saveAll($playlists, $bandaId);
-
-echo json_encode(['sucesso' => true, 'mensagem' => 'Playlists salvas com sucesso!']);
+try {
+    $repo = new PlaylistRepository();
+    $mutation = (new SyncRevisionRepository())->mutate(
+        $bandaId,
+        $data['baseRevision'] ?? null,
+        fn() => $repo->saveAll($playlists, $bandaId)
+    );
+    echo json_encode(['sucesso' => true, 'mensagem' => 'Playlists salvas com sucesso!', 'content_revision' => $mutation['revision']]);
+} catch (SyncConflictException $e) {
+    http_response_code(409);
+    echo json_encode(['sucesso' => false, 'mensagem' => $e->getMessage(), 'content_revision' => $e->getCurrentRevision()]);
+}

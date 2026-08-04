@@ -34,7 +34,6 @@ class LiveStateService {
         return $this->withState($salaId, LOCK_EX, function ($state) use ($salaId, $hostId, $usuario, $now) {
             $state['hostId']       = $hostId;
             $state['hostUserId']   = (string)($usuario['id']       ?? '');
-            $state['hostUsername'] = (string)($usuario['username'] ?? '');
             $state['hostNome']     = (string)($usuario['nome']     ?? '');
             $state['updatedAt']    = $now;
             $state['version']      = ((int)($state['version'] ?? 0)) + 1;
@@ -44,7 +43,6 @@ class LiveStateService {
                     'success'      => true,
                     'hostId'       => $hostId,
                     'hostNome'     => $state['hostNome'],
-                    'hostUsername' => $state['hostUsername'],
                     'message'      => 'Voce agora e o host',
                 ],
             ];
@@ -79,6 +77,9 @@ class LiveStateService {
             $changed = !$somenteKeepAlive && (
                 (string)($state['cifraAtual'] ?? '') !== (string)$cifraAtual
                 || (string)($state['paginaAtual'] ?? '') !== (string)$paginaAtual
+                || ($scrollTop !== null && (int)($state['scrollTop'] ?? 0) !== $scrollTop)
+                || ($scrollPercent !== null && abs((float)($state['scrollPercent'] ?? 0) - $scrollPercent) > 0.0001)
+                || ($canSyncScroll !== null && (bool)($state['canSyncScroll'] ?? false) !== (bool)$canSyncScroll)
             );
 
             if ($changed) {
@@ -104,7 +105,6 @@ class LiveStateService {
                     'scrollPercent' => (float)($state['scrollPercent']?? 0),
                     'canSyncScroll' => !empty($state['canSyncScroll']),
                     'hostNome'      => (string)($state['hostNome']    ?? ''),
-                    'hostUsername'  => (string)($state['hostUsername']?? ''),
                 ],
             ];
         });
@@ -130,7 +130,6 @@ class LiveStateService {
                     'scrollPercent' => (float)($state['scrollPercent']?? 0),
                     'canSyncScroll' => !empty($state['canSyncScroll']),
                     'hostNome'      => $hasHost ? (string)($state['hostNome']    ?? '') : '',
-                    'hostUsername'  => $hasHost ? (string)($state['hostUsername']?? '') : '',
                 ],
             ];
         });
@@ -171,14 +170,13 @@ class LiveStateService {
         return [
             'hostId'        => $row['host_id']        ?? '',
             'hostUserId'    => $row['host_user_id']   ?? '',
-            'hostUsername'  => $row['host_username']  ?? '',
             'hostNome'      => $row['host_nome']      ?? '',
             'cifraAtual'    => $row['cifra_atual']    ?? '',
             'paginaAtual'   => $row['pagina_atual']   ?? 'index.php',
             'scrollTop'     => (int)($row['scrollTop'] ?? $row['scroll_top'] ?? 0),
             'scrollPercent' => (float)($row['scrollPercent'] ?? $row['scroll_percent'] ?? 0),
             'canSyncScroll' => (bool)($row['can_sync_scroll'] ?? true),
-            'updatedAt'     => $row['updated_at'] ?? '',
+            'updatedAt'     => empty($row['updated_at']) ? '' : $row['updated_at'] . ' UTC',
             'version'       => (int)($row['version'] ?? 0),
         ];
     }
@@ -187,13 +185,15 @@ class LiveStateService {
         return [
             'host_id'        => $state['hostId']       ?? null,
             'host_user_id'   => $state['hostUserId']   ?? null,
-            'host_username'  => $state['hostUsername'] ?? null,
             'host_nome'      => $state['hostNome']     ?? null,
             'cifra_atual'    => $state['cifraAtual']   ?? '',
             'pagina_atual'   => $state['paginaAtual']  ?? 'index.php',
             'scroll_top'     => (int)($state['scrollTop']    ?? 0),
             'scroll_percent' => (float)($state['scrollPercent']?? 0),
             'can_sync_scroll'=> isset($state['canSyncScroll']) ? (int)(bool)$state['canSyncScroll'] : 1,
+            'updated_at'     => empty($state['updatedAt'])
+                ? gmdate('Y-m-d H:i:s')
+                : gmdate('Y-m-d H:i:s', strtotime((string)$state['updatedAt'])),
         ];
     }
 
@@ -248,7 +248,7 @@ class LiveStateService {
     private function getSalaState(array $data, string $salaId): array {
         $state = $data['salas'][$salaId] ?? [];
         return array_merge([
-            'hostId' => '', 'hostUserId' => '', 'hostUsername' => '', 'hostNome' => '',
+            'hostId' => '', 'hostUserId' => '', 'hostNome' => '',
             'cifraAtual' => '', 'paginaAtual' => 'index.php',
             'scrollTop' => 0, 'scrollPercent' => 0, 'canSyncScroll' => false,
             'updatedAt' => '', 'version' => 0,

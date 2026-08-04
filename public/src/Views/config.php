@@ -1,3 +1,9 @@
+<?php
+$configBanda = $_SESSION['banda_atual'] ?? [];
+$configPlano = $configBanda['plano'] ?? 'gratuito';
+$configPlanoPago = in_array($configPlano, ['mensal', 'semestral', 'anual', 'ativo'], true);
+$configPlanoLabel = $configPlano === 'ativo' ? 'Mensal' : cifro_plan_label($configPlano);
+?>
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -5,14 +11,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Configurações</title>
     <?php csrf_meta(); ?>
-    <script src="<?= asset_url('/src/js/fdm-csrf.js') ?>"></script>
-    <script src="/src/js/fdm-theme.js"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <script src="<?= asset_url('/src/js/cifro-csrf.js') ?>"></script>
+    <script src="/src/js/cifro-theme.js"></script>
     <link href="/src/css/fonts.css" rel="stylesheet">
     <link href="/src/css/theme.css" rel="stylesheet">
-    <script src="<?= asset_url('/src/js/fdm-confirm.js') ?>"></script>
-    <script src="<?= asset_url('/src/js/fdm-toast.js') ?>"></script>
+    <script src="<?= asset_url('/src/js/cifro-confirm.js') ?>"></script>
+    <script src="<?= asset_url('/src/js/cifro-toast.js') ?>"></script>
     <style>
         body { padding: 0; margin: 0; }
         .config-container {
@@ -63,6 +67,8 @@
             font-size: var(--text-xs);
             color: var(--text-2);
             margin: 0;
+            overflow-wrap: break-word;
+            word-break: normal;
         }
         .config-row__control {
             flex-shrink: 0;
@@ -81,6 +87,7 @@
             display: inline-flex;
             align-items: center;
             gap: 6px;
+            min-height: 44px;
             color: var(--text-2);
             text-decoration: none;
             font-size: var(--text-sm);
@@ -91,14 +98,14 @@
         .switch {
             position: relative;
             display: inline-block;
-            width: 44px;
-            height: 24px;
+            width: 52px;
+            height: 44px;
         }
         .switch input { opacity: 0; width: 0; height: 0; }
         .switch__slider {
             position: absolute;
             cursor: pointer;
-            inset: 0;
+            inset: 6px 0;
             background: var(--bg-3);
             border-radius: 24px;
             transition: background var(--t-fast);
@@ -106,10 +113,10 @@
         .switch__slider::before {
             content: "";
             position: absolute;
-            height: 18px;
-            width: 18px;
-            left: 3px;
-            top: 3px;
+            height: 24px;
+            width: 24px;
+            left: 4px;
+            top: 4px;
             background: #fff;
             border-radius: 50%;
             transition: transform var(--t-fast);
@@ -129,7 +136,11 @@
             display: flex;
             align-items: center;
             gap: var(--space-3);
+            flex: 1;
+            min-width: 0;
         }
+        .config-user > div:last-child { min-width: 0; }
+        .config-user .config-row__desc { overflow-wrap: anywhere; }
         .config-user__avatar {
             width: 48px;
             height: 48px;
@@ -143,11 +154,51 @@
             font-size: var(--text-lg);
             flex-shrink: 0;
         }
+        .config-advanced {
+            border-top: 1px solid var(--border-1);
+        }
+        .config-advanced__summary {
+            cursor: pointer;
+            list-style: none;
+            padding: var(--space-4);
+            color: var(--text-1);
+            font-size: var(--text-sm);
+            font-weight: var(--fw-medium);
+        }
+        .config-advanced__summary::-webkit-details-marker { display: none; }
+        .config-advanced__summary::after {
+            content: "+";
+            float: right;
+            color: var(--text-2);
+            font-size: var(--text-lg);
+            line-height: 1;
+        }
+        .config-advanced[open] .config-advanced__summary::after { content: "−"; }
+        .config-advanced__content {
+            border-top: 1px solid var(--border-1);
+        }
+        .config-plan-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 5px 10px;
+            border-radius: var(--radius-pill);
+            background: rgba(52,211,153,.12);
+            border: 1px solid rgba(52,211,153,.25);
+            color: #34d399;
+            font-size: var(--text-xs);
+            font-weight: var(--fw-bold);
+        }
         @media (max-width: 480px) {
+            .config-container { padding: 12px; }
             .config-row { flex-direction: column; align-items: flex-start; }
             .config-row__control { width: 100%; }
             .config-row__control select,
             .config-row__control input[type="number"] { width: 100%; min-width: 0; }
+            .config-row--compact { flex-direction: row; align-items: center; }
+            .config-row--compact .config-row__control { width: auto; }
+            .config-row--compact .btn { min-height: 44px; }
+            .config-row__control .btn { width: 100%; min-height: 44px; }
         }
     </style>
 </head>
@@ -156,7 +207,7 @@
 
     <div class="config-container">
         <a href="/index.php" class="config-back" aria-label="Voltar para a lista de músicas">
-            <?= fdm_icon('arrow-left', 16) ?> Voltar
+            <?= cifro_icon('arrow-left', 16) ?> Voltar
         </a>
         <h1 class="config-page-title">Configurações</h1>
 
@@ -221,7 +272,7 @@
             <div class="config-row">
                 <div class="config-row__label">
                     <p class="config-row__title">Manter tela acesa</p>
-                    <p class="config-row__desc">Impede que o celular bloqueie a tela durante apresentação (usa Wake Lock API).</p>
+                    <p class="config-row__desc">Evita que o celular bloqueie a tela durante a apresentação.</p>
                 </div>
                 <div class="config-row__control">
                     <label class="switch">
@@ -232,9 +283,63 @@
             </div>
         </section>
 
+        <!-- ===== Conta ===== -->
+        <section class="config-section" aria-labelledby="sec-conta">
+            <header class="config-section__header"><h2 class="config-section__title" id="sec-conta">Conta</h2></header>
+
+            <div class="config-row config-row--compact">
+                <div class="config-user">
+                    <div class="config-user__avatar" aria-hidden="true"><?= e(strtoupper(substr($usuario['nome'] ?? 'U', 0, 1))) ?></div>
+                    <div>
+                        <p class="config-row__title"><?= e($usuario['nome'] ?? 'Usuário') ?></p>
+                        <p class="config-row__desc"><?= e($usuario['email'] ?? '—') ?> · <?= e(ucfirst($usuario['perfil'] ?? 'usuário')) ?></p>
+                    </div>
+                </div>
+                <div class="config-row__control">
+                    <a href="/logout.php" class="btn btn--secondary btn--sm"><?= cifro_icon('log-out', 14) ?> Sair da conta</a>
+                </div>
+            </div>
+            <div class="config-row">
+                <div class="config-row__label">
+                    <p class="config-row__title">Privacidade e dados</p>
+                    <p class="config-row__desc">Baixe seus dados pessoais ou exclua definitivamente sua conta.</p>
+                </div>
+                <div class="config-row__control" style="display:flex;gap:8px;flex-wrap:wrap">
+                    <a href="/api/account/export.php" class="btn btn--secondary btn--sm">Exportar meus dados</a>
+                    <button type="button" id="deleteAccountButton" class="btn btn--danger btn--sm">Excluir conta</button>
+                </div>
+            </div>
+        </section>
+
+        <?php if ($configPlanoPago): ?>
+        <section class="config-section" aria-labelledby="sec-pagamento">
+            <header class="config-section__header"><h2 class="config-section__title" id="sec-pagamento">Plano e pagamento</h2></header>
+
+            <div class="config-row config-row--compact">
+                <div class="config-row__label">
+                    <p class="config-row__title">Plano <?= e($configPlanoLabel) ?></p>
+                    <p class="config-row__desc">Músicas, membros, repertórios e modo ao vivo ilimitados.</p>
+                </div>
+                <div class="config-row__control">
+                    <span class="config-plan-badge">● Ativo</span>
+                </div>
+            </div>
+
+            <div class="config-row config-row--compact">
+                <div class="config-row__label">
+                    <p class="config-row__title">Gerenciar pagamento</p>
+                    <p class="config-row__desc">Renove, troque de plano ou solicite o cancelamento.</p>
+                </div>
+                <div class="config-row__control">
+                    <a href="/plano.php#planos" class="btn btn--primary btn--sm">Gerenciar</a>
+                </div>
+            </div>
+        </section>
+        <?php endif; ?>
+
         <!-- ===== Offline ===== -->
         <section class="config-section" aria-labelledby="sec-offline">
-            <header class="config-section__header"><h2 class="config-section__title" id="sec-offline">Offline e cache</h2></header>
+            <header class="config-section__header"><h2 class="config-section__title" id="sec-offline">Dados offline</h2></header>
 
             <div class="config-row">
                 <div class="config-row__label">
@@ -246,59 +351,58 @@
                 </div>
             </div>
 
-            <div class="config-row">
-                <div class="config-row__label">
-                    <p class="config-row__title">Espaço usado</p>
-                    <p class="config-row__desc config-storage" id="cfgStorageUsage">Calculando…</p>
-                </div>
-                <div class="config-row__control">
-                    <button type="button" class="btn btn--secondary btn--sm" onclick="atualizarUso()">
-                        Atualizar
-                    </button>
-                </div>
-            </div>
-
-            <div class="config-row">
+            <div class="config-row config-row--compact">
                 <div class="config-row__label">
                     <p class="config-row__title">Sincronizar dados</p>
-                    <p class="config-row__desc">Baixa músicas, setlists e roteiros atualizados do servidor.</p>
+                    <p class="config-row__desc">Baixa músicas e repertórios atualizados do servidor.</p>
                 </div>
                 <div class="config-row__control">
                     <button type="button" class="btn btn--primary btn--sm" id="btnSyncDados" onclick="sincronizarDados()">
-                        <?= fdm_icon('refresh', 14) ?> Sincronizar
+                        <?= cifro_icon('refresh', 14) ?> Sincronizar
                     </button>
                 </div>
             </div>
 
-            <div class="config-row">
-                <div class="config-row__label">
-                    <p class="config-row__title">Resetar app</p>
-                    <p class="config-row__desc">Remove todos os dados locais e recarrega. Use apenas se o app estiver com comportamento estranho.</p>
-                </div>
-                <div class="config-row__control">
-                    <button type="button" class="btn btn--danger btn--sm" onclick="limparCache()">
-                        <?= fdm_icon('trash', 14) ?> Resetar
-                    </button>
-                </div>
-            </div>
-        </section>
+            <details class="config-advanced">
+                <summary class="config-advanced__summary">Armazenamento e recuperação</summary>
+                <div class="config-advanced__content">
+                    <div class="config-row config-row--compact">
+                        <div class="config-row__label">
+                            <p class="config-row__title">Espaço usado</p>
+                            <p class="config-row__desc config-storage" id="cfgStorageUsage">Calculando…</p>
+                        </div>
+                        <div class="config-row__control">
+                            <button type="button" class="btn btn--secondary btn--sm" onclick="atualizarUso()">
+                                Recalcular espaço usado
+                            </button>
+                        </div>
+                    </div>
 
-        <!-- ===== Conta ===== -->
-        <section class="config-section" aria-labelledby="sec-conta">
-            <header class="config-section__header"><h2 class="config-section__title" id="sec-conta">Conta</h2></header>
+                    <div class="config-row config-row--compact">
+                        <div class="config-row__label">
+                            <p class="config-row__title">Resetar dados locais</p>
+                            <p class="config-row__desc">Remove preferências e cifras salvas neste dispositivo. Sua conta e os dados do servidor não serão apagados.</p>
+                        </div>
+                        <div class="config-row__control">
+                            <button type="button" class="btn btn--danger btn--sm" onclick="limparCache()">
+                                <?= cifro_icon('trash', 14) ?> Resetar dados
+                            </button>
+                        </div>
+                    </div>
 
-            <div class="config-row">
-                <div class="config-user">
-                    <div class="config-user__avatar" aria-hidden="true"><?= e(strtoupper(substr($usuario['nome'] ?? 'U', 0, 1))) ?></div>
-                    <div>
-                        <p class="config-row__title"><?= e($usuario['nome'] ?? 'Usuário') ?></p>
-                        <p class="config-row__desc">@<?= e($usuario['username'] ?? '—') ?> · <?= e(ucfirst($usuario['perfil'] ?? 'usuário')) ?></p>
+                    <div class="config-row config-row--compact">
+                        <div class="config-row__label">
+                            <p class="config-row__title">Versão offline anterior</p>
+                            <p class="config-row__desc" id="cfgPreviousSnapshot">Verificando disponibilidade…</p>
+                        </div>
+                        <div class="config-row__control">
+                            <button type="button" class="btn btn--secondary btn--sm" id="btnRestoreSnapshot" disabled>
+                                Restaurar versão anterior
+                            </button>
+                        </div>
                     </div>
                 </div>
-                <div class="config-row__control">
-                    <a href="/logout.php" class="btn btn--secondary btn--sm">Sair</a>
-                </div>
-            </div>
+            </details>
         </section>
 
         <!-- ===== Sobre ===== -->
@@ -307,98 +411,126 @@
 
             <div class="config-row">
                 <div class="config-row__label">
-                    <p class="config-row__title">StageBox - Cifras</p>
+                    <p class="config-row__title">Cifrô</p>
                     <p class="config-row__desc">versão <span id="cfgVersion">—</span></p>
                 </div>
             </div>
         </section>
     </div>
 
-    <script src="<?= asset_url('/src/js/fdm-sync.js') ?>"></script>
+    <script>window.CIFRO_USER_ID = '<?= e($usuario['id'] ?? '') ?>';</script>
+    <script src="<?= asset_url('/src/js/cifro-connectivity.js') ?>"></script>
+    <script src="<?= asset_url('/src/js/cifro-sync.js') ?>"></script>
     <script>
-        window.FDM_BAND_ID = '<?= e(current_band_id()) ?>';
+        window.CIFRO_BAND_ID = '<?= e(current_band_id()) ?>';
         // Config vinda do servidor (PHP → JS)
         var _serverConfig = <?= json_encode($usuario['config'] ?? [], JSON_UNESCAPED_UNICODE) ?>;
 
         function cfgGet(key, fallback) {
             // servidor tem prioridade; localStorage é fallback para compatibilidade
             if (_serverConfig && _serverConfig[key] !== undefined) return _serverConfig[key];
-            var ls = localStorage.getItem('fdm-' + key);
+            var ls = localStorage.getItem('cifro-' + key);
             return ls !== null ? ls : fallback;
         }
 
-        function cfgSave(key, value) {
-            // salva localStorage imediatamente (UX responsiva)
-            localStorage.setItem('fdm-' + key, value);
-            // persiste no servidor em background
-            fetch('/src/backend/users/salvar_config.php', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ config: { [key]: value } })
-            }).catch(function () {});
+        function cfgGetEnum(key, allowed, fallback) {
+            var value = String(cfgGet(key, fallback));
+            return allowed.indexOf(value) !== -1 ? value : fallback;
+        }
+
+        async function cfgSave(key, value) {
+            localStorage.setItem('cifro-' + key, value);
+            try {
+                var response = await fetch('/src/backend/users/salvar_config.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ config: { [key]: value } })
+                });
+                var result = await response.json();
+                if (!response.ok || !result.sucesso) throw new Error('save_failed');
+                _serverConfig[key] = value;
+                return true;
+            } catch (e) {
+                return false;
+            }
+        }
+
+        function showSaveResult(saved, successMessage) {
+            if (!window.cifroToast) return;
+            cifroToast(
+                saved ? successMessage : 'Alteração aplicada neste dispositivo, mas não foi salva na conta.',
+                saved ? 'success' : 'error',
+                { duration: saved ? 1800 : 4000 }
+            );
         }
 
         (function () {
             // ---- Tema ----
             var sel = document.getElementById('cfgTheme');
-            var savedTheme = cfgGet('tema', window.fdmTheme ? window.fdmTheme.get() : 'dark');
+            var savedTheme = cfgGetEnum('tema', ['dark', 'light', 'auto'], window.cifroTheme ? window.cifroTheme.get() : 'dark');
             sel.value = savedTheme;
-            sel.addEventListener('change', function () {
-                if (!window.fdmTheme) return;
-                cfgSave('tema', sel.value);
+            sel.addEventListener('change', async function () {
+                if (!window.cifroTheme) return;
                 if (sel.value === 'auto') {
-                    localStorage.removeItem('fdm-theme');
+                    localStorage.removeItem('cifro-theme');
                     document.documentElement.removeAttribute('data-theme');
-                    fdmToast && fdmToast('Tema automático ativado', 'success', { duration: 2000 });
                 } else {
-                    window.fdmTheme.set(sel.value);
-                    fdmToast && fdmToast('Tema ' + (sel.value === 'dark' ? 'escuro' : 'claro') + ' ativado', 'success', { duration: 2000 });
+                    window.cifroTheme.set(sel.value);
                 }
+                var saved = await cfgSave('tema', sel.value);
+                var message = sel.value === 'auto'
+                    ? 'Tema automático ativado'
+                    : 'Tema ' + (sel.value === 'dark' ? 'escuro' : 'claro') + ' ativado';
+                showSaveResult(saved, message);
             });
 
             // ---- Cifra: tamanho da fonte ----
-            var savedSize = cfgGet('cifraSize', '18');
+            var savedSize = cfgGetEnum('cifraSize', ['14', '16', '18', '20', '22'], '18');
             var cifraSel = document.getElementById('cfgCifraSize');
             cifraSel.value = savedSize;
             document.documentElement.style.setProperty('--cifra-size', savedSize + 'px');
-            cifraSel.addEventListener('change', function () {
-                cfgSave('cifraSize', cifraSel.value);
+            cifraSel.addEventListener('change', async function () {
                 document.documentElement.style.setProperty('--cifra-size', cifraSel.value + 'px');
-                fdmToast && fdmToast('Tamanho salvo: ' + cifraSel.value + 'px', 'success', { duration: 1500 });
+                var saved = await cfgSave('cifraSize', cifraSel.value);
+                showSaveResult(saved, 'Tamanho da cifra salvo');
             });
 
             // ---- Apresentação: velocidade ----
-            var savedSpeed = cfgGet('scrollSpeed', 'normal');
+            var savedSpeed = cfgGetEnum('scrollSpeed', ['slow', 'normal', 'fast'], 'normal');
             var speedSel = document.getElementById('cfgScrollSpeed');
             speedSel.value = savedSpeed;
-            speedSel.addEventListener('change', function () {
-                cfgSave('scrollSpeed', speedSel.value);
-                fdmToast && fdmToast('Velocidade salva', 'success', { duration: 1500 });
+            speedSel.addEventListener('change', async function () {
+                var saved = await cfgSave('scrollSpeed', speedSel.value);
+                showSaveResult(saved, 'Velocidade salva');
             });
 
             // ---- Apresentação: wake lock ----
-            var savedWake = cfgGet('keepAwake', 'true');
+            var savedWake = cfgGetEnum('keepAwake', ['true', 'false'], 'true');
             var wakeChk = document.getElementById('cfgKeepAwake');
-            wakeChk.checked = savedWake !== 'false' && savedWake !== false;
-            wakeChk.addEventListener('change', function () {
-                cfgSave('keepAwake', wakeChk.checked ? 'true' : 'false');
+            wakeChk.checked = savedWake === 'true';
+            wakeChk.addEventListener('change', async function () {
+                var saved = await cfgSave('keepAwake', wakeChk.checked ? 'true' : 'false');
+                showSaveResult(saved, 'Preferência salva');
             });
 
             // ---- Sync status ----
             var syncDot = document.getElementById('cfgSyncDot');
             var syncTxt = document.getElementById('cfgSyncStatus');
             function updateSync() {
-                if (navigator.onLine) {
+                var connectionState = window.CifroConnectivity?.current() || 'verificando';
+                if (connectionState === 'servidor_disponivel') {
                     syncDot.className = 'sync-dot sync-dot--online';
-                    syncTxt.textContent = 'Online';
+                    syncTxt.textContent = 'Servidor disponível';
+                } else if (connectionState === 'verificando') {
+                    syncDot.className = 'sync-dot sync-dot--syncing';
+                    syncTxt.textContent = 'Verificando conexão com o servidor…';
                 } else {
                     syncDot.className = 'sync-dot sync-dot--offline';
-                    syncTxt.textContent = 'Offline — você ainda pode acessar tudo que está salvo';
+                    syncTxt.textContent = 'Servidor indisponível — usando a versão salva neste dispositivo. Sincronize quando a conexão voltar.';
                 }
             }
             updateSync();
-            window.addEventListener('online', updateSync);
-            window.addEventListener('offline', updateSync);
+            document.addEventListener('cifro:connectivity', updateSync);
 
             // ---- Espaço usado ----
             async function atualizarUso() {
@@ -420,29 +552,52 @@
             window.atualizarUso = atualizarUso;
             atualizarUso();
 
+            async function atualizarVersaoAnterior() {
+                var status = await cifroSync.getSyncStatus(window.CIFRO_BAND_ID);
+                var description = document.getElementById('cfgPreviousSnapshot');
+                var restoreButton = document.getElementById('btnRestoreSnapshot');
+                restoreButton.disabled = !status.previousAvailable;
+                description.textContent = status.previousAvailable
+                    ? 'Revisão ' + status.previousRevision + ', salva em ' + new Date(status.previousSavedAt).toLocaleString('pt-BR') + '.'
+                    : 'Nenhuma versão anterior disponível neste dispositivo.';
+            }
+            document.getElementById('btnRestoreSnapshot').addEventListener('click', async function () {
+                var confirmed = await cifroConfirm({
+                    title: 'Restaurar versão offline anterior',
+                    message: 'A versão atual e a anterior trocarão de lugar. Você poderá desfazer restaurando novamente.',
+                    confirmText: 'Restaurar versão anterior',
+                    cancelText: 'Cancelar'
+                });
+                if (!confirmed) return;
+                var restored = await cifroSync.restorePreviousSnapshot(window.CIFRO_BAND_ID);
+                cifroToast && cifroToast(restored ? 'Versão offline anterior restaurada.' : 'Nenhuma versão anterior disponível.', restored ? 'success' : 'warning');
+                await atualizarVersaoAnterior();
+            });
+            atualizarVersaoAnterior();
+
             // ---- Sincronizar dados ----
             window.sincronizarDados = async function () {
-                if (!window.FDM_BAND_ID) {
-                    fdmToast && fdmToast('Banda não identificada. Faça login novamente.', 'error');
+                if (!window.CIFRO_BAND_ID) {
+                    cifroToast && cifroToast('Banda não identificada. Faça login novamente.', 'error');
                     return;
                 }
                 var btn = document.getElementById('btnSyncDados');
                 if (btn) { btn.disabled = true; btn.textContent = 'Sincronizando…'; }
                 try {
-                    var ok = await fdmSync.sync(window.FDM_BAND_ID);
-                    fdmToast && fdmToast(ok ? 'Dados sincronizados!' : 'Falha ao sincronizar. Tente novamente.', ok ? 'success' : 'error', { duration: 3000 });
+                    var ok = await cifroSync.sync(window.CIFRO_BAND_ID);
+                    cifroToast && cifroToast(ok ? 'Dados sincronizados!' : 'Servidor indisponível. Seus dados locais foram mantidos; tente sincronizar novamente mais tarde.', ok ? 'success' : 'error', { duration: 4000 });
                 } finally {
-                    if (btn) { btn.disabled = false; btn.innerHTML = '<?= addslashes(fdm_icon('refresh', 14)) ?> Sincronizar'; }
+                    if (btn) { btn.disabled = false; btn.innerHTML = '<?= addslashes(cifro_icon('refresh', 14)) ?> Sincronizar'; }
                     atualizarUso();
                 }
             };
 
             // ---- Limpar cache (Resetar app) ----
             window.limparCache = async function () {
-                var ok = await fdmConfirm({
-                    title: 'Limpar cache do app',
-                    message: 'Isso vai apagar dados salvos localmente (preferências e cifras em cache para uso offline) e recarregar a página. Você precisará de internet na próxima abertura.',
-                    confirmText: 'Sim, limpar',
+                var ok = await cifroConfirm({
+                    title: 'Resetar dados locais',
+                    message: 'Preferências e cifras salvas neste dispositivo serão removidas. Sua conta e os dados do servidor não serão apagados. Você precisará de internet na próxima abertura.',
+                    confirmText: 'Resetar dados',
                     cancelText: 'Cancelar',
                     danger: true
                 });
@@ -469,6 +624,24 @@
                 if (v) v.textContent = '—';
             });
         })();
+    </script>
+    <script>
+      document.getElementById('deleteAccountButton')?.addEventListener('click', async () => {
+        const email = prompt('Digite seu e-mail para confirmar a exclusão definitiva da conta:');
+        if (!email) return;
+        const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
+        const response = await fetch('/api/account/delete.php', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+          body: JSON.stringify({ email })
+        });
+        const result = await response.json();
+        if (!response.ok) {
+          alert(result.error?.message || result.mensagem || 'Não foi possível excluir a conta.');
+          return;
+        }
+        location.href = '/landing.php?conta_excluida=1';
+      });
     </script>
 </body>
 </html>

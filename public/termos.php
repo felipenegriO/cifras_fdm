@@ -1,0 +1,5 @@
+<?php
+require_once __DIR__ . '/src/backend/bootstrap.php';
+$version = (string) env('LEGAL_TERMS_VERSION', '2026-08-03');
+?>
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Termos de Uso — Cifrô</title><link href="/src/css/theme.css" rel="stylesheet"></head><body><main style="max-width:760px;margin:40px auto;padding:24px"><h1>Termos de Uso</h1><p>Versão <?= e($version) ?></p><p>O Cifrô oferece organização de cifras, repertórios e recursos de apresentação para bandas. O usuário é responsável pelo conteúdo que cadastra e por possuir as autorizações necessárias para utilizá-lo.</p><p>É proibido usar o serviço para violar direitos de terceiros, comprometer a segurança da plataforma ou tentar acessar dados de outras contas ou bandas.</p><p>Recursos podem evoluir ou ficar temporariamente indisponíveis para manutenção. Condições comerciais do plano contratado são apresentadas antes da contratação.</p><p>Dúvidas sobre estes termos devem ser enviadas ao canal de suporte informado pela plataforma.</p><p><a href="/register.php">Voltar ao cadastro</a></p></main></body></html>

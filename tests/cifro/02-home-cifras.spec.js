@@ -3,6 +3,7 @@
  * Tela principal (index.php) — lista de cifras, busca, filtros.
  */
 import { test, expect } from '../fixtures/coverage.js';
+import { TEST_EMAIL, TEST_PASSWORD } from '../helpers/auth.js';
 
 test.use({ storageState: 'tests/.auth/user.json' });
 
@@ -28,6 +29,38 @@ test.describe('Home — Lista de Cifras', () => {
     // O id real do container de músicas é #music-list
     const list = page.locator('#music-list, .song-list, .empty-state');
     await expect(list.first()).toBeVisible({ timeout: 10000 });
+  });
+
+  test('oculta onboarding quando existem cifras e mantém biblioteca visível', async ({ page }) => {
+    await expect(page.locator('#onboardingCard')).toBeHidden();
+    await expect(page.locator('#musicLibrary')).toBeVisible();
+    await expect(page.locator('#search')).toBeVisible();
+    await expect(page.locator('#music-list')).toBeVisible();
+  });
+
+  test('usa no atalho live o mesmo texto da tela da música', async ({ page }) => {
+    await expect(page.locator('#entrarlivePlaynow')).toHaveText('Entrar na sessão ao vivo');
+    const layout = await page.locator('#mostrarbtnplay').evaluate(element => {
+      const style = getComputedStyle(element);
+      return { left: style.left, bottom: style.bottom, width: style.width, transform: style.transform };
+    });
+    expect(layout.left).toBe('683px');
+    expect(layout.bottom).toBe('12px');
+    expect(layout.width).toBe('560px');
+    expect(layout.transform).not.toBe('none');
+  });
+
+  test('mostra onboarding sozinho quando o repertório está vazio', async ({ page }) => {
+    await page.evaluate(() => {
+      localStorage.removeItem('cifroOnboardingDismissed');
+      window.songs = [];
+      document.dispatchEvent(new CustomEvent('cifro:sync'));
+    });
+
+    await expect(page.locator('#onboardingCard')).toBeVisible();
+    await expect(page.locator('#musicLibrary')).toBeHidden();
+    await expect(page.locator('#search')).toBeHidden();
+    await expect(page.locator('#music-list')).toBeHidden();
   });
 
   test('campo de busca está presente', async ({ page }) => {
@@ -73,8 +106,8 @@ test.describe('Home — Navegação', () => {
     const page = await ctx.newPage();
     // Login fresco criando sessão própria (não afeta user.json)
     await page.goto('/login.php');
-    await page.fill('#email', process.env.TEST_EMAIL || 'felipe@legacy.invalid');
-    await page.fill('#senha', process.env.TEST_PASSWORD || '123');
+    await page.fill('#email', TEST_EMAIL);
+    await page.fill('#senha', TEST_PASSWORD);
     await page.click('button[type="submit"]');
     await page.waitForURL(url => !url.toString().includes('login.php'), { timeout: 8000 }).catch(() => {});
     // Logout desta sessão própria (não destrói SESS de user.json)

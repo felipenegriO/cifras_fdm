@@ -14,8 +14,8 @@ test.use({ storageState: 'tests/.auth/user.json' });
 async function openPreview(page) {
   await page.goto('/index.php');
   await page.evaluate((song) => {
-    sessionStorage.setItem('fdmEditorPreview', JSON.stringify(song));
-    sessionStorage.removeItem('fdmSetlist');
+    sessionStorage.setItem('cifroEditorPreview', JSON.stringify(song));
+    sessionStorage.removeItem('cifroSetlist');
   }, { id: 78, nome: 'Matriz de ensaio audio/youtube', artista: '', bit: '', cifra: '<b>C G Am F</b><br>'.repeat(20) });
   await page.goto('/music.php?id=78&editorPreview=1');
   await expect(page.locator('#song-cifra')).toBeVisible();

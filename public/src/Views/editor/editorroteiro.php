@@ -4,11 +4,11 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <?php csrf_meta(); ?>
-  <script src="<?= asset_url('/src/js/fdm-csrf.js') ?>"></script>
-  <script src="<?= asset_url('/src/js/fdm-confirm.js') ?>"></script>
-  <script src="<?= asset_url('/src/js/fdm-toast.js') ?>"></script>
-  <title>Editor de Roteiros — StageBox</title>
-  <script src="/src/js/fdm-theme.js"></script>
+  <script src="<?= asset_url('/src/js/cifro-csrf.js') ?>"></script>
+  <script src="<?= asset_url('/src/js/cifro-confirm.js') ?>"></script>
+  <script src="<?= asset_url('/src/js/cifro-toast.js') ?>"></script>
+  <title>Editor de Roteiros — Cifrô</title>
+  <script src="/src/js/cifro-theme.js"></script>
   <link href="/src/css/fonts.css" rel="stylesheet">
   <link href="/src/css/theme.css" rel="stylesheet">
   <link href="/src/css/style2.css" rel="stylesheet">
@@ -91,10 +91,10 @@
 
     <div id="editor">
       <div class="editor-actions">
-        <button type="button" class="btn btn--secondary" onclick="novoRoteiro()"><?= fdm_icon('eraser', 16) ?> Limpar</button>
-        <button type="button" class="btn btn--primary" onclick="salvarRoteiro()"><?= fdm_icon('save', 16) ?> Salvar</button>
-        <button type="button" class="btn btn--danger" onclick="deletarRoteiro()"><?= fdm_icon('trash', 16) ?> Deletar</button>
-        <button type="button" class="btn btn--secondary" onclick="abrirModalMusicas()"><?= fdm_icon('music', 16) ?> Inserir música</button>
+        <button type="button" class="btn btn--secondary" onclick="novoRoteiro()"><?= cifro_icon('eraser', 16) ?> Limpar</button>
+        <button type="button" class="btn btn--primary" onclick="salvarRoteiro()"><?= cifro_icon('save', 16) ?> Salvar roteiro</button>
+        <button type="button" class="btn btn--danger" onclick="deletarRoteiro()"><?= cifro_icon('trash', 16) ?> Deletar</button>
+        <button type="button" class="btn btn--secondary" onclick="abrirModalMusicas()"><?= cifro_icon('music', 16) ?> Inserir música</button>
       </div>
       <div class="editor-meta">
         <input id="titulo" placeholder="Título do roteiro" aria-label="Título do roteiro">
@@ -114,22 +114,26 @@
   </div>
 
   <script src="/src/js/jquery-3.5.1.min.js"></script>
-  <script>window.FDM_BAND_ID = '<?= e(current_band_id()) ?>';</script>
-  <script src="<?= asset_url('/src/js/fdm-sync.js') ?>"></script>
-  <script src="https://cdn.tiny.cloud/1/56uixiy3yc6tkjs0wqt9924yoehc5nhmyjo3tj0i9xtn0d0m/tinymce/7/tinymce.min.js" referrerpolicy="origin"></script>
+  <script>window.CIFRO_USER_ID = '<?= e($_SESSION['usuario']['id'] ?? '') ?>'; window.CIFRO_BAND_ID = '<?= e(current_band_id()) ?>';</script>
+  <script src="<?= asset_url('/src/js/cifro-connectivity.js') ?>"></script>
+  <script src="<?= asset_url('/src/js/cifro-sync.js') ?>"></script>
+  <script src="<?= asset_url('/src/vendor/tinymce/tinymce.min.js') ?>"></script>
   <script>
-    const _fdmIsDark = (window.fdmTheme ? window.fdmTheme.get() : 'dark') !== 'light';
+    const _cifroIsDark = (window.cifroTheme ? window.cifroTheme.get() : 'dark') !== 'light';
     tinymce.init({
       selector: '#roteiroInput',
+    license_key: 'gpl',
+    base_url: '/src/vendor/tinymce',
+    suffix: '.min',
     plugins: 'code link',
   toolbar: 'undo redo | bold italic underline | link | code',
 
   valid_elements: '*[*]',
 
-  skin: _fdmIsDark ? 'oxide-dark' : 'oxide',
+  skin: _cifroIsDark ? 'oxide-dark' : 'oxide',
   content_css: false,
 
-  content_style: _fdmIsDark
+  content_style: _cifroIsDark
     ? 'body { background:#1c1c22; color:#f4f4f5; } a { color:#8fd3ff; text-decoration:underline; font-size:inherit; }'
     : 'body { background:#fff; color:#18181b; } a { color:#2563eb; text-decoration:underline; font-size:inherit; }',
 
@@ -199,9 +203,11 @@
       atualizarPreview();
     }
 
+    let salvandoRoteiro = false;
     async function salvarRoteiro() {
-      if (!navigator.onLine) {
-        alert('Sem internet: nao e possivel salvar agora. Conecte-se para salvar.');
+      if (salvandoRoteiro) return;
+      if (!(await window.CifroConnectivity?.probe({ force: true }))) {
+        alert('Servidor indisponível: o roteiro local foi mantido. Tente salvar novamente quando a conexão voltar.');
         return;
       }
       const titulo = document.getElementById('titulo').value.trim();
@@ -219,17 +225,22 @@
         conteudo: conteudo
       };
 
-      const res = await fetch('salvar_roteiros.php', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      const data = await res.json();
-      if (data.ok) {
-        document.getElementById('status').innerText = 'Salvo com sucesso!';
-        window.location.reload();
-      } else {
-        document.getElementById('status').innerText = data.error || 'Erro ao salvar!';
+      salvandoRoteiro = true;
+      try {
+        const res = await fetch('salvar_roteiros.php', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (data.ok) {
+          document.getElementById('status').innerText = 'Salvo com sucesso!';
+          window.location.reload();
+        } else {
+          document.getElementById('status').innerText = data.error || 'Erro ao salvar!';
+        }
+      } finally {
+        salvandoRoteiro = false;
       }
     }
 
@@ -239,7 +250,7 @@
         return;
       }
       const nome = (selecionado.titulo || 'este roteiro').replace(/[<>&]/g, '');
-      const ok = await fdmConfirm({
+      const ok = await cifroConfirm({
         title: 'Deletar roteiro',
         message: 'O roteiro <strong>' + nome + '</strong> será removido permanentemente.',
         confirmText: 'Sim, deletar',
@@ -313,7 +324,7 @@
 
     document.getElementById('filtroMusicasModal')?.addEventListener('input', montarListaMusicas);
 
-    fdmSync.load(window.FDM_BAND_ID).then(() => carregarRoteiros());
+    cifroSync.load(window.CIFRO_BAND_ID).then(() => carregarRoteiros());
 
     function normalizeRoteiroHtml(html) {
       let out = String(html || '');

@@ -7,6 +7,7 @@
  * para não interferir na sessão compartilhada dos demais specs.
  */
 import { test, expect } from '../fixtures/coverage.js';
+import { TEST_EMAIL, TEST_PASSWORD } from '../helpers/auth.js';
 
 // Sobrescreve o storageState do projeto: todos os testes aqui são sem auth
 // (evita session_regenerate_id() do login invalidar a sessão dos outros specs)
@@ -58,10 +59,8 @@ test.describe('Login', () => {
   });
 
   test('login válido redireciona para dentro do app', async ({ page }) => {
-    const email = process.env.TEST_EMAIL || 'felipe@legacy.invalid';
-    const pass = process.env.TEST_PASSWORD || '123';
-    await page.fill('#email', email);
-    await page.fill('#senha', pass);
+    await page.fill('#email', TEST_EMAIL);
+    await page.fill('#senha', TEST_PASSWORD);
     await page.click('button[type="submit"]');
     await page.waitForURL(url => !url.toString().includes('login.php'), { timeout: 10000 });
     expect(page.url()).not.toContain('login.php');
@@ -108,6 +107,7 @@ test.describe('Cadastro Público', () => {
     await page.fill('#nome', 'Teste User');
     await page.fill('#email', 'nao-e-um-email');
     await page.fill('#banda_nome', 'Banda Teste');
+    await page.check('#legal_acceptance');
     await page.click('.btn-submit');
     await page.waitForLoadState('networkidle');
     expect(page.url()).toContain('register.php');

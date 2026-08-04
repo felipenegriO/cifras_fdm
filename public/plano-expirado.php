@@ -4,15 +4,14 @@ if (!isset($_SESSION['autenticado']) || $_SESSION['autenticado'] !== true) {
     header('Location: /landing.php'); exit;
 }
 $bandaNome = $_SESSION['banda_atual']['nome'] ?? 'sua banda';
-$expira    = $_SESSION['banda_atual']['trial_expira_em'] ?? '';
 ?>
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Plano expirado — StageBox</title>
-  <script src="/src/js/fdm-theme.js"></script>
+  <title>Plano bloqueado — Cifrô</title>
+  <script src="/src/js/cifro-theme.js"></script>
   <link href="/src/css/fonts.css" rel="stylesheet">
   <link href="/src/css/theme.css" rel="stylesheet">
   <style>
@@ -32,14 +31,14 @@ $expira    = $_SESSION['banda_atual']['trial_expira_em'] ?? '';
 <body>
   <div class="card">
     <div class="icon">🔒</div>
-    <h1>Trial expirado</h1>
+    <h1>Plano bloqueado</h1>
     <p class="sub">
-      O período de teste de <strong><?= htmlspecialchars($bandaNome) ?></strong> chegou ao fim.
-      Para continuar usando o StageBox, assine um plano ou entre em contato.
+      O acesso de <strong><?= htmlspecialchars($bandaNome) ?></strong> está suspenso.
+      Regularize o pagamento para continuar usando o Cifrô.
     </p>
     <div class="actions">
-      <a href="mailto:contato@stagebox.com.br?subject=Assinar%20StageBox" class="btn-lg btn-primary">
-        Falar com a equipe
+      <a href="/plano.php#planos" class="btn-lg btn-primary">
+        Regularizar plano
       </a>
       <a href="/login.php?logout=1" class="btn-lg btn-ghost">Sair</a>
     </div>

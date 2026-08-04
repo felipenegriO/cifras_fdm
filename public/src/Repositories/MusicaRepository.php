@@ -29,8 +29,9 @@ class MusicaRepository {
 
     public function save(array $musica, string $bandaId): int {
         if (!empty($musica['id'])) {
+            if (!$this->findById((int)$musica['id'], $bandaId)) throw new RuntimeException('Música não encontrada.');
             $stmt = $this->pdo->prepare(
-                'UPDATE musicas SET nome=?, artista=?, classificacao=?, cifra=?, bit=? WHERE id=? AND banda_id=?'
+                'UPDATE musicas SET nome=?, artista=?, classificacao=?, cifra=?, bit=?, source_url=? WHERE id=? AND banda_id=?'
             );
             $stmt->execute([
                 $musica['nome'],
@@ -38,6 +39,7 @@ class MusicaRepository {
                 $musica['classificacao'] ?? '',
                 $musica['cifra'] ?? '',
                 $musica['bit'] ?? '',
+                $musica['source_url'] ?? null,
                 (int)$musica['id'],
                 $bandaId,
             ]);
@@ -45,7 +47,7 @@ class MusicaRepository {
         }
 
         $stmt = $this->pdo->prepare(
-            'INSERT INTO musicas (banda_id, nome, artista, classificacao, cifra, bit) VALUES (?,?,?,?,?,?)'
+            'INSERT INTO musicas (banda_id, nome, artista, classificacao, cifra, bit, source_url) VALUES (?,?,?,?,?,?,?)'
         );
         $stmt->execute([
             $bandaId,
@@ -54,6 +56,7 @@ class MusicaRepository {
             $musica['classificacao'] ?? '',
             $musica['cifra'] ?? '',
             $musica['bit'] ?? '',
+            $musica['source_url'] ?? null,
         ]);
         return (int)$this->pdo->lastInsertId();
     }
@@ -61,6 +64,7 @@ class MusicaRepository {
     public function delete(int $id, string $bandaId): void {
         $stmt = $this->pdo->prepare('DELETE FROM musicas WHERE id=? AND banda_id=?');
         $stmt->execute([$id, $bandaId]);
+        if ($stmt->rowCount() !== 1) throw new RuntimeException('Música não encontrada.');
     }
 
     public function copy(int $id, string $bandaId): int {

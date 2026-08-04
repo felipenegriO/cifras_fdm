@@ -13,7 +13,7 @@ test.use({ storageState: 'tests/.auth/user.json' });
 async function openRehearsalPanel(page, musicId) {
   await page.goto('/index.php');
   await page.evaluate((id) => {
-    sessionStorage.setItem('fdmEditorPreview', JSON.stringify({
+    sessionStorage.setItem('cifroEditorPreview', JSON.stringify({
       id,
       nome: 'Cobertura rehearsal.state',
       artista: 'Teste E2E',

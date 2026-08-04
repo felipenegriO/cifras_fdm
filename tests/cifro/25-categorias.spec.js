@@ -137,7 +137,7 @@ test('exibe mensagem de lista vazia e trata falha ao carregar/salvar', async ({ 
 
   await page.getByPlaceholder('Nome da categoria').fill('__FALHA_SIMULADA__');
   await page.getByRole('button', { name: 'Salvar' }).click();
-  await expect(page.locator('.fdm-toast, .toast', { hasText: 'Falha simulada' })).toBeVisible();
+  await expect(page.locator('.cifro-toast, .toast', { hasText: 'Falha simulada' })).toBeVisible();
 
   await page.unroute('**/src/backend/categorias/api.php');
 });

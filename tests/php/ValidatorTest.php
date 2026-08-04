@@ -26,13 +26,13 @@ final class ValidatorTest extends TestCase
         self::assertSame('', Validator::string(null));
     }
 
-    public function testUsernameIsLowercased(): void
+    public function testLoginIsLowercased(): void
     {
-        self::assertSame('felipe.negri', Validator::username('  Felipe.Negri  '));
+        self::assertSame('felipe@e2e.local', Validator::login('  FELIPE@E2E.LOCAL  '));
     }
 
-    public function testUsernameRespectsMaxLen(): void
+    public function testLoginRespectsMaxLen(): void
     {
-        self::assertSame('abcdef', Validator::username('ABCDEFGHIJ', 6));
+        self::assertSame(str_repeat('a', 180), Validator::login(str_repeat('A', 200)));
     }
 }

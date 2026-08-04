@@ -6,7 +6,7 @@
   <title>Detector (Nota + Tom) - Modal</title>
 
   <!-- Bootstrap 5 -->
-  <script src="/src/js/fdm-theme.js"></script>
+  <script src="/src/js/cifro-theme.js"></script>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="/src/css/theme.css" rel="stylesheet">
 </head>
