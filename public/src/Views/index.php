@@ -5,14 +5,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <?php csrf_meta(); ?>
-    <script src="<?= asset_url('/src/js/fdm-csrf.js') ?>"></script>
-    <script src="<?= asset_url('/src/js/fdm-confirm.js') ?>"></script>
-    <script src="<?= asset_url('/src/js/fdm-toast.js') ?>"></script>
-    <title>StageBox - Cifras</title>
+    <script src="<?= asset_url('/src/js/cifro-csrf.js') ?>"></script>
+    <script src="<?= asset_url('/src/js/cifro-confirm.js') ?>"></script>
+    <script src="<?= asset_url('/src/js/cifro-toast.js') ?>"></script>
+    <title>Cifrô</title>
     <link rel="manifest" href="manifest.json">
-    <script src="/src/js/fdm-theme.js"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <script src="/src/js/cifro-theme.js"></script>
     <link href="/src/css/fonts.css" rel="stylesheet">
     <link href="/src/css/bootstrap.min.css" rel="stylesheet" defer>
     <link href="/src/css/theme.css" rel="stylesheet">
@@ -82,6 +80,22 @@
     color: var(--text-2);
     font-size: var(--text-sm);
   }
+  #mostrarbtnplay {
+    left: 50%;
+    bottom: 12px;
+    width: min(560px, calc(100vw - 32px));
+    transform: translateX(-50%);
+  }
+  .onboarding-card { max-width: 920px; margin: var(--space-4) auto 0; padding: var(--space-4); border: 1px solid var(--border-1); border-radius: var(--radius-md); background: var(--bg-1); }
+  .onboarding-card[hidden] { display: none; }
+  .onboarding-card__header { display: flex; align-items: start; justify-content: space-between; gap: var(--space-3); }
+  .onboarding-card__header h2 { margin: 0 0 var(--space-1); font-size: var(--text-lg); }
+  .onboarding-card__header p { margin: 0; color: var(--text-2); }
+  .onboarding-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-3); margin: var(--space-4) 0; padding: 0; list-style: none; }
+  .onboarding-step { padding: var(--space-3); border-radius: var(--radius-sm); background: var(--bg-2); color: var(--text-2); }
+  .onboarding-step.is-done { color: var(--text-1); }
+  .onboarding-step strong { display: block; color: var(--text-1); }
+  @media (max-width: 600px) { .onboarding-steps { grid-template-columns: 1fr; } }
   .container { max-width: 920px; padding: var(--space-4); }
   .container h1 {
     font-size: var(--text-xl);
@@ -97,17 +111,12 @@
     .container h1 { font-size: var(--text-lg); }
     .container h1 img { height: 28px; }
   }
-  .fdm-floating-actions {
-    z-index: 999;
-    position: fixed;
-    right: var(--space-3);
-    top: 10px;
-    display: flex;
-        gap: var(--space-2);
+  .cifro-floating-actions {
+    display: none !important;
     }
-    .fdm-floating-actions .btn,
-    .fdm-floating-actions .btn.btn-primary,
-    .fdm-floating-actions .btn.btn--secondary {
+    .cifro-floating-actions .btn,
+    .cifro-floating-actions .btn.btn-primary,
+    .cifro-floating-actions .btn.btn--secondary {
         width: 44px;
         height: 44px;
         min-height: 44px;
@@ -122,33 +131,107 @@
         -webkit-backdrop-filter: blur(6px);
         transition: transform var(--t-fast), box-shadow var(--t-fast), background var(--t-fast), border-color var(--t-fast);
     }
-    .fdm-floating-actions .btn:hover,
-    .fdm-floating-actions .btn.btn-primary:hover,
-    .fdm-floating-actions .btn.btn--secondary:hover {
+    .cifro-floating-actions .btn:hover,
+    .cifro-floating-actions .btn.btn-primary:hover,
+    .cifro-floating-actions .btn.btn--secondary:hover {
         transform: translateY(-1px);
         background: var(--bg-3) !important;
         border-color: var(--border-2) !important;
         color: var(--text-1) !important;
         box-shadow: var(--shadow-2);
     }
-    .fdm-floating-actions .btn:focus-visible {
+    .cifro-floating-actions .btn:focus-visible {
         outline: 2px solid var(--border-2);
         outline-offset: 2px;
     }
-    .fdm-floating-actions .btn svg {
+    .cifro-floating-actions .btn svg {
         width: 18px;
         height: 18px;
   }
-  /* Em desktop a topnav já tem links — esconder floating */
-  @media (min-width: 721px) {
-    .fdm-floating-actions { display: none; }
+  #sideMenu,
+  #menusideMenu {
+    right: -100%;
+    width: min(360px, 100vw);
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--bg-elevated);
+    border-left: 1px solid var(--border-1);
+    box-shadow: var(--shadow-2);
   }
-
+  #sideMenu h2,
+  #menusideMenu h2 {
+    min-height: 64px;
+    margin: 0;
+    padding: 20px 56px;
+    border-bottom: 1px solid var(--border-1);
+    font-size: var(--text-lg);
+    font-weight: var(--fw-semibold);
+  }
+  #sideMenu #closeButton,
+  #menusideMenu #menucloseButton {
+    top: 12px;
+    left: 12px;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border-radius: var(--radius-sm);
+    line-height: 1;
+  }
+  #sideMenu #closeButton:hover,
+  #menusideMenu #menucloseButton:hover { background: var(--bg-2); }
+  #lista-playlists {
+    flex: 1;
+    overflow-y: auto !important;
+    height: auto !important;
+    margin: 0;
+    padding: var(--space-3) !important;
+  }
+  #lista-playlists .playlist-section-title {
+    margin: var(--space-4) var(--space-2) var(--space-2);
+    color: var(--text-3);
+  }
+  #lista-playlists .liPlaylist,
+  #lista-playlists .liRoteiro {
+    margin: 2px 0;
+    border-radius: var(--radius-sm);
+  }
+  #lista-playlists .liPlaylist > a,
+  #lista-playlists .liRoteiro > a {
+    display: flex;
+    align-items: center;
+    min-height: 44px;
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-sm);
+    color: var(--text-1);
+    font-size: var(--text-sm);
+    font-weight: var(--fw-medium);
+  }
+  #lista-playlists .liPlaylist > a:hover,
+  #lista-playlists .liRoteiro > a:hover {
+    background: var(--bg-2);
+    color: var(--brand);
+    text-decoration: none;
+  }
     </style>
 </head>
 
 <body>
 <?php include __DIR__ . '/partials/topnav.php'; ?>
+    <h1 class="sr-only">Músicas da banda</h1>
+    <section class="onboarding-card" id="onboardingCard" aria-labelledby="onboardingTitle" hidden>
+        <div class="onboarding-card__header">
+            <div><h2 id="onboardingTitle">Comece seu repertório</h2><p>Três passos rápidos para deixar a primeira cifra pronta.</p></div>
+            <button type="button" class="btn btn--secondary btn--sm" id="dismissOnboarding">Continuar depois</button>
+        </div>
+        <ol class="onboarding-steps">
+            <li class="onboarding-step is-done"><strong>1. Banda selecionada</strong>Seu espaço de trabalho está pronto.</li>
+            <li class="onboarding-step" id="onboardingSongStep"><strong>2. Adicione uma cifra</strong>Cadastre o nome, artista e conteúdo.</li>
+            <li class="onboarding-step" id="onboardingOpenStep"><strong>3. Abra e transponha</strong>Escolha o tom adequado para tocar.</li>
+        </ol>
+        <a class="btn btn--primary" id="onboardingAction" href="/src/backend/editor/editor.php">Adicionar primeira cifra</a>
+    </section>
     <!-- <button id="playlistButton"><i class="fa-solid fa-music"></i></button> -->
 <div id="toast" style="
   position: fixed;
@@ -164,13 +247,13 @@
   z-index: 9999;
   box-shadow: 0 2px 6px rgba(0,0,0,0.3);
 "></div>
-        <div class="btn-group fdm-floating-actions" role="group" aria-label="Ações rápidas">
+        <div class="btn-group cifro-floating-actions" role="group" aria-label="Ações rápidas">
             <button type="button" class="btn btn--icon btn--secondary" id="menuButton" aria-label="Abrir menu">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
                 </svg>
             </button>
-            <button type="button" class="btn btn--icon btn--secondary" id="playlistButton" aria-label="Abrir setlists">
+            <button type="button" class="btn btn--icon btn--secondary" id="playlistButton" aria-label="Abrir repertórios">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
                     <circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/>
@@ -198,29 +281,22 @@
         <div id="liveStatus" class="live-status mt-2">Live desconectada</div>
         <?php if (function_exists('current_user_is_admin') && current_user_is_admin()): ?>
             <a href="src/backend/editor/editor.php" type="button" class="btn btn-primary mt-3" >Editor</a>
-            <a href="src/backend/editor/roteiro.php" type="button" class="btn btn-primary mt-3">Editor Roteiros</a>
+        <?php endif; ?>
+        <?php if (function_exists('can_edit_content') && can_edit_content()): ?>
+            <a href="/categorias.php" class="btn btn-primary mt-3">Categorias</a>
         <?php endif; ?>
         
     </div>
     <div id="sideMenu">
-        <button id="closeButton" onclick="document.getElementById('sideMenu').style.right = '-300px';">×</button>
-        <h2>PlayLists 
+        <button id="closeButton" onclick="document.getElementById('sideMenu').style.right = '-100%';">×</button>
+        <h2>Repertórios
             <!-- <button class="btn" data-toggle="modal" data-target="#addPlayList"><i
                     class="fa-solid fa-plus"></i></button> -->
                 </h2>
-        <ul id="lista-playlists" style="    display: block;
-    overflow: hidden;
-    height: 100%;
-    border: none;"></ul>
+        <ul id="lista-playlists"></ul>
     </div>
-    <div class="container">
+    <div class="container" id="musicLibrary">
         <div class="filter-group" role="group" aria-label="Filtros por categoria">
-            <button type="button" class="chip chip--active" onclick="aplicarFiltro('')">Todas</button>
-            <button type="button" class="chip" onclick="aplicarFiltro('Louvor Animado')">Louvores</button>
-            <button type="button" class="chip" onclick="aplicarFiltro('Marianas')">Marianas</button>
-            <button type="button" class="chip" onclick="aplicarFiltro('Oracionais')">Oracionais</button>
-            <button type="button" class="chip" onclick="aplicarFiltro('Adoração')">Adoração</button>
-            <button type="button" class="chip" onclick="aplicarFiltro('Missa')">Missa</button>
         </div>
         <input type="search" id="search" class="form-control" placeholder="Pesquisar música ou artista" aria-label="Pesquisar">
         <ul id="music-list" class="list-group mt-3" style=" width: 100%;">
@@ -230,29 +306,31 @@
             <li class="list-group-item" aria-hidden="true"><div class="skeleton" style="height:16px;width:65%;"></div></li>
         </ul>
         <div id="letraAtiva">A</div>
-        <div id="mostrarbtnplay" class="hide">
-             <a type="button" class="btn btn-primary col" id="entrarlivePlaynow"><i class="fa-solid fa-play"></i>
-                ENTRAR PRO PLAY</a>
-        </div>
     </div>
 
-    <div class="modal fade" id="addPlayList" tabindex="-1" role="dialog" aria-labelledby="addPlayList"
+    <div id="mostrarbtnplay" style="display:none" aria-hidden="true">
+        <a class="btn btn-primary col" id="entrarlivePlaynow">
+            Entrar na sessão ao vivo
+        </a>
+    </div>
+
+    <div class="modal fade" id="addPlayList" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="myModalLabel"
         aria-hidden="true">
         <div class="modal-dialog" role="document">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title" id="myModalLabel">Add PlayList</h5>
+                    <h5 class="modal-title" id="myModalLabel">Novo repertório</h5>
                     <button type="button" class="close" data-dismiss="modal" aria-label="Close">
                         <span aria-hidden="true">&times;</span>
                     </button>
                 </div>
                 <div class="modal-body">
-                    <span>Nome da PlaysList</span>
+                    <label for="playlistnome">Nome do repertório</label>
                     <input name="playlistnome" class="form-control" id="playlistnome" />
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-dismiss="modal">Fechar</button>
-                    <button type="button" class="btn btn-primary" id="salvarPlayList">Salvar</button>
+                    <button type="button" class="btn btn-primary" id="salvarPlayList">Criar repertório</button>
                 </div>
             </div>
         </div>
@@ -260,38 +338,28 @@
 
     <script src="/src/js/jquery-3.5.1.min.js" ></script>
     <script src="/src/js/bootstrap.min.js" defer></script>
-    <script>window.FDM_BAND_ID = '<?= e(current_band_id()) ?>';</script>
-    <script src="<?= asset_url('/src/js/fdm-sync.js') ?>"></script>
+    <script>window.CIFRO_USER_ID = '<?= e($_SESSION['usuario']['id'] ?? '') ?>'; window.CIFRO_BAND_ID = '<?= e(current_band_id()) ?>';</script>
+    <script src="<?= asset_url('/src/js/cifro-connectivity.js') ?>"></script>
+    <script src="<?= asset_url('/src/js/cifro-sync.js') ?>"></script>
+    <script src="<?= asset_url('/src/js/chords.js') ?>"></script>
     <script src="<?= asset_url('/src/js/script.js') ?>" defer></script>
-    <script src="/src/js/06215d6691.js" defer></script>
-    <script>document.addEventListener('DOMContentLoaded', () => fdmSync.load(window.FDM_BAND_ID));</script>
     <script src="<?= asset_url('/src/js/playlists.js') ?>" defer></script>
     <script src="<?= asset_url('/src/js/offline-tools.js') ?>"></script>
     <script src="<?= asset_url('/src/js/live.js') ?>"></script>
     <script>
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/service-worker.js')
-                    .then(registration => {
-                        console.log('Service Worker registrado com sucesso:', registration);
-                    })
-                    .catch(error => {
-                        console.warn('Falha ao registrar o Service Worker:', error);
-                    });
-            });
-        }
-        // Toggle do tema (módulo fdm-theme já carregado e aplicado no <head>)
+        // Toggle do tema (módulo cifro-theme já carregado e aplicado no <head>)
         document.addEventListener('DOMContentLoaded', function () {
             var toggle = document.getElementById('themeToggle');
-            if (!toggle || !window.fdmTheme) return;
-            toggle.checked = window.fdmTheme.get() === 'dark';
+            if (!toggle || !window.cifroTheme) return;
+            toggle.checked = window.cifroTheme.get() === 'dark';
             toggle.addEventListener('change', function () {
-                window.fdmTheme.set(toggle.checked ? 'dark' : 'light');
+                window.cifroTheme.set(toggle.checked ? 'dark' : 'light');
             });
         });
 
         function aplicarFiltro(classificacao) {
             $("#search").val(classificacao).trigger("input");
+            sessionStorage.setItem('cifroHomeCategory', classificacao);
             document.querySelectorAll('.filter-group .chip').forEach(function (el) {
                 el.classList.remove('chip--active');
             });
@@ -304,20 +372,41 @@
             });
             if (target) target.classList.add('chip--active');
         }
+        function renderCategoryFilters() {
+            var group = document.querySelector('.filter-group');
+            group.replaceChildren();
+            var all = document.createElement('button');
+            all.type = 'button';
+            all.className = 'chip chip--active';
+            all.textContent = 'Todas';
+            all.addEventListener('click', function () { aplicarFiltro(''); });
+            group.appendChild(all);
+            (Array.isArray(window.categorias) ? window.categorias : []).forEach(function (categoria) {
+                var button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'chip';
+                button.textContent = categoria.nome;
+                button.addEventListener('click', function () { aplicarFiltro(categoria.nome); });
+                group.appendChild(button);
+            });
+        }
         function normalizeString(str) {
             return str.normalize('NFD').replace(/[\u0300-\u036f]/g, "").toLowerCase();
         }
-        $(document).ready(function () {
+        document.addEventListener('cifro:sync', renderCategoryFilters);
+        $(document).ready(async function () {
+            await cifroSync.load(window.CIFRO_BAND_ID);
+            renderCategoryFilters();
               $(document).click(function(event) {
                 var $menu = $('#sideMenu');
                 var right = $menu.css('right');
             
                 if (right === '0px' && !$(event.target).closest('#sideMenu').length) {
-                    $menu.css('right', '-300px');
+                    $menu.css('right', '-100%');
                 }
             });
             document.getElementById('clearCacheBtn').addEventListener('click', async () => {
-                const ok = await fdmConfirm({
+                const ok = await cifroConfirm({
                     title: 'Limpar cache do app',
                     message: 'Isso vai apagar dados salvos localmente (preferências e músicas em cache para uso offline) e recarregar a página. Você precisará de internet na próxima abertura.',
                     confirmText: 'Sim, limpar',
@@ -343,76 +432,114 @@
                     location.reload();
                 }
             });
-            songs = songs.sort((a, b) => a.nome.localeCompare(b.nome));
-            function renderList(filter = '') {
+            let songs = (Array.isArray(window.songs) ? window.songs : []).slice()
+                .sort((a, b) => String(a.nome || '').localeCompare(String(b.nome || ''), 'pt-BR', { sensitivity: 'base' }));
+            const SONG_PAGE_SIZE = 100;
+            let visibleSongLimit = SONG_PAGE_SIZE;
+            let activeFilter = '';
+            function renderList(filter = '', resetPage = true) {
                 $('#music-list').empty();
                 const normalizedFilter = normalizeString(filter);
+                if (resetPage || normalizedFilter !== activeFilter) visibleSongLimit = SONG_PAGE_SIZE;
+                activeFilter = normalizedFilter;
                 const filteredSongs = songs.filter(song =>
-                    normalizeString(song.nome).includes(normalizedFilter) ||
-                    normalizeString(song.artista).includes(normalizedFilter) ||
-                    normalizeString(song.classificacao).includes(normalizedFilter) ||
-                    normalizeString(song.cifra).includes(normalizedFilter)
+                    normalizeString(song.nome || '').includes(normalizedFilter) ||
+                    normalizeString(song.artista || '').includes(normalizedFilter) ||
+                    normalizeString(song.classificacao || '').includes(normalizedFilter) ||
+                    normalizeString(song.cifra || '').includes(normalizedFilter)
                 );
                 if (filteredSongs.length === 0) {
                     const termo = String(filter).replace(/[<>&]/g, '');
                     $('#music-list').append(
                         `<li class="empty-state" role="status">
                             <span class="empty-state__icon" aria-hidden="true">🔎</span>
-                            <p class="empty-state__title">Nenhuma música encontrada</p>
-                            <p class="empty-state__desc">${termo ? 'Tente outro termo em vez de <strong>' + termo + '</strong>.' : 'A lista está vazia no momento.'}</p>
+                            <p class="empty-state__title">${termo ? 'Nenhuma música encontrada' : 'Você ainda não tem músicas cadastradas'}</p>
+                            <p class="empty-state__desc">${termo ? 'Tente outro termo em vez de <strong>' + termo + '</strong>.' : 'Comece adicionando uma cifra ao repertório.'}</p>
+                            ${termo ? '' : '<a class="btn btn-primary" href="/src/backend/editor/editor.php">Adicionar primeira cifra</a>'}
                         </li>`
                     );
                 } else {
-                    filteredSongs.forEach(song => {
-                        var nome = song.nome + " - " + song.artista;
-                        $('#music-list').append(
-                            `<li class="list-group-item">
-                                <a href="music.php?id=${song.id}">${nome}</a>
-                            </li>`
-                        );
+                    filteredSongs.slice(0, visibleSongLimit).forEach(song => {
+                        const item = document.createElement('li');
+                        item.className = 'list-group-item';
+                        const link = document.createElement('a');
+                        link.href = 'music.php?id=' + encodeURIComponent(song.id);
+                        link.textContent = String(song.nome || '') + ' - ' + String(song.artista || '');
+                        item.appendChild(link);
+                        document.getElementById('music-list').appendChild(item);
                     });
+                    if (filteredSongs.length > visibleSongLimit) {
+                        const item = document.createElement('li');
+                        item.className = 'list-group-item text-center';
+                        const button = document.createElement('button');
+                        button.type = 'button';
+                        button.className = 'btn btn-outline-primary';
+                        button.textContent = `Carregar mais (${filteredSongs.length - visibleSongLimit})`;
+                        button.addEventListener('click', () => {
+                            visibleSongLimit += SONG_PAGE_SIZE;
+                            renderList(filter, false);
+                        });
+                        item.appendChild(button);
+                        document.getElementById('music-list').appendChild(item);
+                    }
                 }
-                var lista = document.getElementById('music-list');
-                const letraAtiva = document.getElementById('letraAtiva');
-                const items = lista.querySelectorAll('li');
-
-                lista.addEventListener('scroll', () => {
-
-                     clearTimeout(scrollTimeout);
-
-                    // Mostra a letra ativa
-                    letraAtiva.classList.add('visible');
-                    // Pega o scroll top do UL
-                    const scrollTop = lista.scrollTop;
-
-                    // Vamos identificar qual li está mais próximo do topo visível
-                    let letra = '';
-
-                    for (const li of items) {
-                        const offsetTop = li.offsetTop;
-                        const height = li.offsetHeight;
-
-                        // Se o topo do li já passou do scrollTop (está visível)
-                        if (offsetTop - scrollTop <= -5) {
-                            // Pega a primeira letra do li (antes do '-')
-                            letra = li.textContent.trim()[0];
-                        }
-                    }
-
-                    if (letra) {
-                        letraAtiva.textContent = letra;
-                    }
-                    var scrollTimeout = setTimeout(() => {
-                      letraAtiva.classList.remove('visible');
-                    }, 3000);
-                });
             }
+
+            const musicList = document.getElementById('music-list');
+            const activeLetter = document.getElementById('letraAtiva');
+            let scrollTimeout;
+            musicList.addEventListener('scroll', () => {
+                clearTimeout(scrollTimeout);
+                activeLetter.classList.add('visible');
+                let letter = '';
+                for (const item of musicList.querySelectorAll('li')) {
+                    if (item.offsetTop - musicList.scrollTop <= -5) letter = item.textContent.trim()[0] || '';
+                }
+                if (letter) activeLetter.textContent = letter;
+                scrollTimeout = setTimeout(() => activeLetter.classList.remove('visible'), 3000);
+            }, { passive: true });
 
             $('#search').on('input', function () {
                 renderList($(this).val());
             });
 
-            renderList();
+            document.addEventListener('cifro:sync', function () {
+                songs = (Array.isArray(window.songs) ? window.songs : []).slice()
+                    .sort((a, b) => String(a.nome || '').localeCompare(String(b.nome || ''), 'pt-BR', { sensitivity: 'base' }));
+                renderList($('#search').val());
+                if (typeof window.renderPlaylistsMenu === 'function') window.renderPlaylistsMenu();
+            });
+
+            renderList('');
+            const savedScroll = Number(sessionStorage.getItem('cifroHomeScroll') || 0);
+            document.getElementById('music-list').scrollTop = savedScroll;
+            document.getElementById('music-list').addEventListener('scroll', function () {
+                sessionStorage.setItem('cifroHomeScroll', String(this.scrollTop));
+            }, { passive: true });
+            const savedCategory = sessionStorage.getItem('cifroHomeCategory');
+            if (savedCategory) aplicarFiltro(savedCategory);
+
+            const onboarding = document.getElementById('onboardingCard');
+            const onboardingAction = document.getElementById('onboardingAction');
+            const onboardingSongStep = document.getElementById('onboardingSongStep');
+            const onboardingOpenStep = document.getElementById('onboardingOpenStep');
+            const musicLibrary = document.getElementById('musicLibrary');
+            function updateHomeContentState() {
+                const hasSongs = Array.isArray(window.songs) && window.songs.length > 0;
+                const dismissed = localStorage.getItem('cifroOnboardingDismissed') === '1';
+                const showOnboarding = !hasSongs && !dismissed;
+                onboarding.hidden = !showOnboarding;
+                musicLibrary.hidden = showOnboarding;
+                onboardingSongStep.toggleAttribute('aria-current', showOnboarding);
+            }
+            updateHomeContentState();
+            document.addEventListener('cifro:sync', updateHomeContentState);
+            document.getElementById('dismissOnboarding').addEventListener('click', function () {
+                localStorage.setItem('cifroOnboardingDismissed', '1');
+                updateHomeContentState();
+            });
+            window.__cifroHomeRenderAt = performance.now();
+            if (typeof window.renderPlaylistsMenu === 'function') window.renderPlaylistsMenu();
 
              // Verifica a cada 5 segundos
 
