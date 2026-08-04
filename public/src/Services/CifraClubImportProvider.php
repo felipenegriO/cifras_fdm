@@ -67,7 +67,7 @@ class CifraClubImportProvider implements ChordImportProvider
         libxml_use_internal_errors($previous);
 
         $xpath = new DOMXPath($document);
-        $preNode = $xpath->query('//pre[contains(@id, "cifra")]')->item(0);
+        $preNode = $xpath->query('//pre[@data-chord-content="true"] | //pre[contains(@id, "cifra")]')->item(0);
         if (!$preNode) {
             throw new RuntimeException('Não foi possível extrair a cifra desta página.');
         }
@@ -78,15 +78,12 @@ class CifraClubImportProvider implements ChordImportProvider
             $title = trim($h1->textContent);
         }
 
+        // O artista fica no primeiro <h2> após o <h1> (layout atual do CifraClub
+        // usa classes CSS ofuscadas/instáveis, então não dá pra confiar nelas).
         $artist = '';
-        $h2Link = $xpath->query('//h2//a')->item(0);
-        if ($h2Link) {
-            $artist = trim($h2Link->textContent);
-        } else {
-            $h2 = $xpath->query('//h2')->item(0);
-            if ($h2) {
-                $artist = trim($h2->textContent);
-            }
+        $h2 = $xpath->query('(//h1/following::h2)[1]')->item(0) ?: $xpath->query('//h2')->item(0);
+        if ($h2) {
+            $artist = trim($h2->textContent);
         }
 
         $rawContent = str_replace("\r\n", "\n", $preNode->textContent);

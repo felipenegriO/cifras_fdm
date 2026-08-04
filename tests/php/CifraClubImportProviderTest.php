@@ -48,6 +48,20 @@ final class CifraClubImportProviderTest extends TestCase
         $this->assertStringNotContainsString('Tom: C', $result['content']);
     }
 
+    public function testParsesRealCifraClubLayoutWithObfuscatedClasses(): void
+    {
+        $html = file_get_contents(__DIR__ . '/../fixtures/cifraclub-real-layout.html');
+        $provider = new CifraClubImportProvider(['httpGet' => function () use ($html) {
+            return $html;
+        }]);
+
+        $result = $provider->import('https://www.cifraclub.com.br/diante-do-trono/a-ele-gloria/');
+
+        $this->assertSame('A Ele a Glória', $result['title']);
+        $this->assertSame('Diante do Trono', $result['artist']);
+        $this->assertStringContainsString('[Intro] Em  C  D9(11)', $result['content']);
+    }
+
     public function testParseHttpStatusCodeExtractsRedirectStatus(): void
     {
         $status = CifraClubImportProvider::parseHttpStatusCode([
