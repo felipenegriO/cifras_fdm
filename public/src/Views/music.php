@@ -5,28 +5,23 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <?php csrf_meta(); ?>
-    <script src="<?= asset_url('/src/js/fdm-csrf.js') ?>"></script>
-    <script src="<?= asset_url('/src/js/fdm-confirm.js') ?>"></script>
-    <script src="<?= asset_url('/src/js/fdm-toast.js') ?>"></script>
-    <title>StageBox - Cifras</title>
-    <script src="/src/js/fdm-theme.js"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <script src="<?= asset_url('/src/js/cifro-csrf.js') ?>"></script>
+    <script src="<?= asset_url('/src/js/cifro-confirm.js') ?>"></script>
+    <script src="<?= asset_url('/src/js/cifro-toast.js') ?>"></script>
+    <title>Cifrô</title>
+    <script src="/src/js/cifro-theme.js"></script>
     <link href="/src/css/fonts.css" rel="stylesheet">
     <link href="/src/css/bootstrap.min.css" rel="stylesheet">
     <link href="/src/css/theme.css" rel="stylesheet">
     <link href="/src/css/style2.css" rel="stylesheet">
     <link href="/src/css/rehearsal.css" rel="stylesheet">
+    <link href="<?= asset_url('/src/css/music-view.css') ?>" rel="stylesheet">
 
     <style>
-        body {
+        .music-page {
             background: var(--bg-0);
             color: var(--text-1);
             line-height: normal;
-        }
-
-        body {
-            padding: 20px;
             overflow-x: hidden;
         }
 
@@ -61,70 +56,10 @@
             white-space: pre-wrap !important;
         }
 
-        /* ===== Mobile Bottom Bar (Etapa 3) ===== */
-        .music-bottom-bar {
-            position: fixed;
-            left: 0; right: 0; bottom: 0;
-            z-index: var(--z-bottom-bar, 90);
-            display: none;
-            align-items: center;
-            justify-content: space-between;
-            gap: 8px;
-            padding: 8px 12px calc(8px + env(safe-area-inset-bottom)) 12px;
-            background: rgba(15, 15, 17, .94);
-            backdrop-filter: blur(8px);
-            -webkit-backdrop-filter: blur(8px);
-            border-top: 1px solid var(--border-1, #27272f);
-        }
-        .music-bottom-bar__group {
-            display: flex;
-            align-items: center;
-            gap: 4px;
-        }
-        .music-bottom-bar__btn {
-            min-width: 40px;
-            min-height: 40px;
-            padding: 0 10px;
-            border-radius: 6px;
-            background: transparent;
-            color: var(--text-1, #f4f4f5);
-            border: 1px solid var(--border-1, #27272f);
-            font-family: inherit;
-            font-size: 13px;
-            font-weight: 500;
-            cursor: pointer;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .music-bottom-bar__btn:hover { background: var(--bg-2, #1c1c22); }
-        .music-bottom-bar__btn--primary {
-            background: var(--bg-0);
-            border: 1px solid var(--border-2);
-            color: var(--text-1);
-        }
-        [data-theme="light"] .music-bottom-bar__btn--primary {
-            background: var(--text-1);
-            border-color: var(--text-1);
-            color: var(--bg-0);
-        }
-        .music-bottom-bar__btn--primary:hover { opacity: .85; }
-        .music-bottom-bar__label {
-            font-size: 11px;
-            color: var(--text-2, #a1a1aa);
-            padding: 0 4px;
-        }
-
-        @media (max-width: 768px) {
-            .music-bottom-bar { display: flex; }
-            #song-cifra { margin-bottom: calc(80px + env(safe-area-inset-bottom)) !important; }
-            /* esconder btn-group flutuante (topnav já tem) */
-            body > .row .btn-group[role="group"] { top: 70px; }
-        }
     </style>
 </head>
 
-<body>
+<body class="music-page<?= (($_GET['editorPreview'] ?? '') === '1') ? ' is-editor-preview' : '' ?>">
     <div id="toast" style="
       position: fixed;
       bottom: 15%;
@@ -148,7 +83,8 @@
             var dstHeader = document.getElementById('song-tom-display');
             if (!src) return;
             function sync() {
-                var v = (src.textContent || '').trim() || '—';
+                var raw = (src.textContent || '').trim();
+                var v = /^Tom não identificado$/i.test(raw) ? '—' : (raw || '—');
                 if (dst) dst.textContent = v;
                 if (dstHeader) dstHeader.textContent = v && v !== '—' ? 'Tom: ' + v : '';
             }
@@ -157,125 +93,186 @@
         });
     </script>
 
-    <!-- Bottom bar mobile (delega cliques aos botões originais) -->
-    <div class="music-bottom-bar safe-area-bottom" role="toolbar" aria-label="Controles rápidos">
+    <div class="music-bottom-bar safe-area-bottom is-hidden" id="musicQuickBar" role="toolbar" aria-label="Controles rápidos" aria-hidden="true">
         <div class="music-bottom-bar__group" role="group" aria-label="Tom">
-            <button type="button" class="music-bottom-bar__btn" aria-label="Diminuir tom" onclick="document.getElementById('decrease-tom').click()">−</button>
+            <button type="button" class="music-bottom-bar__btn" aria-label="Diminuir tom" data-music-action="decrease-tom">−</button>
             <span class="music-bottom-bar__label" aria-live="polite"><span id="mbbTom">—</span></span>
-            <button type="button" class="music-bottom-bar__btn" aria-label="Aumentar tom" onclick="document.getElementById('increase-tom').click()">+</button>
+            <button type="button" class="music-bottom-bar__btn" aria-label="Aumentar tom" data-music-action="increase-tom">+</button>
         </div>
-        <div class="music-bottom-bar__group" role="group" aria-label="Tamanho da fonte">
-            <button type="button" class="music-bottom-bar__btn" aria-label="Diminuir texto" onclick="document.getElementById('decrease-text').click()">A−</button>
-            <button type="button" class="music-bottom-bar__btn" aria-label="Aumentar texto" onclick="document.getElementById('increase-text').click()">A+</button>
+        <div class="music-bottom-bar__group music-bottom-bar__secondary" role="group" aria-label="Tamanho da fonte">
+            <button type="button" class="music-bottom-bar__btn" aria-label="Diminuir texto" data-music-action="decrease-text">A−</button>
+            <button type="button" class="music-bottom-bar__btn" aria-label="Aumentar texto" data-music-action="increase-text">A+</button>
         </div>
-        <button type="button" class="music-bottom-bar__btn music-bottom-bar__btn--primary" aria-label="Abrir menu" onclick="document.getElementById('menuButton').click()">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
-        </button>
+        <div class="music-bottom-bar__group music-bottom-bar__optional" role="group" aria-label="Leitura">
+            <button type="button" id="quickAutoScroll" class="music-bottom-bar__btn" aria-label="Iniciar ou pausar rolagem automática" aria-pressed="false">Rolar</button>
+            <button type="button" id="quickLyrics" class="music-bottom-bar__btn" aria-label="Alternar entre cifra e somente letra" aria-pressed="false" data-music-action="toggle-cifra-letra">Letra</button>
+        </div>
+        <button type="button" class="music-bottom-bar__btn music-bottom-bar__btn--primary" aria-label="Abrir ajustes" data-music-action="menuButton">Ajustes</button>
     </div>
 
-    <div id="menusideMenu">
-        <h2><button id="menucloseButton" style="z-index: 999;">×</button>Menu</h2>
-
-        <div class="row" style="margin-bottom: 15px;">
-            <button type="button" class="btn btn-primary col" id="decrease-tom" style="    padding-right: 0;">- tom</button>
-            <button type="button" class="btn col" style="color: white;" id="tom"></button>
-            <button type="button" class="btn btn-primary col" id="increase-tom">+ tom</button>
+    <aside id="menusideMenu" aria-label="Ajustes da música" aria-hidden="true">
+        <div class="music-drawer__header">
+            <h2 class="music-drawer__title">Ajustes</h2>
+            <button id="menucloseButton" type="button" aria-label="Fechar ajustes">×</button>
         </div>
-        <div id="tomInfo" class="live-status" style="margin-bottom: 15px; font-size: 12px;"></div>
-
-        <div class="row" style="margin-bottom: 15px;">
-            <button type="button" class="btn btn-primary col mr-2" id="increase-text">A+</button>
-            <button type="button" class="btn btn-primary col" id="decrease-text">A-</button>
+        <div class="music-settings-tabs" role="tablist" aria-label="Seções dos ajustes">
+            <button type="button" class="music-settings-tab is-active" id="settingsTabReading" role="tab" aria-selected="true" aria-controls="settingsPanelReading" data-settings-tab="reading">Leitura</button>
+            <button type="button" class="music-settings-tab" id="settingsTabLive" role="tab" aria-selected="false" aria-controls="settingsPanelLive" data-settings-tab="live">Ao vivo</button>
+            <button type="button" class="music-settings-tab" id="settingsTabTools" role="tab" aria-selected="false" aria-controls="settingsPanelTools" data-settings-tab="tools">Ferramentas</button>
         </div>
+        <div class="music-drawer__body">
+            <section class="music-settings-panel" id="settingsPanelReading" role="tabpanel" aria-labelledby="settingsTabReading" data-settings-panel="reading">
+                <div class="music-control-row">
+                    <div class="music-control-label">
+                        <strong>Tom</strong>
+                        <span id="tomInfo" class="live-status"></span>
+                    </div>
+                    <div class="music-inline-stepper" role="group" aria-label="Tom da música">
+                        <button type="button" id="decrease-tom" aria-label="Diminuir tom">−</button>
+                        <span id="tom" aria-live="polite">—</span>
+                        <button type="button" id="increase-tom" aria-label="Aumentar tom">+</button>
+                    </div>
+                </div>
 
-        <div class="row" style="margin-bottom: 15px;">
-            <button id="toggle-columns" class="btn btn-primary toggle-btn col">Formatação automática</button>
+                <div class="music-control-row">
+                    <div class="music-control-label"><strong>Tamanho</strong></div>
+                    <div class="music-inline-stepper" role="group" aria-label="Tamanho do texto">
+                        <button type="button" id="decrease-text" aria-label="Diminuir texto">A−</button>
+                        <span id="fontSizeDisplay">—</span>
+                        <button type="button" id="increase-text" aria-label="Aumentar texto">A+</button>
+                    </div>
+                </div>
+
+                <div class="music-control-row music-control-row--stacked">
+                    <div class="music-control-label"><strong>Conteúdo</strong></div>
+                    <div class="music-segmented" role="group" aria-label="Conteúdo exibido">
+                        <button type="button" id="viewModeChords" data-view-mode="chords" aria-pressed="true">Cifra</button>
+                        <button type="button" id="viewModeLyrics" data-view-mode="lyrics" aria-pressed="false">Letra</button>
+                    </div>
+                </div>
+
+                <div class="music-control-row music-control-row--stacked">
+                    <div class="music-control-label"><strong>Colunas</strong></div>
+                    <div class="music-segmented music-segmented--three" role="group" aria-label="Quantidade de colunas">
+                        <button type="button" id="columnModeAuto" data-column-mode="auto" aria-pressed="true">Auto</button>
+                        <button type="button" id="columnMode1" data-column-mode="1" aria-pressed="false">1</button>
+                        <button type="button" id="columnMode2" data-column-mode="2" aria-pressed="false">2</button>
+                    </div>
+                </div>
+
+                <div class="music-control-row">
+                    <label class="music-control-label" for="showQuickBar"><strong>Barra de controles</strong></label>
+                    <label class="music-switch">
+                        <input type="checkbox" id="showQuickBar" role="switch" aria-label="Exibir barra de controles">
+                        <span aria-hidden="true"></span>
+                    </label>
+                </div>
+
+                <button id="toggle-columns" class="music-control-proxy">Ajuste automático</button>
+                <button id="toggle-cifra-letra" class="music-control-proxy">Somente letra</button>
+
+                <div class="music-scroll-card">
+                    <div class="music-scroll-card__header">
+                        <div>
+                            <strong>Rolagem automática</strong>
+                            <span>Use a barra de espaço para pausar</span>
+                        </div>
+                        <button type="button" id="autoScrollToggle" class="music-primary-action" aria-pressed="false">Iniciar</button>
+                    </div>
+                    <label class="music-range-label" for="autoScrollSpeed"><span>Velocidade</span><span id="autoScrollSpeedValue">2/5</span></label>
+                    <input class="music-range" type="range" id="autoScrollSpeed" min="1" max="5" value="2" step="1">
+                </div>
+
+                <div class="music-panel-footer">
+                    <button type="button" class="music-secondary-action" id="resetReadingSettings">Restaurar padrão</button>
+                    <button type="button" class="music-secondary-action" onclick="cifroPresentation && cifroPresentation.enter()">Modo apresentação</button>
+                </div>
+            </section>
+
+            <section class="music-settings-panel" id="settingsPanelLive" role="tabpanel" aria-labelledby="settingsTabLive" data-settings-panel="live" hidden>
+                <div class="music-live-card">
+                    <span class="music-live-card__eyebrow">Status da sessão</span>
+                    <div id="liveStatus" class="live-status">Live desconectada</div>
+                </div>
+                <button type="button" class="music-primary-action music-full-action" id="entrarlivePlay">Entrar na sessão</button>
+                <div class="music-leader-action">
+                    <span>Quer controlar a música para todos?</span>
+                    <button type="button" class="music-secondary-action music-full-action" id="livePlay">Iniciar como líder</button>
+                </div>
+            </section>
+
+            <section class="music-settings-panel" id="settingsPanelTools" role="tabpanel" aria-labelledby="settingsTabTools" data-settings-panel="tools" hidden>
+                <details class="music-tool" open>
+                    <summary>Metrônomo</summary>
+                    <div class="music-tool__content metronome-controls">
+                    <label class="music-range-label" for="bpmSlider"><span>Metrônomo</span><span><span id="bpmValue">80</span> BPM</span></label>
+                    <input class="music-range" type="range" id="bpmSlider" min="40" max="300" value="60" step="1">
+                        <div class="music-tool-actions" role="group" aria-label="Controles do metrônomo">
+                            <button id="startMetronome" class="music-primary-action">Iniciar</button>
+                            <button id="stopMetronome" class="music-secondary-action">Parar</button>
+                            <button id="tapTempo" class="music-secondary-action">Tap tempo</button>
+                        </div>
+                    </div>
+                </details>
+                <details class="music-tool">
+                    <summary>Ensaio com YouTube e áudio</summary>
+                    <div class="music-tool__content">
+                        <a href="" id="linkYou" target="_blank" rel="noopener" class="music-secondary-action music-full-action">Pesquisar no YouTube</a>
+                        <button type="button" id="btnAtivarEnsaio" class="music-primary-action music-full-action">Abrir painel de ensaio</button>
+                    </div>
+                </details>
+                <details class="music-tool">
+                    <summary>Uso offline</summary>
+                    <div class="music-tool__content" id="offlineToolsMount"></div>
+                </details>
+            </section>
         </div>
+    </aside>
 
-        <div class="row" style="margin-bottom: 15px;">
-            <button id="toggle-cifra-letra" class="btn btn-primary toggle-btn col">Somente letra</button>
+    <aside id="sideMenu" aria-label="Repertórios" aria-hidden="true">
+        <div class="music-drawer__header">
+            <h2 class="music-drawer__title">Repertórios</h2>
+            <button id="closeButton" type="button" aria-label="Fechar repertórios">×</button>
         </div>
-
-        <div class="row" style="margin-bottom: 15px;">
-            <button type="button" class="btn btn-primary col" onclick="fdmPresentation && fdmPresentation.enter()">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:middle;"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
-                Modo Apresentação
-            </button>
-        </div>
-
-        <div class="row" style="margin-bottom: 15px;">
-            <button type="button" class="btn btn-primary col" id="entrarlivePlay">
-                <i class="fa-solid fa-play"></i> ENTRAR NO MODO LIVE
-            </button>
-        </div>
-
-        <div class="row" style="margin-bottom: 15px;">
-            <button type="button" class="btn btn-primary col" id="livePlay">
-                <i class="fa-solid fa-broadcast-tower"></i> VIRAR HOST
-            </button>
-        </div>
-
-        <div id="liveStatus" class="live-status" style="margin-bottom: 15px;">Live desconectada</div>
-
-        <div class="row" style="margin-bottom: 15px;">
-            <a href="" id="linkYou" target="_blank" class="btn btn-primary" style="width: 100%;">
-                <img src="/src/images/youtube.svg" style="width: 100px;">
-            </a>
-        </div>
-
-
-        <div class="metronome-controls mt-3">
-            <label for="bpmSlider">BPM: <span id="bpmValue">80</span></label><br>
-            <input type="range" id="bpmSlider" min="40" max="300" value="60" step="1" style="width: 100%;">
-
-            <div class="row mt-2" role="group">
-                <button id="startMetronome" class="btn btn-success col mr-2"
-                    style="background-color: #28a745 !important;">
-                    <i style="background-color: #28a745 !important;" class="fa-solid fa-play"></i> Iniciar
-                </button>
-                <button id="stopMetronome" class="btn btn-danger col mr-2"
-                    style="background-color: #dc3545 !important;">
-                    <i style="background-color: #dc3545 !important;" class="fa-solid fa-stop"></i> Parar
-                </button>
-                <button id="tapTempo" class="btn btn-primary col" style="background-color: #007bff !important;">
-                    Tap Tempo
-                </button>
+        <div class="music-drawer__body">
+            <div class="music-setting-row">
+                <a class="btn btn-primary music-drawer-button" href="/src/backend/editor/editorplaylist.php">Criar repertório</a>
             </div>
+            <ul id="lista-playlists"></ul>
         </div>
-    </div>
+    </aside>
 
-    <div id="sideMenu">
-        <button id="closeButton">×</button>
-        <h2>PlayLists <button class="btn" data-toggle="modal" data-target="#addPlayList"><i
-                    class="fa-solid fa-plus"></i></button></h2>
-        <ul id="lista-playlists" style="overflow: hidden; height: 100%; border: none;"></ul>
-    </div>
-
-    <div class="row">
-        <div class="col-2">
-            <a href="index.php" class="btn" id="backLink"><i class="fa-solid fa-2x fa-arrow-left"></i></a>
-        </div>
-        <div class="col-10">
-            <h3 id="song-title" style="margin-bottom:2px;"></h3>
-            <div style="font-size: var(--text-xs); color: var(--text-2);">
+    <header class="music-header">
+        <a href="index.php" class="music-header__back" id="backLink" aria-label="Voltar">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+        </a>
+        <div class="music-header__identity">
+            <h1 class="music-header__title" id="song-title">Carregando música…</h1>
+            <div class="music-header__meta">
+                <span id="artist-name"></span>
                 <span id="song-tom-display"></span>
             </div>
         </div>
-
-        <div class="btn-group" style="position: fixed; right: 10px; overflow: auto;" role="group"
-            aria-label="Basic example">
-            <!-- <button type="button" class="btn btn-primary" id="btnAtivarEnsaio" title="Ativar Modo Ensaio"><i class="fa-solid fa-heart"></i> Ensaio</button> -->
-            <button type="button" class="btn btn-primary" id="menuButton"><i class="fa-solid fa-list"></i></button>
-            <button type="button" class="btn btn-primary" id="playlistButton"><i class="fa-solid fa-music"></i></button>
+        <div class="music-header__actions">
+            <span class="music-connection" id="connectionStatus" role="status">Online</span>
+            <button type="button" class="music-header__action" id="playlistButton" aria-label="Abrir repertórios">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+            </button>
+            <button type="button" class="music-header__action" id="menuButton" aria-label="Abrir ajustes">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 21v-7"/><path d="M4 10V3"/><path d="M12 21v-9"/><path d="M12 8V3"/><path d="M20 21v-5"/><path d="M20 12V3"/><path d="M1 14h6"/><path d="M9 8h6"/><path d="M17 16h6"/></svg>
+            </button>
         </div>
-    </div>
+    </header>
 
-    <div class="row">
-        <div class="container" style="margin-left: 0px; margin-right: 0; max-width: 100%;">
-            <div id="song-cifra" class="cifra auto-columns" style="margin-bottom: 4rem !important;"></div>
+    <main class="music-content">
+        <div id="song-cifra" class="cifra auto-columns" aria-live="polite" aria-busy="true"></div>
 
             <!-- Modo Ensaio Panel -->
             <div id="modo-ensaio" aria-hidden="true">
+                <div class="rehearsal-panel__header">
+                    <strong>Controles de ensaio</strong>
+                    <button type="button" id="btnFecharEnsaio" class="rehearsal-panel__close" aria-label="Fechar painel de ensaio">×</button>
+                </div>
                 <!-- YouTube Section -->
                 <div class="rehearsal-section">
                     <h4 class="rehearsal-section-title">Inserir Música (YouTube)</h4>
@@ -337,15 +334,12 @@
                 </div>
             </div>
 
-            <div id="barranaevegacao">
-                <div style="right: 15px; position: fixed; bottom: 15px;"></div>
-            </div>
-        </div>
-    </div>
+        <div id="barranaevegacao"></div>
+    </main>
 
-    <div id="mostrarbtnplay" class="hide">
-        <a type="button" class="btn btn-primary col" id="entrarlivePlaynow">
-            <i class="fa-solid fa-play"></i> ENTRAR PRO PLAY
+    <div id="mostrarbtnplay" style="display:none" aria-hidden="true">
+        <a class="btn btn-primary col" id="entrarlivePlaynow">
+            Entrar na sessão ao vivo
         </a>
     </div>
 
@@ -385,27 +379,35 @@
         </div>
     </div>
 
-    <script src="/src/js/06215d6691.js"></script>
     <script src="/src/js/jquery-3.5.1.min.js"></script>
     <script src="/src/js/bootstrap.min.js"></script>
-
-    <!-- WaveSurfer v7 (UMD version for script tag loading) -->
-    <script src="https://cdn.jsdelivr.net/npm/wavesurfer.js@7/dist/wavesurfer.umd.js"></script>
-
-    <!-- SoundTouchJS for Pitch Control (Optional) -->
-    <script src="https://unpkg.com/soundtouchjs@0.1.30/dist/soundtouch.min.js"></script>
-
-    <!-- Rehearsal Mode Modules -->
-    <script src="<?= asset_url('/src/js/rehearsal/rehearsal.state.js') ?>" defer></script>
-    <script src="<?= asset_url('/src/js/rehearsal/rehearsal.youtube.js') ?>" defer></script>
-    <script src="<?= asset_url('/src/js/rehearsal/rehearsal.pitch.js') ?>" defer></script>
-    <script src="<?= asset_url('/src/js/rehearsal/rehearsal.audio.js') ?>" defer></script>
-    <script src="<?= asset_url('/src/js/rehearsal/rehearsal.ui.js') ?>" defer></script>
-    <script src="<?= asset_url('/src/js/rehearsal/rehearsal.bootstrap.js') ?>" defer></script>
 
     <!-- Botão Ensaio - Listener IMEDIATO (executa antes de tudo) -->
     <script>
         (function setupEnsaioButton() {
+            let rehearsalPromise = null;
+            function loadScript(src) {
+                return new Promise((resolve, reject) => {
+                    const script = document.createElement('script');
+                    script.src = src;
+                    script.onload = resolve;
+                    script.onerror = () => reject(new Error('Falha ao carregar ensaio'));
+                    document.head.appendChild(script);
+                });
+            }
+            function loadRehearsal() {
+                if (rehearsalPromise) return rehearsalPromise;
+                rehearsalPromise = (async () => {
+                    await loadScript('/src/vendor/wavesurfer/wavesurfer.min.js');
+                    await loadScript('/src/vendor/soundtouch/soundtouch.min.js');
+                    for (const src of [
+                        '/src/js/rehearsal/rehearsal.state.js', '/src/js/rehearsal/rehearsal.youtube.js',
+                        '/src/js/rehearsal/rehearsal.pitch.js', '/src/js/rehearsal/rehearsal.audio.js',
+                        '/src/js/rehearsal/rehearsal.ui.js', '/src/js/rehearsal/rehearsal.bootstrap.js'
+                    ]) await loadScript(src);
+                })();
+                return rehearsalPromise;
+            }
             function bindButton() {
                 const btn = document.getElementById('btnAtivarEnsaio');
                 const panel = document.getElementById('modo-ensaio');
@@ -414,14 +416,33 @@
                 
                 if (btn.dataset.ensaioListenerAdded) return true;
                 btn.dataset.ensaioListenerAdded = 'true';
+
+                document.getElementById('btnFecharEnsaio')?.addEventListener('click', function() {
+                    panel.classList.remove('is-active');
+                    panel.setAttribute('aria-hidden', 'true');
+                    btn.classList.remove('active');
+                    btn.textContent = 'Abrir painel de ensaio';
+                    btn.focus();
+                });
                 
-                btn.addEventListener('click', function(e) {
+                btn.addEventListener('click', async function(e) {
                     e.stopPropagation();
                     e.preventDefault();
                     
                     const isActive = panel.classList.toggle('is-active');
                     panel.setAttribute('aria-hidden', String(!isActive));
                     btn.classList.toggle('active', isActive);
+                    btn.textContent = isActive ? 'Fechar painel de ensaio' : 'Abrir painel de ensaio';
+                    if (isActive) {
+                        btn.disabled = true;
+                        try { await loadRehearsal(); } catch (error) {
+                            panel.classList.remove('is-active');
+                            panel.setAttribute('aria-hidden', 'true');
+                            window.cifroToast && cifroToast('Não foi possível carregar o modo ensaio.', 'error');
+                        } finally { btn.disabled = false; }
+                        const menu = document.getElementById('menusideMenu');
+                        if (menu) menu.style.right = '-100%';
+                    }
                     
                     // Force reflow
                     void panel.offsetHeight;
@@ -438,11 +459,28 @@
         })();
     </script>
 
+    <script src="<?= asset_url('/src/js/chords.js') ?>"></script>
     <script src="<?= asset_url('/src/js/script.js') ?>" defer></script>
-    <script src="<?= asset_url('/src/js/fdm-presentation.js') ?>"></script>
-    <script>window.FDM_BAND_ID = '<?= e(current_band_id()) ?>';</script>
-    <script src="<?= asset_url('/src/js/fdm-sync.js') ?>"></script>
-    <script>document.addEventListener('DOMContentLoaded', () => fdmSync.load(window.FDM_BAND_ID));</script>
+    <script src="<?= asset_url('/src/js/music-view.js') ?>" defer></script>
+    <script src="<?= asset_url('/src/js/cifro-presentation.js') ?>"></script>
+    <script>window.CIFRO_USER_ID = '<?= e($_SESSION['usuario']['id'] ?? '') ?>'; window.CIFRO_BAND_ID = '<?= e(current_band_id()) ?>';</script>
+    <script src="<?= asset_url('/src/js/cifro-sanitize.js') ?>"></script>
+    <script src="<?= asset_url('/src/js/cifro-connectivity.js') ?>"></script>
+    <script src="<?= asset_url('/src/js/cifro-sync.js') ?>"></script>
+    <script>
+        window.__cifroInitialDataPromise = cifroSync.load(window.CIFRO_BAND_ID).then(function (loaded) {
+            const id = new URLSearchParams(window.location.search).get('id');
+            const song = (window.songs || []).find(item => String(item.id) === String(id));
+            if (!song) return loaded;
+            document.getElementById('song-title').textContent = song.nome || '';
+            document.getElementById('artist-name').textContent = song.artista || '';
+            const cifra = document.getElementById('song-cifra');
+            cifra.innerHTML = window.cifroSanitizeCifra(song.cifra || '');
+            cifra.setAttribute('aria-busy', 'false');
+            window.__cifroFirstRenderAt = performance.now();
+            return loaded;
+        });
+    </script>
     <script src="<?= asset_url('/src/js/playlists.js') ?>" defer></script>
     <script src="<?= asset_url('/src/js/offline-tools.js') ?>"></script>
     <script src="<?= asset_url('/src/js/live.js') ?>"></script>
@@ -470,38 +508,7 @@
         }
 
         function sanitizeCifraHtml(html) {
-            // PRESERVAR espaços múltiplos convertendo para &nbsp;
-            // Isso previne o DOMParser de colapsar espaços
-            const preservedHtml = String(html).replace(/ {2,}/g, match => {
-                // Converte múltiplos espaços em combinação de &nbsp; e espaços
-                return match.split('').map((_, i) => i === 0 ? ' ' : '&nbsp;').join('');
-            });
-
-            const allowedTags = new Set([
-                'b', 'br', 'refrao', 'prerefrao', 'ponte', 'intro', 'verso',
-                'strong', 'em', 'i', 'u', 'p', 'span', 'pre', 'div'
-            ]);
-
-            const doc = new DOMParser().parseFromString(preservedHtml, 'text/html');
-            const nodes = Array.from(doc.body.querySelectorAll('*'));
-
-            nodes.forEach(node => {
-                const tag = node.nodeName.toLowerCase();
-                if (!allowedTags.has(tag)) {
-                    const parent = node.parentNode;
-                    if (parent) {
-                        while (node.firstChild) {
-                            parent.insertBefore(node.firstChild, node);
-                        }
-                        parent.removeChild(node);
-                    }
-                    return;
-                }
-
-                Array.from(node.attributes).forEach(attr => node.removeAttribute(attr.name));
-            });
-
-            return doc.body.innerHTML;
+            return window.cifroSanitizeCifra(html);
         }
 
         const SECTION_TAGS = new Set(['REFRAO', 'PREREFRAO', 'PONTE']);
@@ -543,7 +550,7 @@
         }
 
         const chordTokenRegex =
-            /^[A-G](?:#|b)?(?:m|maj|min|dim|aug|sus|add)?\d{0,2}(?:\([^)]+\))?(?:\/[A-G](?:#|b)?)?$/i;
+            /^[A-G](?:#|b)?(?:m|maj|min|dim|aug|sus|add|M)?\d{0,2}(?:M)?(?:\([^)]+\))*(?:[+º°])?(?:\/[A-G](?:#|b)?)?$/i;
 
         function cleanChordTokensInPlainText(text) {
             const parts = text.split(/(\s+)/);
@@ -599,12 +606,10 @@
                 });
             }
 
-            // 2) limpa o restante fora dessas tags
-            const lines = processed.split(/<br\s*\/?>/i);
-
-            const cleaned = lines.map(lineHtml => {
-                if (/(<(prerefrao|refrao|ponte|intro|verso)\b)/i.test(lineHtml)) return lineHtml;
-
+            // 2) limpa o restante fora dessas tags, sem particionar os blocos
+            // já processados no passo 1 (um split por <br> "cego" cortava
+            // <refrao>...</refrao> ao meio e deixava a tag sem fechamento).
+            const cleanLine = lineHtml => {
                 const text = getTextFromHtml(lineHtml);
                 const trimmed = text.trim();
                 if (!trimmed) return "";
@@ -623,6 +628,16 @@
                 if (isChordOnlyLine) return "";
 
                 return cleanChordTokensInPlainText(text);
+            };
+
+            const blockSplitRegex = new RegExp(`(<(?:${tagsToKeep.join('|')})\\b[^>]*>[\\s\\S]*?<\\/(?:${tagsToKeep.join('|')})>)`, 'gi');
+            const segments = processed.split(blockSplitRegex);
+
+            const cleaned = segments.map((segment, index) => {
+                // Índices ímpares são os blocos capturados (<refrao>...</refrao>
+                // etc.), já limpos no passo 1 — devolve como está.
+                if (index % 2 === 1) return segment;
+                return segment.split(/<br\s*\/?>/i).map(cleanLine).join('\n');
             });
 
             const result = cleaned.join('\n')
@@ -650,14 +665,26 @@
         // ==========================
         let ultimoNumero = null;
 
-        $(document).ready(function () {
+        document.addEventListener('cifro:sync', function (event) {
+            if (!event.detail?.changed || new URLSearchParams(window.location.search).get('editorPreview') === '1' || document.getElementById('cifroSongUpdate')) return;
+            const notice = document.createElement('button');
+            notice.id = 'cifroSongUpdate';
+            notice.type = 'button';
+            notice.textContent = 'Atualização disponível — toque para reabrir';
+            notice.style.cssText = 'position:fixed;top:56px;left:50%;transform:translateX(-50%);z-index:9998;border:0;border-radius:999px;padding:10px 16px;background:#f59e0b;color:#111;font-weight:700;box-shadow:0 6px 20px #0008';
+            notice.addEventListener('click', () => window.location.reload());
+            document.body.appendChild(notice);
+        });
+
+        $(document).ready(async function () {
+            await window.__cifroInitialDataPromise;
 
             $(document).click(function (event) {
                 var $menu = $('#menusideMenu');
                 var right = $menu.css('right');
 
-                if (right === '0px' && !$(event.target).closest('#menusideMenu').length) {
-                    $menu.css('right', '-300px');
+                if (right === '0px' && !$(event.target).closest('#menusideMenu, #menuButton, [data-music-action="menuButton"]').length) {
+                    $menu.css('right', '-100%');
                 }
             });
 
@@ -665,8 +692,8 @@
                 var $menu = $('#sideMenu');
                 var right = $menu.css('right');
 
-                if (right === '0px' && !$(event.target).closest('#sideMenu').length) {
-                    $menu.css('right', '-300px');
+                if (right === '0px' && !$(event.target).closest('#sideMenu, #playlistButton').length) {
+                    $menu.css('right', '-100%');
                 }
             });
 
@@ -678,7 +705,15 @@
             const decreaseBtnTom = document.getElementById('decrease-tom');
             const cifraDiv = document.getElementById('song-cifra');
             const songId = urlParams.get('id');
-            const song = songs.find(song => song.id == songId);
+            let editorPreviewSong = null;
+            if (urlParams.get('editorPreview') === '1') {
+                try {
+                    editorPreviewSong = JSON.parse(sessionStorage.getItem('cifroEditorPreview'));
+                } catch (error) {
+                    editorPreviewSong = null;
+                }
+            }
+            const song = editorPreviewSong || songs.find(song => song.id == songId);
 
             let baseFontSize = null;
 
@@ -709,20 +744,12 @@
             }
 
             function normalizarTomPlaylist(tom) {
-                const equivalentes = {
-                    'DB': 'C#',
-                    'EB': 'D#',
-                    'GB': 'F#',
-                    'AB': 'G#',
-                    'BB': 'A#'
-                };
-                const valor = String(tom || '').trim().toUpperCase();
-                return equivalentes[valor] || valor;
+                return window.CifroChords.normalizeKey(tom);
             }
 
             function indiceTomPlaylist(tom) {
                 const notas = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-                return notas.indexOf(normalizarTomPlaylist(tom));
+                return notas.indexOf(window.CifroChords.tonicOf(normalizarTomPlaylist(tom)));
             }
 
             function aplicarTomDaPlaylist(html, tomDestino) {
@@ -1761,8 +1788,11 @@
                 }
 
                 let sizeAdjustIters = 0;
-                while (finalState.overflowX > 1 && finalSize > minSize && sizeAdjustIters < 4) {
-                    finalSize = Math.max(minSize, finalSize - step);
+                while (finalState.overflowX > 1 && finalSize > minSize && sizeAdjustIters < 8) {
+                    const renderedWidth = availableWidth + finalState.overflowX;
+                    const widthRatio = Math.max(0.1, (availableWidth - 8) / renderedWidth);
+                    const scaledSize = Math.floor(finalSize * widthRatio * 2) / 2;
+                    finalSize = Math.max(minSize, Math.min(finalSize - step, scaledSize));
                     finalState = tryRender(finalCols, finalSize, minForcedCols);
                     sizeAdjustIters += 1;
                 }
@@ -1784,8 +1814,20 @@
                     fillIters += 1;
                 }
 
+                sizeAdjustIters = 0;
+                while (finalState.overflowX > 1 && finalSize > minSize && sizeAdjustIters < 8) {
+                    const renderedWidth = availableWidth + finalState.overflowX;
+                    const widthRatio = Math.max(0.1, (availableWidth - 8) / renderedWidth);
+                    const scaledSize = Math.floor(finalSize * widthRatio * 2) / 2;
+                    finalSize = Math.max(minSize, Math.min(finalSize - step, scaledSize));
+                    finalState = tryRender(finalCols, finalSize, minForcedCols);
+                    sizeAdjustIters += 1;
+                }
+                needsScroll = finalState.overflowY > 1 || finalState.heightUsage > scrollTarget;
+
                 cifraDiv.dataset.forceMaxColumns = '';
                 cifraDiv.dataset.forceMinColumns = '';
+                cifraDiv.style.overflowX = 'hidden';
                 cifraDiv.style.overflowY = needsScroll ? 'auto' : 'hidden';
                 setBodyScrollLock(!needsScroll);
             }
@@ -1868,6 +1910,7 @@
             if (song) {
                 $('#song-title').text(song.nome);
                 $('#artist-name').text(song.artista);
+                cifraDiv.setAttribute('aria-busy', 'false');
 
                 const tomPlaylist = normalizarTomPlaylist(urlParams.get('playlistTom'));
                 const sanitizedCifra = sanitizeCifraHtml(song.cifra);
@@ -1893,9 +1936,9 @@
 
                 if (tomPlaylist) {
                     if (indiceTomPlaylist(tomDetectadoOriginal) < 0) {
-                        setTomInfo('Tom da playlist: ' + tomPlaylist + ' | tom original nao identificado com seguranca', 'waiting');
+                        setTomInfo('Tom do repertório: ' + tomPlaylist + ' | tom original não identificado com segurança', 'waiting');
                     } else {
-                        setTomInfo('Tom da playlist: ' + tomPlaylist + ' | original detectado: ' + tomDetectadoOriginal, 'follow');
+                        setTomInfo('Tom do repertório: ' + tomPlaylist + ' | original detectado: ' + tomDetectadoOriginal, 'follow');
                     }
                 } else {
                     setTomInfo('Tom original detectado: ' + (tomDetectadoOriginal || 'nao identificado'), tomDetectadoOriginal ? 'host' : 'waiting');
@@ -1909,18 +1952,30 @@
                 document.getElementById('bpmValue').value = song.bit;
                 document.getElementById('bpmSlider').value = song.bit;
 
-                if (!navigator.onLine) {
+                if (!window.CifroConnectivity?.isServerAvailable()) {
                     $("#mostrarbtnplay").hide();
                 }
 
             } else {
-                $('body').html('<div class="container"><h1>Música não encontrada</h1></div>');
+                $('body').html(`
+                    <main class="container not-found" style="min-height:100vh;display:grid;place-content:center;text-align:center;gap:1rem">
+                        <h1>Música não encontrada</h1>
+                        <p>Esta música não existe ou não está disponível para a banda selecionada.</p>
+                        <a class="btn btn-primary" href="/index.php">Voltar para a home</a>
+                    </main>
+                `);
                 return;
             }
 
             // ajuste colunas no load e resize
             adjustColumns();
             setTimeout(validateLayout, 100);
+            if (document.fonts?.ready) {
+                document.fonts.ready.then(() => {
+                    adjustColumns();
+                    validateLayout();
+                });
+            }
             window.addEventListener('resize', adjustColumns);
             window.addEventListener('resize', validateLayout);
 
@@ -1958,7 +2013,7 @@
                     setCifraHtml(cifraTransposta);
                     window.__cifraOriginalHtml = cifraTransposta;
                     $("#tom").text(tomnovo);
-                    setTomInfo('Tom ajustado manualmente: ' + tomnovo + ' | nao salva na playlist automaticamente', 'waiting');
+                    setTomInfo('Tom ajustado manualmente: ' + tomnovo + ' | não é salvo no repertório automaticamente', 'waiting');
                     break;
                 }
             });
@@ -1974,7 +2029,7 @@
                     setCifraHtml(cifraTransposta);
                     window.__cifraOriginalHtml = cifraTransposta;
                     $("#tom").text(tomnovo);
-                    setTomInfo('Tom ajustado manualmente: ' + tomnovo + ' | nao salva na playlist automaticamente', 'waiting');
+                    setTomInfo('Tom ajustado manualmente: ' + tomnovo + ' | não é salvo no repertório automaticamente', 'waiting');
                     break;
                 }
             });
