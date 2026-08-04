@@ -526,12 +526,56 @@
       .join('\n');
   }
 
-  function plainTextToHtml(text) {
-    const html = markChordLines(text)
+  // Linha que começa marcando uma seção da cifra, ex.: "[Refrão]" ou
+  // "[Intro] Em  C  D9(11)" (o marcador pode vir seguido de acordes na
+  // mesma linha).
+  const SECTION_HEADER_REGEX = /^\[([^\]]+)\]/;
+
+  // Mapeia o nome da seção para a tag já usada pelos botões manuais do
+  // editor (versoBtn/preRefraoBtn/refraoBtn/ponteBtn usam os mesmos
+  // formatos). Qualquer nome não reconhecido (Intro, Primeira Parte,
+  // Segunda Parte, Final, Solo etc.) vira um bloco "verso" genérico (div),
+  // igual ao botão "Verso"/"Intro" do editor.
+  function classifySectionTag(label) {
+    const normalized = String(label || '').trim().toLowerCase();
+    if (/^refr[aã]o/.test(normalized)) return 'refrao';
+    if (/^pr[eé]-?\s?refr[aã]o/.test(normalized)) return 'prerefrao';
+    if (/^ponte/.test(normalized)) return 'ponte';
+    return 'div';
+  }
+
+  // Agrupa as linhas em seções a partir dos marcadores "[Nome]": cada
+  // marcador inicia uma nova seção que engloba todas as linhas até o
+  // próximo marcador (ou o fim do texto). Conteúdo antes do primeiro
+  // marcador (se houver) fica sem tag, como hoje.
+  function splitIntoSections(text) {
+    const lines = String(text || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+    const sections = [];
+    let current = null;
+    lines.forEach(line => {
+      const match = line.trim().match(SECTION_HEADER_REGEX);
+      if (match) {
+        if (current) sections.push(current);
+        current = { tag: classifySectionTag(match[1]), lines: [line] };
+      } else {
+        if (!current) current = { tag: null, lines: [] };
+        current.lines.push(line);
+      }
+    });
+    if (current) sections.push(current);
+    return sections;
+  }
+
+  function sectionToHtml(section) {
+    const inner = markChordLines(section.lines.join('\n'))
       .replace(/ {2}/g, ' &nbsp;')
       .replace(/\t/g, '&nbsp;&nbsp;&nbsp;&nbsp;')
-      .replace(/\n/g, '<br/>')
-      .trim();
+      .replace(/\n/g, '<br/>');
+    return section.tag ? `<${section.tag}>${inner}</${section.tag}>` : inner;
+  }
+
+  function plainTextToHtml(text) {
+    const html = splitIntoSections(text).map(sectionToHtml).join('').trim();
     // O TinyMCE fragmenta em vários <p> quando recebe muitos <b> adjacentes
     // separados só por espaço (comum em linhas de acorde). Envolver tudo
     // num único bloco evita essa quebra e mantém a cifra como um bloco só.
