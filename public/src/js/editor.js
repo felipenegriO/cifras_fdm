@@ -477,19 +477,27 @@
     document.body.style.overflow = '';
   }
 
-  // Mesma regra usada em music.php (chordTokenRegex) para reconhecer uma
-  // linha composta só por acordes, para manter consistência entre o que é
-  // salvo e o que é exibido.
+  // Mesma regra usada em music.php (chordTokenRegex) para reconhecer um
+  // acorde isolado.
   const CHORD_LINE_TOKEN_REGEX = /^[A-G](?:#|b)?(?:m|maj|min|dim|aug|sus|add|M)?\d{0,2}(?:M)?(?:\([^)]+\))*(?:[+º°])?(?:\/[A-G](?:#|b)?)?$/i;
+  // Tokens que podem aparecer numa linha de acordes sem serem eles mesmos
+  // um acorde: marcador de seção sem espaço ("[Intro]", "[Final]") e
+  // parênteses isolados que envolvem um trecho instrumental ("( E7  Em7 )").
+  const CHORD_LINE_ALLOWED_EXTRA_REGEX = /^(\[[^\]\s]+\]|\(|\))$/;
 
   function escapeHtml(text) {
     return String(text || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
-  // Marca com <b> os acordes de linhas compostas só por acordes (mesmo
-  // critério do chordTokenRegex de music.php), para que o estilo global
-  // `b { color: var(--chord) }` reconheça automaticamente cifras
-  // importadas — igual ao que o botão "Acorde" do editor faz manualmente.
+  function isChordToken(token) {
+    return CHORD_LINE_TOKEN_REGEX.test(token);
+  }
+
+  // Marca com <b> os acordes de linhas de cifra (mesmo critério do
+  // chordTokenRegex de music.php, tolerando marcador de seção e parênteses
+  // isolados), para que o estilo global `b { color: var(--chord) }`
+  // reconheça automaticamente cifras importadas — igual ao que o botão
+  // "Acorde" do editor faz manualmente.
   function markChordLines(text) {
     return String(text || '')
       .replace(/\r\n/g, '\n')
@@ -498,13 +506,22 @@
       .map(line => {
         const parts = line.split(/(\s+)/);
         const tokens = parts.filter((part, index) => index % 2 === 0 && part !== '');
-        const isChordLine = tokens.length > 0 && tokens.every(
-          token => CHORD_LINE_TOKEN_REGEX.test(token.replace(/[.,;:!?]/g, ''))
+        const cleanedTokens = tokens.map(token => token.replace(/[.,;:!?]/g, ''));
+        const hasChord = cleanedTokens.some(isChordToken);
+        const isChordLine = hasChord && cleanedTokens.every(
+          token => isChordToken(token) || CHORD_LINE_ALLOWED_EXTRA_REGEX.test(token)
         );
         if (!isChordLine) return escapeHtml(line);
-        return parts.map(
-          (part, index) => (index % 2 === 0 && part !== '') ? `<b>${escapeHtml(part)}</b>` : escapeHtml(part)
-        ).join('');
+        return parts.map((part, index) => {
+          if (index % 2 !== 0) {
+            // Espaço simples entre tags <b> pode ser descartado pelo TinyMCE
+            // ao serializar; usar &nbsp; garante que o espaçamento sobreviva.
+            return part.replace(/ /g, '&nbsp;');
+          }
+          if (part === '') return part;
+          const cleaned = part.replace(/[.,;:!?]/g, '');
+          return isChordToken(cleaned) ? `<b>${escapeHtml(part)}</b>` : escapeHtml(part);
+        }).join('');
       })
       .join('\n');
   }
