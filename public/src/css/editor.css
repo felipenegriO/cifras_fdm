@@ -221,11 +221,24 @@ body {
 .import-modal__actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
 
 .import-modal__tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border-1); }
-.import-modal__tab { padding: 8px 14px; border: none; background: none; color: var(--text-2); cursor: pointer; border-bottom: 2px solid transparent; font: inherit; }
-.import-modal__tab.is-active { color: var(--text-1); border-bottom-color: var(--accent-1, var(--text-1)); font-weight: var(--fw-medium); }
+.import-modal__tab {
+    padding: 8px 14px;
+    border: none;
+    border-bottom: 2px solid transparent;
+    background: none;
+    color: var(--text-2);
+    font: inherit;
+    font-weight: var(--fw-medium);
+    cursor: pointer;
+    transition: color var(--t-fast), border-color var(--t-fast);
+}
+.import-modal__tab:hover { color: var(--text-1); }
+.import-modal__tab:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.import-modal__tab.is-active { color: var(--brand); border-bottom-color: var(--brand); }
 .import-modal__panel[hidden] { display: none; }
-.import-fetch-error { padding: 10px 12px; border: 1px solid var(--border-1); border-radius: var(--radius-sm); background: var(--bg-2); color: var(--danger-1, #c0392b); }
-.link-button { background: none; border: none; padding: 0; color: var(--accent-1, #2563eb); text-decoration: underline; cursor: pointer; font: inherit; }
+.import-fetch-error { padding: 10px 12px; border: 1px solid var(--border-1); border-radius: var(--radius-sm); background: var(--bg-2); color: var(--danger); }
+.link-button { background: none; border: none; padding: 0; color: var(--brand); text-decoration: underline; cursor: pointer; font: inherit; }
+.link-button:hover { color: var(--brand-hover); }
 
 .editor-mobile-tabs { display: none; }
 .editor-shell.library-collapsed { grid-template-columns: 0 minmax(520px, 1fr); }
