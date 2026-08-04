@@ -477,13 +477,40 @@
     document.body.style.overflow = '';
   }
 
-  function plainTextToHtml(text) {
+  // Mesma regra usada em music.php (chordTokenRegex) para reconhecer uma
+  // linha composta só por acordes, para manter consistência entre o que é
+  // salvo e o que é exibido.
+  const CHORD_LINE_TOKEN_REGEX = /^[A-G](?:#|b)?(?:m|maj|min|dim|aug|sus|add|M)?\d{0,2}(?:M)?(?:\([^)]+\))*(?:[+º°])?(?:\/[A-G](?:#|b)?)?$/i;
+
+  function escapeHtml(text) {
+    return String(text || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  // Marca com <b> os acordes de linhas compostas só por acordes (mesmo
+  // critério do chordTokenRegex de music.php), para que o estilo global
+  // `b { color: var(--chord) }` reconheça automaticamente cifras
+  // importadas — igual ao que o botão "Acorde" do editor faz manualmente.
+  function markChordLines(text) {
     return String(text || '')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
       .replace(/\r\n/g, '\n')
       .replace(/\r/g, '\n')
+      .split('\n')
+      .map(line => {
+        const parts = line.split(/(\s+)/);
+        const tokens = parts.filter((part, index) => index % 2 === 0 && part !== '');
+        const isChordLine = tokens.length > 0 && tokens.every(
+          token => CHORD_LINE_TOKEN_REGEX.test(token.replace(/[.,;:!?]/g, ''))
+        );
+        if (!isChordLine) return escapeHtml(line);
+        return parts.map(
+          (part, index) => (index % 2 === 0 && part !== '') ? `<b>${escapeHtml(part)}</b>` : escapeHtml(part)
+        ).join('');
+      })
+      .join('\n');
+  }
+
+  function plainTextToHtml(text) {
+    return markChordLines(text)
       .replace(/ {2}/g, ' &nbsp;')
       .replace(/\t/g, '&nbsp;&nbsp;&nbsp;&nbsp;')
       .replace(/\n/g, '<br/>')
