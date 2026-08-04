@@ -44,6 +44,68 @@ class CifraClubImportProvider implements ChordImportProvider
 
     private function parseHtml(string $html, string $url): array
     {
-        throw new RuntimeException('Não foi possível extrair a cifra desta página.');
+        $document = new DOMDocument();
+        $previous = libxml_use_internal_errors(true);
+        $document->loadHTML('<?xml encoding="UTF-8">' . $html);
+        libxml_clear_errors();
+        libxml_use_internal_errors($previous);
+
+        $xpath = new DOMXPath($document);
+        $preNode = $xpath->query('//pre[contains(@id, "cifra")]')->item(0);
+        if (!$preNode) {
+            throw new RuntimeException('Não foi possível extrair a cifra desta página.');
+        }
+
+        $title = '';
+        $h1 = $xpath->query('//h1')->item(0);
+        if ($h1) {
+            $title = trim($h1->textContent);
+        }
+
+        $artist = '';
+        $h2Link = $xpath->query('//h2//a')->item(0);
+        if ($h2Link) {
+            $artist = trim($h2Link->textContent);
+        } else {
+            $h2 = $xpath->query('//h2')->item(0);
+            if ($h2) {
+                $artist = trim($h2->textContent);
+            }
+        }
+
+        $rawContent = str_replace("\r\n", "\n", $preNode->textContent);
+        $lines = explode("\n", $rawContent);
+
+        $metadata = [];
+        $contentStart = 0;
+        while ($contentStart < count($lines)) {
+            $line = trim($lines[$contentStart]);
+            if ($line === '') {
+                $contentStart++;
+                continue;
+            }
+            if (preg_match('/^(tom|capo|afina[cç][aã]o)\s*:\s*(.+)$/iu', $line, $match)) {
+                $metadata[mb_strtolower($match[1], 'UTF-8')] = trim($match[2]);
+                $contentStart++;
+                continue;
+            }
+            break;
+        }
+
+        $content = trim(implode("\n", array_slice($lines, $contentStart)));
+        if ($content === '') {
+            throw new RuntimeException('Não foi possível extrair a cifra desta página.');
+        }
+
+        return [
+            'title' => mb_substr($title, 0, 200),
+            'artist' => mb_substr($artist, 0, 200),
+            'content' => $content,
+            'metadata' => [
+                'tom' => $metadata['tom'] ?? null,
+                'capo' => $metadata['capo'] ?? null,
+                'afinação' => $metadata['afinação'] ?? $metadata['afinacao'] ?? null,
+            ],
+        ];
     }
 }
