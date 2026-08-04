@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Botão Ensaio</title>
+    <style>
+        body { font-family: Arial; padding: 20px; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 4px; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .warning { background: #fff3cd; color: #856404; }
+        button { padding: 10px 20px; font-size: 16px; margin: 10px; }
+        #modo-ensaio { padding: 20px; border: 2px solid #333; margin: 20px 0; }
+        #modo-ensaio[aria-hidden="true"] { display: none; }
+    </style>
+</head>
+<body>
+    <h1>🔍 Debug: Botão Ensaio</h1>
+    
+    <button id="btnAtivarEnsaio">Ensaio</button>
+    
+    <div id="modo-ensaio" aria-hidden="true">
+        <h2>Painel Ensaio Aberto!</h2>
+        <p>Se você vê isto, o toggle funcionou.</p>
+    </div>
+    
+    <div id="debug-output"></div>
+    
+    <script>
+        const debugOutput = document.getElementById('debug-output');
+        
+        function logStatus(message, type = 'success') {
+            const div = document.createElement('div');
+            div.className = `status ${type}`;
+            div.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            debugOutput.appendChild(div);
+        }
+        
+        // Check if Rehearsal modules exist
+        logStatus('Iniciando verificação...', 'warning');
+        
+        if (typeof window.Rehearsal === 'undefined') {
+            logStatus('❌ window.Rehearsal não existe', 'error');
+        } else {
+            logStatus('✅ window.Rehearsal existe', 'success');
+            
+            if (!window.Rehearsal.ui) {
+                logStatus('❌ window.Rehearsal.ui não existe', 'error');
+            } else {
+                logStatus('✅ window.Rehearsal.ui existe', 'success');
+                
+                if (typeof window.Rehearsal.ui.initUI !== 'function') {
+                    logStatus('❌ initUI não é uma função', 'error');
+                } else {
+                    logStatus('✅ initUI é uma função', 'success');
+                }
+            }
+        }
+        
+        // Try to bind manually
+        const btn = document.getElementById('btnAtivarEnsaio');
+        const panel = document.getElementById('modo-ensaio');
+        
+        if (!btn) {
+            logStatus('❌ Botão #btnAtivarEnsaio não encontrado', 'error');
+        } else {
+            logStatus('✅ Botão encontrado', 'success');
+        }
+        
+        if (!panel) {
+            logStatus('❌ Painel #modo-ensaio não encontrado', 'error');
+        } else {
+            logStatus('✅ Painel encontrado', 'success');
+        }
+        
+        // Manual click handler
+        btn.addEventListener('click', function() {
+            logStatus('🖱️ Clique detectado!', 'warning');
+            const isActive = panel.classList.toggle('is-active');
+            panel.setAttribute('aria-hidden', String(!isActive));
+            logStatus(`Painel agora: ${isActive ? 'ABERTO' : 'FECHADO'}`, 'success');
+        });
+        
+        logStatus('✅ Event listener adicionado manualmente', 'success');
+    </script>
+</body>
+</html>

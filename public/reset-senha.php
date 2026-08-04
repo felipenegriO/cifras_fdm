@@ -1,0 +1,89 @@
+<?php
+require_once __DIR__ . '/src/backend/bootstrap.php';
+
+$token = trim($_GET['token'] ?? $_POST['token'] ?? '');
+$erro  = '';
+$ok    = false;
+$repo  = new UserRepository();
+$flow  = new PasswordResetFlow($repo);
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    require_csrf();
+    $senha  = $_POST['senha']  ?? '';
+    $senha2 = $_POST['senha2'] ?? '';
+
+    $result = $flow->handleSubmit($token, $senha, $senha2);
+    $erro = $result['erro'];
+    $ok = $result['ok'];
+    if ($ok) {
+        // Invalidate any existing session for this user
+        if (session_status() === PHP_SESSION_ACTIVE && !headers_sent()) {
+            session_regenerate_id(true);
+        }
+        $_SESSION = [];
+    }
+} else {
+    $erro = $flow->checkTokenForDisplay($token) ?? '';
+}
+?>
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <?php csrf_meta(); ?>
+  <title>Redefinir senha — Cifrô</title>
+  <script src="/src/js/cifro-theme.js"></script>
+  <link href="/src/css/fonts.css" rel="stylesheet">
+  <link href="/src/css/theme.css" rel="stylesheet">
+  <style>
+    body { display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:linear-gradient(135deg,#0f0f0f,#1a1a2e);padding:20px;box-sizing:border-box;font-family:var(--font-ui,sans-serif); }
+    .card { background:var(--bg-2,#1e1e1e);border:1px solid var(--border-1,#333);border-radius:16px;padding:36px 32px;max-width:420px;width:100%;box-shadow:0 12px 40px rgba(0,0,0,.5); }
+    .brand { text-align:center;margin-bottom:24px;font-size:20px;font-weight:700;color:#fff; }
+    h2 { margin:0 0 18px;font-size:18px;color:#fff;text-align:center; }
+    .form-group { margin-bottom:14px; }
+    label { display:block;font-size:13px;color:#aaa;margin-bottom:5px;font-weight:500; }
+    input { width:100%;height:42px;padding:0 12px;box-sizing:border-box;background:#111;color:#fff;border:1px solid #333;border-radius:8px;font-family:inherit;font-size:14px; }
+    input:focus { outline:none;border-color:#7c3aed; }
+    .btn { width:100%;height:44px;background:#7c3aed;color:#fff;border:none;border-radius:8px;font-family:inherit;font-size:15px;font-weight:600;cursor:pointer;margin-top:8px; }
+    .btn:hover { background:#6d28d9; }
+    .error { background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.4);color:#f87171;border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:14px; }
+    .link { text-align:center;margin-top:18px;font-size:13px;color:#666; }
+    .link a { color:#7c3aed;text-decoration:none; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="brand">Cifrô</div>
+    <h2>Nova senha</h2>
+
+    <?php if ($ok): ?>
+      <p style="color:#aaa;text-align:center;line-height:1.6">
+        Senha redefinida com sucesso!<br>
+        <a href="/login.php" style="color:#7c3aed">Entrar agora</a>
+      </p>
+    <?php elseif ($erro): ?>
+      <div class="error"><?= htmlspecialchars($erro) ?></div>
+      <div class="link"><a href="/esqueci-senha.php">Solicitar novo link</a></div>
+    <?php else: ?>
+      <form method="post" novalidate>
+        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(csrf_token()) ?>">
+        <input type="hidden" name="token" value="<?= htmlspecialchars($token) ?>">
+
+        <div class="form-group">
+          <label for="senha">Nova senha</label>
+          <input type="password" id="senha" name="senha" placeholder="Mínimo 12 caracteres" minlength="12" autocomplete="new-password" required>
+        </div>
+        <div class="form-group">
+          <label for="senha2">Confirmar senha</label>
+          <input type="password" id="senha2" name="senha2" placeholder="Repita a senha" required>
+        </div>
+
+        <button type="submit" class="btn">Salvar nova senha</button>
+      </form>
+    <?php endif; ?>
+
+    <div class="link"><a href="/login.php">← Voltar ao login</a></div>
+  </div>
+</body>
+</html>

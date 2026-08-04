@@ -1,0 +1,38 @@
+{
+  "name": "cifro-tests",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "npm run test:unit && npm run test:e2e",
+    "test:unit": "npm run test:unit:php && npm run test:unit:js",
+    "test:unit:php": "C:/xampp/php/php.exe vendor/bin/phpunit",
+    "test:unit:js": "node --test tests/chords.test.js",
+    "test:coverage:php": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/coverage/run-php.ps1 -Threshold 80",
+    "test:coverage:js": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/coverage/run-js.ps1 -Threshold 80",
+    "coverage:js:uncovered": "node scripts/coverage/summarize-js-uncovered.mjs",
+    "test:coverage": "npm run test:coverage:php && npm run test:coverage:js",
+    "test:e2e": "playwright test --project=cifro",
+    "test:e2e:db:setup": "C:/xampp/php/php.exe scripts/setup/setup_e2e_db.php",
+    "test:e2e:smoke": "playwright test --project=cifro --grep \"login válido redireciona|carrega a página sem erro|carrega cifra com ID válido|GET /api/sync/data.php retorna|cadastra, edita e exclui categoria\"",
+    "test:e2e:pwa": "playwright test --project=pwa",
+    "test:e2e:visual": "playwright test --project=visual",
+    "test:e2e:quality": "playwright test --project=cifro tests/cifro/42-mobile-layout-accessibility.spec.js tests/cifro/51-performance-accessibility.spec.js",
+    "test:e2e:coverage": "playwright test --project=coverage",
+    "test:e2e:full": "playwright test --project=cifro --project=visual --project=pwa",
+    "test:e2e:legacy": "playwright test --project=legacy",
+    "security:dependencies": "npm audit --audit-level=high",
+    "serve": "php -S localhost:8090 -t public"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.50.0",
+    "esbuild": "^0.28.1",
+    "monocart-reporter": "^2.12.2"
+  },
+  "dependencies": {
+    "@fontsource/inter": "^5.2.8",
+    "@fontsource/jetbrains-mono": "^5.2.8",
+    "soundtouchjs": "^0.1.30",
+    "tinymce": "^7.9.3",
+    "wavesurfer.js": "^7.12.10"
+  }
+}

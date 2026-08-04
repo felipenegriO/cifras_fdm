@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">Cifrô</title>
+  <path fill="#7c3aed" d="M32 4C17 4 8 14.5 8 29.2 8 43 18.1 54.2 32 61c13.9-6.8 24-18 24-31.8 0-5.7-1.8-10.7-5-14.8l-10.2 8.2A13.8 13.8 0 0 1 44 31.4c0 6.4-4.7 12.1-12 15.8-7.3-3.7-12-9.4-12-15.8C20 23 25.1 17 32 17c4.1 0 7.5 1.7 9.8 4.5L52 13.4C47.2 7.3 40.1 4 32 4Z"/>
+  <path fill="#7c3aed" d="M17 27h25v4H17zm1 8h23v4H18z"/>
+</svg>
