@@ -40,4 +40,7 @@ try {
 } catch (InvalidArgumentException|RuntimeException $e) {
     http_response_code(422);
     echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+} catch (Throwable $e) {
+    http_response_code(500);
+    echo json_encode(['ok' => false, 'error' => 'Não foi possível concluir a importação.']);
 }

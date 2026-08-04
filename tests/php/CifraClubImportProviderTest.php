@@ -48,6 +48,26 @@ final class CifraClubImportProviderTest extends TestCase
         $this->assertStringNotContainsString('Tom: C', $result['content']);
     }
 
+    public function testParseHttpStatusCodeExtractsRedirectStatus(): void
+    {
+        $status = CifraClubImportProvider::parseHttpStatusCode([
+            'HTTP/1.1 301 Moved Permanently',
+            'Location: http://evil.internal/',
+        ]);
+        $this->assertSame(301, $status);
+    }
+
+    public function testParseHttpStatusCodeExtractsOkStatus(): void
+    {
+        $status = CifraClubImportProvider::parseHttpStatusCode(['HTTP/1.1 200 OK']);
+        $this->assertSame(200, $status);
+    }
+
+    public function testParseHttpStatusCodeReturnsNullForEmptyHeaders(): void
+    {
+        $this->assertNull(CifraClubImportProvider::parseHttpStatusCode([]));
+    }
+
     public function testThrowsWhenPageHasNoCifraBlock(): void
     {
         $html = file_get_contents(__DIR__ . '/../fixtures/cifraclub-sem-cifra.html');

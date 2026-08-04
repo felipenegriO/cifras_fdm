@@ -821,6 +821,9 @@
     elements.importTabTextButton?.addEventListener('click', () => switchImportTab('text'));
     elements.fetchImportButton?.addEventListener('click', fetchImportFromUrl);
     elements.confirmImportButton?.addEventListener('click', confirmImport);
+    elements.importRights?.addEventListener('change', () => {
+      elements.confirmImportButton.disabled = !elements.importRights.checked || !elements.importModal.dataset.preview;
+    });
     document.getElementById('closePreviewButton')?.addEventListener('click', closePreview);
     elements.saveButton?.addEventListener('click', saveSong);
     elements.deleteButton?.addEventListener('click', deleteSong);

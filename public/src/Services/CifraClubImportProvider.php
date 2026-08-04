@@ -15,11 +15,27 @@ class CifraClubImportProvider implements ChordImportProvider
                     'user_agent' => 'CifroFdm/1.0 (+https://cifrasfdm.com.br)',
                     'timeout' => $timeout,
                     'ignore_errors' => true,
-                    'max_redirects' => 3,
+                    'follow_location' => 0,
                 ],
             ]);
-            return @file_get_contents($url, false, $context, 0, 2 * 1024 * 1024);
+            $html = @file_get_contents($url, false, $context, 0, 2 * 1024 * 1024);
+            $status = self::parseHttpStatusCode($http_response_header ?? []);
+            if ($status !== null && $status >= 300 && $status <= 399) {
+                return false;
+            }
+            return $html;
         };
+    }
+
+    public static function parseHttpStatusCode(array $responseHeaders): ?int
+    {
+        if (!isset($responseHeaders[0]) || !is_string($responseHeaders[0])) {
+            return null;
+        }
+        if (preg_match('#^HTTP/\d(?:\.\d)?\s+(\d{3})#', $responseHeaders[0], $match) !== 1) {
+            return null;
+        }
+        return (int)$match[1];
     }
 
     public function import(string $url): array
