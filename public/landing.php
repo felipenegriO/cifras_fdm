@@ -271,6 +271,8 @@ if (isset($_SESSION['autenticado']) && $_SESSION['autenticado'] === true) {
 
   <footer>
     Cifrô &nbsp;·&nbsp; <a href="mailto:contato@cifro.online" style="color:var(--text-3)">contato@cifro.online</a>
+    &nbsp;·&nbsp; <a href="<?= htmlspecialchars((string)env('TERMS_URL', '/termos.php')) ?>" style="color:var(--text-3)">Termos de Uso</a>
+    &nbsp;·&nbsp; <a href="<?= htmlspecialchars((string)env('PRIVACY_URL', '/privacidade.php')) ?>" style="color:var(--text-3)">Política de Privacidade</a>
   </footer>
 
 </body>
