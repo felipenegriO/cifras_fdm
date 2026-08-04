@@ -1422,14 +1422,6 @@
                 let bestGap = resolvedColumnGap;
                 let bestMode = packModesToTry[0];
 
-                // Entre as opções que cabem na largura disponível e não
-                // estouram a altura, guarda a que usa MAIS colunas desde que
-                // o desequilíbrio entre elas seja razoável — evita preferir
-                // menos colunas só porque sobra altura (comum quando o
-                // conteúdo é mais curto, como no modo "somente letra").
-                const MAX_ACCEPTABLE_IMBALANCE = 0.35;
-                let widestAcceptable = null;
-
                 for (let k = minColumnsStart; k <= maxColumns; k += 1) {
                     const cols = buildColumnsWithMode(k);
                     const width = computeTotalWidth(cols, resolvedColumnGap);
@@ -1467,17 +1459,6 @@
                         bestGap = effectiveGap;
                         bestMode = preferredPackMode;
                     }
-
-                    if (overflow === 0 && imbalance <= MAX_ACCEPTABLE_IMBALANCE) {
-                        widestAcceptable = { cols, width: effectiveWidth, gap: effectiveGap, columnCount: k };
-                    }
-                }
-
-                if (widestAcceptable && (!bestColumns || widestAcceptable.columnCount > bestColumns.length)) {
-                    bestColumns = widestAcceptable.cols;
-                    bestWidth = widestAcceptable.width;
-                    bestGap = widestAcceptable.gap;
-                    bestMode = preferredPackMode;
                 }
 
                 if (bestColumns) {
