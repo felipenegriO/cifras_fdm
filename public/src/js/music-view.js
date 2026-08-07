@@ -102,8 +102,19 @@
             frame = requestAnimationFrame(autoScrollStep);
         }
 
+        function disableAutoColumnsIfActive() {
+            // O modo de colunas automáticas encaixa tudo numa altura fixa
+            // (overflow-y: hidden) para caber na tela sem precisar rolar —
+            // isso deixa a rolagem automática sem nada pra mover. Sair desse
+            // modo antes de rolar usa o mesmo botão/lógica de "Ajustes".
+            if (!cifra || !cifra.classList.contains('auto-columns')) return;
+            const toggleColumnsBtn = document.getElementById('toggle-columns');
+            if (toggleColumnsBtn) toggleColumnsBtn.click();
+        }
+
         function toggleAutoScroll() {
             if (scrolling) return stopAutoScroll();
+            disableAutoColumnsIfActive();
             scrolling = true;
             updateAutoScrollUi();
             frame = requestAnimationFrame(autoScrollStep);

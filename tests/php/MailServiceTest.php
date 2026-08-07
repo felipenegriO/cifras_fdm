@@ -67,4 +67,63 @@ final class MailServiceTest extends TestCase
         self::assertStringContainsString('token+com+espa%C3%A7o', $mailer->Body);
         self::assertStringContainsString('ana@example.com', $mailer->Body);
     }
+
+    public function testMontaEmailDeBoasVindasESolicitaEnvio(): void
+    {
+        $mailer = $this->getMockBuilder(PHPMailer::class)
+            ->setConstructorArgs([true])
+            ->onlyMethods(['send'])
+            ->getMock();
+        $mailer->expects(self::once())->method('send')->willReturn(true);
+
+        MailService::sendWelcome(
+            ['nome' => 'Carlos', 'email' => 'carlos@example.com'],
+            ['nome' => 'Banda Rock'],
+            'token-boas-vindas',
+            $mailer
+        );
+
+        self::assertSame('Bem-vindo ao Cifrô! Defina sua senha', $mailer->Subject);
+        self::assertStringContainsString('Carlos', $mailer->Body);
+        self::assertStringContainsString('Banda Rock', $mailer->Body);
+        self::assertStringContainsString('token-boas-vindas', $mailer->Body);
+    }
+
+    public function testMontaEmailDeConviteESolicitaEnvio(): void
+    {
+        $mailer = $this->getMockBuilder(PHPMailer::class)
+            ->setConstructorArgs([true])
+            ->onlyMethods(['send'])
+            ->getMock();
+        $mailer->expects(self::once())->method('send')->willReturn(true);
+
+        MailService::sendInvite(
+            ['nome' => 'Diana', 'email' => 'diana@example.com'],
+            ['nome' => 'Banda Jazz'],
+            'token-convite',
+            $mailer
+        );
+
+        self::assertSame('Você foi convidado para o Cifrô', $mailer->Subject);
+        self::assertStringContainsString('Banda Jazz', $mailer->Body);
+        self::assertStringContainsString('token-convite', $mailer->Body);
+    }
+
+    public function testSendLoggedRelancaExcecaoERegistraErro(): void
+    {
+        $mailer = $this->getMockBuilder(PHPMailer::class)
+            ->setConstructorArgs([true])
+            ->onlyMethods(['send'])
+            ->getMock();
+        $mailer->method('send')->willThrowException(new RuntimeException('SMTP connection failed'));
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('SMTP connection failed');
+
+        MailService::sendPasswordReset(
+            ['nome' => 'Erro', 'email' => 'erro@example.com'],
+            'token-erro',
+            $mailer
+        );
+    }
 }

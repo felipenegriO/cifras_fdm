@@ -415,6 +415,16 @@ $configPlanoLabel = $configPlano === 'ativo' ? 'Mensal' : cifro_plan_label($conf
                     <p class="config-row__desc">versão <span id="cfgVersion">—</span></p>
                 </div>
             </div>
+
+            <div class="config-row">
+                <div class="config-row__label">
+                    <p class="config-row__title">Reportar problema</p>
+                    <p class="config-row__desc">Esta aplicação está em fase beta. Encontrou um erro? Nos avise.</p>
+                </div>
+                <div class="config-row__control">
+                    <a class="btn btn--secondary" href="mailto:contato@cifro.online?subject=Reportar%20problema%20-%20Cifr%C3%B4">Reportar problema</a>
+                </div>
+            </div>
         </section>
     </div>
 

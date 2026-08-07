@@ -4,7 +4,7 @@ use PHPMailer\PHPMailer\SMTP;
 
 class MailService {
     private static function mailer(?string $vendorAutoload = null): PHPMailer {
-        $vendorAutoload ??= __DIR__ . '/../../../vendor/autoload.php';
+        $vendorAutoload ??= __DIR__ . '/../../vendor/autoload.php';
         if (!file_exists($vendorAutoload)) {
             throw new RuntimeException('PHPMailer não instalado. Execute: composer install');
         }
@@ -30,11 +30,11 @@ class MailService {
     }
 
     /** Boas-vindas + link para definir senha (novo cadastro). */
-    public static function sendWelcome(array $usuario, array $banda, string $token): void {
+    public static function sendWelcome(array $usuario, array $banda, string $token, ?PHPMailer $mail = null): void {
         $appUrl = rtrim(env('APP_URL', 'https://cifro.com.br'), '/');
         $link   = $appUrl . '/definir-senha.php?token=' . urlencode($token);
 
-        $mail = self::mailer();
+        $mail ??= self::mailer();
         $mail->addAddress($usuario['email'], $usuario['nome']);
         $mail->isHTML(true);
         $mail->Subject = 'Bem-vindo ao Cifrô! Defina sua senha';
@@ -50,11 +50,11 @@ class MailService {
     }
 
     /** Convite quando admin cria usuário pelo painel. */
-    public static function sendInvite(array $usuario, array $banda, string $token): void {
+    public static function sendInvite(array $usuario, array $banda, string $token, ?PHPMailer $mail = null): void {
         $appUrl = rtrim(env('APP_URL', 'https://cifro.com.br'), '/');
         $link   = $appUrl . '/definir-senha.php?token=' . urlencode($token);
 
-        $mail = self::mailer();
+        $mail ??= self::mailer();
         $mail->addAddress($usuario['email'], $usuario['nome']);
         $mail->isHTML(true);
         $mail->Subject = 'Você foi convidado para o Cifrô';
@@ -87,6 +87,79 @@ class MailService {
         );
         $mail->AltBody = "Redefinição de senha Cifrô\n\nAcesse:\n{$link}\n\nVálido por 1 hora.";
         self::sendLogged($mail, 'password_reset');
+    }
+
+    /** Confirmação de pagamento / assinatura ativada. */
+    public static function sendPaymentConfirmation(array $usuario, array $banda, string $plano, string $validade, ?PHPMailer $mail = null): void {
+        $appUrl   = rtrim(env('APP_URL', 'https://cifro.online'), '/');
+        $planoLabel = match($plano) {
+            'mensal'    => 'Mensal',
+            'semestral' => 'Semestral',
+            'anual'     => 'Anual',
+            default     => ucfirst($plano),
+        };
+
+        $mail ??= self::mailer();
+        $mail->addAddress($usuario['email'], $usuario['nome']);
+        $mail->isHTML(true);
+        $mail->Subject = 'Cifrô — Assinatura confirmada!';
+        $mail->Body = self::template(
+            'Pagamento confirmado!',
+            '<p>Olá, <strong>' . htmlspecialchars($usuario['nome']) . '</strong>!</p>
+             <p>Sua assinatura do plano <strong>' . htmlspecialchars($planoLabel) . '</strong> para a banda <strong>' . htmlspecialchars($banda['nome']) . '</strong> foi confirmada.</p>
+             <p>Válida até: <strong>' . htmlspecialchars($validade) . '</strong></p>
+             <p>Aproveite todos os recursos do Cifrô!</p>',
+            $appUrl . '/plano.php',
+            'Ver meu plano'
+        );
+        $mail->AltBody = "Pagamento confirmado!\n\nPlano {$planoLabel} para {$banda['nome']} ativo até {$validade}.\n\nAcesse: {$appUrl}/plano.php";
+        self::sendLogged($mail, 'payment_confirmation');
+    }
+
+    /** Lembrete de renovação (disparado por invoice.upcoming, ~7 dias antes). */
+    public static function sendPaymentReminder(array $usuario, array $banda, string $plano, string $dataRenovacao, ?PHPMailer $mail = null): void {
+        $appUrl = rtrim(env('APP_URL', 'https://cifro.online'), '/');
+        $planoLabel = match($plano) {
+            'mensal'    => 'Mensal',
+            'semestral' => 'Semestral',
+            'anual'     => 'Anual',
+            default     => ucfirst($plano),
+        };
+
+        $mail ??= self::mailer();
+        $mail->addAddress($usuario['email'], $usuario['nome']);
+        $mail->isHTML(true);
+        $mail->Subject = 'Cifrô — Sua assinatura renova em breve';
+        $mail->Body = self::template(
+            'Renovação em breve',
+            '<p>Olá, <strong>' . htmlspecialchars($usuario['nome']) . '</strong>!</p>
+             <p>A assinatura do plano <strong>' . htmlspecialchars($planoLabel) . '</strong> da banda <strong>' . htmlspecialchars($banda['nome']) . '</strong> será renovada automaticamente em <strong>' . htmlspecialchars($dataRenovacao) . '</strong>.</p>
+             <p>Se quiser cancelar ou trocar de plano, faça isso antes dessa data.</p>',
+            $appUrl . '/plano.php',
+            'Gerenciar plano'
+        );
+        $mail->AltBody = "Renovação em breve!\n\nO plano {$planoLabel} da banda {$banda['nome']} renova em {$dataRenovacao}.\n\nGerenciar: {$appUrl}/plano.php";
+        self::sendLogged($mail, 'payment_reminder');
+    }
+
+    /** Aviso de plano expirado. */
+    public static function sendPlanExpired(array $usuario, array $banda, ?PHPMailer $mail = null): void {
+        $appUrl = rtrim(env('APP_URL', 'https://cifro.online'), '/');
+
+        $mail ??= self::mailer();
+        $mail->addAddress($usuario['email'], $usuario['nome']);
+        $mail->isHTML(true);
+        $mail->Subject = 'Cifrô — Seu plano expirou';
+        $mail->Body = self::template(
+            'Seu plano expirou',
+            '<p>Olá, <strong>' . htmlspecialchars($usuario['nome']) . '</strong>!</p>
+             <p>O plano da banda <strong>' . htmlspecialchars($banda['nome']) . '</strong> expirou e o acesso foi limitado.</p>
+             <p>Renove agora para continuar usando todos os recursos do Cifrô sem interrupção.</p>',
+            $appUrl . '/plano.php',
+            'Renovar agora'
+        );
+        $mail->AltBody = "Seu plano expirou!\n\nRenove em: {$appUrl}/plano.php";
+        self::sendLogged($mail, 'plan_expired');
     }
 
     private static function sendLogged(PHPMailer $mail, string $operation): void {

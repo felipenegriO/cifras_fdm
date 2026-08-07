@@ -62,6 +62,53 @@ final class RepositoryIntegrationTest extends TestCase
         self::assertNull($repo->findById($newId));
     }
 
+    public function testCountGratuitasByUsuarioIgnoraBandasPagasDoMesmoDono(): void
+    {
+        $repo = new BandaRepository();
+        // $this->bandId (setUp) já é gratuita e administrada por $this->userId.
+        self::assertSame(1, $repo->countGratuitasByUsuario($this->userId));
+
+        $bandaPaga = 'phpunit-paga-' . bin2hex(random_bytes(8));
+        $this->pdo->prepare('INSERT INTO bandas (id, nome, plano) VALUES (?, ?, ?)')
+            ->execute([$bandaPaga, 'Banda Paga', 'mensal']);
+        $this->pdo->prepare('INSERT INTO usuario_banda (usuario_id, banda_id, perfil) VALUES (?, ?, ?)')
+            ->execute([$this->userId, $bandaPaga, 'administrador']);
+
+        // Ganhar uma banda paga não aumenta nem reduz quantas bandas grátis
+        // esse dono já tem — continua exatamente 1.
+        self::assertSame(1, $repo->countGratuitasByUsuario($this->userId));
+        self::assertSame(2, $repo->countByUsuario($this->userId));
+    }
+
+    public function testConvidadoDeBandaPagaContinuaLivreParaTerSuaPropriaBandaGratuita(): void
+    {
+        $repo = new BandaRepository();
+
+        // Dono de uma banda paga convida outra pessoa como membro (gestor,
+        // não administrador — convite não torna a pessoa dona da banda).
+        $bandaPaga = 'phpunit-paga-' . bin2hex(random_bytes(8));
+        $convidadoId = 'phpunit-convidado-' . bin2hex(random_bytes(8));
+        $this->pdo->prepare('INSERT INTO bandas (id, nome, plano) VALUES (?, ?, ?)')
+            ->execute([$bandaPaga, 'Banda Paga', 'mensal']);
+        $this->pdo->prepare('INSERT INTO usuarios (id, nome, email, perfil, ativo, plano) VALUES (?, ?, ?, ?, ?, ?)')
+            ->execute([$convidadoId, 'Convidado PHPUnit', $convidadoId . '@phpunit.local', 'usuario', 1, 'ativo']);
+        $this->pdo->prepare('INSERT INTO usuario_banda (usuario_id, banda_id, perfil) VALUES (?, ?, ?)')
+            ->execute([$convidadoId, $bandaPaga, 'gestor']);
+
+        // Ser membro (não dono) de uma banda paga não conta como banda
+        // grátis própria — o convidado ainda não é dono de nenhuma banda.
+        self::assertSame(0, $repo->countGratuitasByUsuario($convidadoId));
+
+        // Ele pode criar e ser dono da própria banda, que nasce gratuita.
+        $bandaPropria = 'phpunit-propria-' . bin2hex(random_bytes(8));
+        $this->pdo->prepare('INSERT INTO bandas (id, nome, plano) VALUES (?, ?, ?)')
+            ->execute([$bandaPropria, 'Banda Própria', 'gratuito']);
+        $this->pdo->prepare('INSERT INTO usuario_banda (usuario_id, banda_id, perfil) VALUES (?, ?, ?)')
+            ->execute([$convidadoId, $bandaPropria, 'administrador']);
+
+        self::assertSame(1, $repo->countGratuitasByUsuario($convidadoId));
+    }
+
     public function testMusicasECategoriasMantemIsolamentoEReferencias(): void
     {
         $musicas = new MusicaRepository();
@@ -173,5 +220,31 @@ final class RepositoryIntegrationTest extends TestCase
         self::assertCount(1, $roteiros->getAllByBanda($this->bandId));
         $roteiros->saveAll([], $this->bandId);
         self::assertSame([], $roteiros->getAllByBanda($this->bandId));
+    }
+
+    public function testMusicaFindBySourceUrl(): void
+    {
+        $musicas = new MusicaRepository();
+        $sourceUrl = 'https://youtube.com/watch?v=phpunit-' . bin2hex(random_bytes(4));
+
+        $musicId = $musicas->save([
+            'nome'         => 'Música Source URL',
+            'artista'      => 'PHPUnit',
+            'classificacao' => '',
+            'cifra'        => '',
+            'bit'          => '',
+            'source_url'   => $sourceUrl,
+        ], $this->bandId);
+
+        // Found by URL
+        $row = $musicas->findBySourceUrl($sourceUrl, $this->bandId);
+        self::assertNotNull($row);
+        self::assertSame($musicId, (int)$row['id']);
+
+        // Excluded by its own id
+        self::assertNull($musicas->findBySourceUrl($sourceUrl, $this->bandId, $musicId));
+
+        // Non-existent URL returns null
+        self::assertNull($musicas->findBySourceUrl('https://nao-existe.com', $this->bandId));
     }
 }

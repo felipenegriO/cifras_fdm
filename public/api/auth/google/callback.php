@@ -2,8 +2,10 @@
 require_once __DIR__ . '/../../../src/backend/bootstrap.php';
 
 function googleLoginFailed(string $reason): void {
-    error_log('[google-auth] ' . $reason);
-    header('Location: /login.php?erro=google');
+    if (strtolower((string) env('GOOGLE_AUTH_DEBUG', 'false')) === 'true') {
+        error_log('[google-auth] ' . date('Y-m-d H:i:s') . ' ' . $reason);
+    }
+    header('Location: ' . base_url('/login.php?erro=google'));
     exit;
 }
 
@@ -16,8 +18,10 @@ if (!GoogleCallbackValidator::isStateValid($expectedState, $receivedState)) {
 }
 
 if (GoogleCallbackValidator::userCancelled($_GET)) {
-    error_log('[google-auth] user cancelled: ' . $_GET['error']);
-    header('Location: /login.php?erro=google');
+    if (strtolower((string) env('GOOGLE_AUTH_DEBUG', 'false')) === 'true') {
+        error_log('[google-auth] user cancelled: ' . ($_GET['error'] ?? ''));
+    }
+    header('Location: ' . base_url('/login.php?erro=google'));
     exit;
 }
 
@@ -54,10 +58,16 @@ try {
         );
     }
 } catch (\Throwable $e) {
-    googleLoginFailed('authentication failure type=' . get_class($e));
+    ErrorLogger::fromThrowable($e, 'Falha na autenticação Google OAuth', 'api/auth/google/callback.php');
+    googleLoginFailed('authentication failure type=' . get_class($e) . ' msg=' . $e->getMessage());
 }
 
 $appDebug = strtolower((string) env('APP_DEBUG', 'false')) === 'true';
 $authService = new AuthService($userRepository);
 $authController = new AuthController($authService, $userRepository, $appDebug, $bandaRepository);
-$authController->finalizeLogin($user);
+try {
+    $authController->finalizeLogin($user);
+} catch (\Throwable $e) {
+    ErrorLogger::fromThrowable($e, 'Falha no finalizeLogin após Google OAuth', 'api/auth/google/callback.php');
+    googleLoginFailed('finalizeLogin failure type=' . get_class($e) . ' msg=' . $e->getMessage());
+}

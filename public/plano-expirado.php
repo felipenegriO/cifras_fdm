@@ -1,7 +1,7 @@
 <?php
 require_once __DIR__ . '/src/backend/bootstrap.php';
 if (!isset($_SESSION['autenticado']) || $_SESSION['autenticado'] !== true) {
-    header('Location: /landing.php'); exit;
+    header('Location: ' . base_url('/landing.php')); exit;
 }
 $bandaNome = $_SESSION['banda_atual']['nome'] ?? 'sua banda';
 ?>

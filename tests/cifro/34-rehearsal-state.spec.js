@@ -23,6 +23,7 @@ async function openRehearsalPanel(page, musicId) {
   }, musicId);
   await page.goto(`/music.php?id=${musicId}&editorPreview=1`);
   await expect(page.locator('#song-cifra')).toBeVisible();
+  await page.evaluate(() => document.body.classList.remove('is-editor-preview'));
 
   await page.locator('#menuButton').click();
   await page.locator('#settingsTabTools').click();
@@ -31,8 +32,8 @@ async function openRehearsalPanel(page, musicId) {
   await expect.poll(() => page.evaluate(() => window.bootstrapEntered === true)).toBe(true);
 }
 
-test.describe('Rehearsal.state — normalizeState', () => {
-  test('aplica valores padrão quando raw é null/undefined', async ({ page }) => {
+test.describe('Ensaio — validação de configurações', () => {
+  test('estado padrão é aplicado quando nenhuma configuração foi salva', async ({ page }) => {
     await openRehearsalPanel(page, 990101);
     const [fromNull, fromUndefined, defaults] = await page.evaluate(() => [
       window.Rehearsal.state.normalizeState(null),
@@ -43,7 +44,7 @@ test.describe('Rehearsal.state — normalizeState', () => {
     expect(fromUndefined).toEqual(defaults);
   });
 
-  test('normaliza tipos inválidos para os padrões seguros', async ({ page }) => {
+  test('configurações com valores inválidos são corrigidas automaticamente', async ({ page }) => {
     await openRehearsalPanel(page, 990102);
     const state = await page.evaluate(() => window.Rehearsal.state.normalizeState({
       youtubeVideoId: 123,
@@ -65,7 +66,7 @@ test.describe('Rehearsal.state — normalizeState', () => {
     expect(state.region).toEqual({ A: null, B: null });
   });
 
-  test('clampa pitchSemitones entre -12 e 12', async ({ page }) => {
+  test('ajuste de tom é limitado ao intervalo de -12 a 12 semitons', async ({ page }) => {
     await openRehearsalPanel(page, 990103);
     const clampedHigh = await page.evaluate(() => window.Rehearsal.state.normalizeState({ pitchSemitones: 99 }).pitchSemitones);
     const clampedLow = await page.evaluate(() => window.Rehearsal.state.normalizeState({ pitchSemitones: -99 }).pitchSemitones);
@@ -75,13 +76,13 @@ test.describe('Rehearsal.state — normalizeState', () => {
     expect(withinRange).toBe(5);
   });
 
-  test('clampa lastPositionSeconds para não-negativo', async ({ page }) => {
+  test('posição de reprodução negativa é corrigida para zero', async ({ page }) => {
     await openRehearsalPanel(page, 990104);
     const clamped = await page.evaluate(() => window.Rehearsal.state.normalizeState({ lastPositionSeconds: -50 }).lastPositionSeconds);
     expect(clamped).toBe(0);
   });
 
-  test('clampa region.A e region.B individualmente, aceitando null', async ({ page }) => {
+  test('marcadores de loop são limitados a valores não-negativos ou nulos', async ({ page }) => {
     await openRehearsalPanel(page, 990105);
     const region = await page.evaluate(() => window.Rehearsal.state.normalizeState({ region: { A: -5, B: 42 } }).region);
     expect(region).toEqual({ A: 0, B: 42 });
@@ -90,7 +91,7 @@ test.describe('Rehearsal.state — normalizeState', () => {
     expect(regionNulls).toEqual({ A: null, B: null });
   });
 
-  test('preserva valores válidos sem alterá-los', async ({ page }) => {
+  test('configurações válidas de ensaio são preservadas sem alteração', async ({ page }) => {
     await openRehearsalPanel(page, 990106);
     const state = await page.evaluate(() => window.Rehearsal.state.normalizeState({
       youtubeVideoId: 'abc123',
@@ -115,8 +116,8 @@ test.describe('Rehearsal.state — normalizeState', () => {
   });
 });
 
-test.describe('Rehearsal.state — loadState/saveState', () => {
-  test('loadState sem dado salvo retorna estado padrão', async ({ page }) => {
+test.describe('Ensaio — persistência de configurações', () => {
+  test('carregar configuração de ensaio pela primeira vez usa os valores padrão', async ({ page }) => {
     const id = 990107;
     await openRehearsalPanel(page, id);
     await page.evaluate((musicId) => localStorage.removeItem('rehearsal:' + musicId), id);
@@ -125,7 +126,7 @@ test.describe('Rehearsal.state — loadState/saveState', () => {
     expect(state.loopEnabled).toBe(false);
   });
 
-  test('saveState persiste e loadState recupera normalizado', async ({ page }) => {
+  test('configuração salva no ensaio é recuperada corretamente na próxima vez', async ({ page }) => {
     const id = 990108;
     await openRehearsalPanel(page, id);
     await page.evaluate((musicId) => {
@@ -137,7 +138,7 @@ test.describe('Rehearsal.state — loadState/saveState', () => {
     expect(reloaded.region).toEqual({ A: 1, B: 2 });
   });
 
-  test('loadState com JSON corrompido no localStorage cai para o padrão', async ({ page }) => {
+  test('configuração de ensaio corrompida é ignorada e substituída pelo estado padrão', async ({ page }) => {
     const id = 990109;
     await openRehearsalPanel(page, id);
     await page.evaluate((musicId) => localStorage.setItem('rehearsal:' + musicId, '{not valid json'), id);
@@ -146,7 +147,7 @@ test.describe('Rehearsal.state — loadState/saveState', () => {
     expect(state.region).toEqual({ A: null, B: null });
   });
 
-  test('loadState/saveState com musicId ausente usa a chave "unknown"', async ({ page }) => {
+  test('configuração de ensaio sem ID de música usa chave genérica', async ({ page }) => {
     await openRehearsalPanel(page, 990110);
     await page.evaluate(() => {
       localStorage.removeItem('rehearsal:unknown');
@@ -155,5 +156,53 @@ test.describe('Rehearsal.state — loadState/saveState', () => {
     const stored = await page.evaluate(() => localStorage.getItem('rehearsal:unknown'));
     expect(stored).not.toBeNull();
     await page.evaluate(() => localStorage.removeItem('rehearsal:unknown'));
+  });
+});
+
+test.describe('Ensaio — persistência visível na UI', () => {
+  test('tom e loop salvos aparecem na tela ao reabrir o painel', async ({ page }) => {
+    const musicId = 990201;
+    await openRehearsalPanel(page, musicId);
+
+    // Navega para fora — o beforeunload do music.php dispara e persiste o estado
+    // padrão (pitch=0). É intencional: queremos sair antes de escrever o estado
+    // desejado, para que o beforeunload não sobrescreva o que vamos salvar a seguir.
+    await page.goto('/index.php');
+
+    // Agora em index.php, sem risco de beforeunload do music.php, definimos o
+    // estado desejado diretamente no localStorage.
+    await page.evaluate(id => {
+      localStorage.setItem('rehearsal:' + id, JSON.stringify({
+        pitchSemitones: 7,
+        loopEnabled: true,
+        youtubeVideoId: '',
+        youtubeUrl: '',
+        youtubeTitle: '',
+        audioFileName: '',
+        lastPositionSeconds: 0,
+        region: { A: null, B: null },
+      }));
+    }, musicId);
+
+    // Reabre o painel — o bootstrap lê do localStorage e aplica pitch=7
+    await openRehearsalPanel(page, musicId);
+
+    // Verifica que os valores persistidos aparecem na UI
+    await expect(page.locator('#pitchLabel')).toHaveText('+7 semitons');
+    await expect(page.locator('#btnLoop')).toHaveClass(/is-active/);
+  });
+
+  test('painel carrega com valores padrão e sem crash quando localStorage está corrompido', async ({ page }) => {
+    const musicId = 990202;
+    await openRehearsalPanel(page, musicId);
+
+    // Corrompe o localStorage
+    await page.evaluate(id => localStorage.setItem('rehearsal:' + id, '{INVALIDO'), musicId);
+
+    // Reabre o painel — deve carregar sem crash e com valores padrão
+    await openRehearsalPanel(page, musicId);
+
+    await expect(page.locator('#pitchLabel')).toHaveText('0 semitons');
+    await expect(page.locator('#btnLoop')).not.toHaveClass(/is-active/);
   });
 });

@@ -15,6 +15,7 @@ async function openMusicPreview(page) {
   });
   await page.goto('/music.php?id=990001&editorPreview=1');
   await expect(page.locator('#song-cifra')).toBeVisible();
+  await page.evaluate(() => document.body.classList.remove('is-editor-preview'));
 }
 
 async function openRehearsalPanel(page) {
@@ -95,6 +96,7 @@ test('usuário vincula um vídeo e vê a prévia', async ({ page }) => {
   await expect(page.locator('#ytThumb')).toHaveAttribute('src', /hqdefault/);
   await expect(page.locator('#rehearsalMessage')).toContainText('Conversão automática indisponível');
   await page.reload();
+  await page.evaluate(() => document.body.classList.remove('is-editor-preview'));
   await page.locator('#menuButton').click();
   await page.getByText('Ensaio com YouTube e áudio', { exact: true }).click();
   await page.locator('#btnAtivarEnsaio').click();
@@ -162,6 +164,7 @@ test('bootstrap não faz nada quando a página não tem id de música', async ({
   });
   await page.goto('/music.php?editorPreview=1');
   await expect(page.locator('#song-cifra')).toBeVisible();
+  await page.evaluate(() => document.body.classList.remove('is-editor-preview'));
 
   await page.locator('#menuButton').click();
   await page.locator('#settingsTabTools').click();

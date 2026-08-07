@@ -86,7 +86,7 @@
 
             uiModule.showMessage("Converting audio (this may take 30-60s)...", "");
             try {
-                const response = await fetch("/src/backend/download-yt-audio.php", {
+                const response = await fetch((window.APP_BASE || '') + "/src/backend/download-yt-audio.php", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ videoId: videoId })

@@ -88,6 +88,31 @@ final class GoogleAuthServiceTest extends TestCase
         self::assertSame('user@example.com', $result['nome']);
     }
 
+    public function testUsuarioDesativadoEncontradoPorGoogleSubNaoConsegueLogar(): void
+    {
+        $desativado = ['id' => 'u-desat', 'nome' => 'Banido', 'email' => 'ban@example.com', 'ativo' => 0, 'bandas' => []];
+        $users = $this->createMock(UserRepository::class);
+        $users->method('findByGoogleSub')->willReturn($desativado);
+
+        $service = new GoogleAuthService($users, $this->createMock(BandaRepository::class));
+
+        $this->expectException(\RuntimeException::class);
+        $service->resolveOrCreateUser($this->payload());
+    }
+
+    public function testUsuarioDesativadoEncontradoPorEmailNaoConsegueLogar(): void
+    {
+        $desativado = ['id' => 'u-desat', 'nome' => 'Banido', 'email' => 'user@example.com', 'ativo' => 0, 'bandas' => []];
+        $users = $this->createMock(UserRepository::class);
+        $users->method('findByGoogleSub')->willReturn(null);
+        $users->method('findByEmail')->willReturn($desativado);
+
+        $service = new GoogleAuthService($users, $this->createMock(BandaRepository::class));
+
+        $this->expectException(\RuntimeException::class);
+        $service->resolveOrCreateUser($this->payload());
+    }
+
     public function testResolveOrCreateUserRejeitaEmailNaoVerificado(): void
     {
         $users = $this->createMock(UserRepository::class);

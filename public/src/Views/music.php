@@ -219,6 +219,19 @@
                     <div class="music-tool__content">
                         <a href="" id="linkYou" target="_blank" rel="noopener" class="music-secondary-action music-full-action">Pesquisar no YouTube</a>
                         <button type="button" id="btnAtivarEnsaio" class="music-primary-action music-full-action">Abrir painel de ensaio</button>
+
+                        <div class="music-yt-inline-form">
+                            <label for="youtubeVideoLinkInput" class="music-yt-inline-form__label">Colar link do vídeo</label>
+                            <div class="music-yt-inline-form__row">
+                                <input type="text" id="youtubeVideoLinkInput" class="music-yt-inline-form__input" placeholder="https://www.youtube.com/watch?v=...">
+                                <button type="button" id="btnTocarYoutubeAqui" class="music-secondary-action">Tocar aqui</button>
+                            </div>
+                            <p id="youtubeVideoLinkError" class="music-yt-inline-form__error" hidden>Link do YouTube inválido.</p>
+                        </div>
+
+                        <div id="youtubeShowPanelRow" class="music-tool-actions" hidden style="grid-template-columns: 1fr;">
+                            <button type="button" id="btnMostrarYoutube" class="music-secondary-action music-full-action">Mostrar vídeo: <span id="youtubeShowPanelTitle"></span></button>
+                        </div>
                     </div>
                 </details>
                 <details class="music-tool">
@@ -241,6 +254,21 @@
             <ul id="lista-playlists"></ul>
         </div>
     </aside>
+
+    <div id="youtubePlayerPanel" role="complementary" aria-label="Player de vídeo do YouTube">
+        <div class="yt-panel__header">
+            <span class="yt-panel__title" id="youtubePlayerPanelTitle"></span>
+            <div class="yt-panel__header-actions">
+                <button type="button" id="btnYoutubePanelMinimize" aria-label="Minimizar vídeo">−</button>
+                <button type="button" id="btnYoutubePanelClose" aria-label="Ocultar vídeo">×</button>
+            </div>
+        </div>
+        <div class="yt-panel__body" id="youtubePlayerPanelBody"></div>
+        <div class="yt-panel__mini-bar">
+            <button type="button" id="btnYoutubePanelRestore" aria-label="Restaurar vídeo">Restaurar</button>
+            <button type="button" id="btnYoutubePanelCloseMini" aria-label="Ocultar vídeo">×</button>
+        </div>
+    </div>
 
     <header class="music-header">
         <a href="index.php" class="music-header__back" id="backLink" aria-label="Voltar">
@@ -401,7 +429,7 @@
                     await loadScript('/src/vendor/wavesurfer/wavesurfer.min.js');
                     await loadScript('/src/vendor/soundtouch/soundtouch.min.js');
                     for (const src of [
-                        '/src/js/rehearsal/rehearsal.state.js', '/src/js/rehearsal/rehearsal.youtube.js',
+                        '/src/js/rehearsal/rehearsal.state.js',
                         '/src/js/rehearsal/rehearsal.pitch.js', '/src/js/rehearsal/rehearsal.audio.js',
                         '/src/js/rehearsal/rehearsal.ui.js', '/src/js/rehearsal/rehearsal.bootstrap.js'
                     ]) await loadScript(src);
@@ -461,6 +489,9 @@
 
     <script src="<?= asset_url('/src/js/chords.js') ?>"></script>
     <script src="<?= asset_url('/src/js/script.js') ?>" defer></script>
+    <script src="<?= asset_url('/src/js/rehearsal/rehearsal.youtube.js') ?>"></script>
+    <script src="<?= asset_url('/src/js/music-youtube-panel-state.js') ?>"></script>
+    <script src="<?= asset_url('/src/js/music-youtube-panel.js') ?>" defer></script>
     <script src="<?= asset_url('/src/js/music-view.js') ?>" defer></script>
     <script src="<?= asset_url('/src/js/cifro-presentation.js') ?>"></script>
     <script>window.CIFRO_USER_ID = '<?= e($_SESSION['usuario']['id'] ?? '') ?>'; window.CIFRO_BAND_ID = '<?= e(current_band_id()) ?>';</script>

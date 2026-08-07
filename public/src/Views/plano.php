@@ -9,6 +9,7 @@
   <link href="/src/css/fonts.css" rel="stylesheet">
   <link href="/src/css/theme.css" rel="stylesheet">
   <script src="<?= asset_url('/src/js/cifro-toast.js') ?>"></script>
+  <script src="<?= asset_url('/src/js/cifro-csrf.js') ?>"></script>
   <style>
     body { margin: 0; padding: 0; }
     .plan-wrap { max-width: 760px; margin: 0 auto; padding: var(--space-4); }
@@ -282,17 +283,8 @@ $isPago = in_array($plano, ['mensal', 'semestral', 'anual', 'ativo']);
 $isGratuito = $plano === 'gratuito';
 $isBloqueado = $plano === 'bloqueado';
 
-$stripeSecret = (string)env('STRIPE_SECRET_KEY', '');
-$stripeLinks = [
-    'mensal'    => trim((string)env('STRIPE_LINK_MENSAL', '')),
-    'semestral' => trim((string)env('STRIPE_LINK_SEMESTRAL', '')),
-    'anual'     => trim((string)env('STRIPE_LINK_ANUAL', '')),
-];
-foreach ($stripeLinks as $tipo => $link) {
-    if (!PlanoViewModel::isStripeLinkValid($stripeSecret, $link)) {
-        $stripeLinks[$tipo] = '';
-    }
-}
+$stripeSecret  = (string)env('STRIPE_SECRET_KEY', '');
+$stripeEnabled = PlanoViewModel::isStripeEnabled($stripeSecret);
 
 $pixPhoneRaw = trim((string)env('PAYMENT_PIX_PHONE', ''));
 $pixRecipient = trim((string)env('PAYMENT_PIX_RECIPIENT', ''));
@@ -436,7 +428,7 @@ $cancelUrl = PlanoViewModel::cancelUrl($pixEnabled, $whatsappPhone, $cancelMessa
   <p class="plan-section-title">Renovar ou trocar de plano</p>
   <?php endif; ?>
 
-  <?php if ($pixEnabled && !array_filter($stripeLinks)): ?>
+  <?php if ($pixEnabled && !$stripeEnabled): ?>
   <div class="payment-note">
     <div class="payment-note__icon" aria-hidden="true">🟢</div>
     <div>
@@ -463,18 +455,18 @@ $cancelUrl = PlanoViewModel::cancelUrl($pixEnabled, $whatsappPhone, $cancelMessa
         <li>Funciona offline</li>
       </ul>
       <?php if ($plano === 'mensal'): ?>
-        <?php if ($stripeLinks['mensal'] !== ''): ?>
-          <a href="<?= e($stripeLinks['mensal']) ?>" class="btn-upgrade btn-upgrade--outline"
-             target="_blank" rel="noopener">Renovar mensal</a>
+        <?php if ($stripeEnabled): ?>
+          <button type="button" class="btn-upgrade btn-upgrade--outline js-stripe-checkout"
+                  data-plan="mensal">Renovar mensal</button>
         <?php elseif ($pixEnabled): ?>
           <button type="button" class="btn-upgrade btn-upgrade--outline js-pix-payment"
                   data-plan="mensal">Renovar via PIX</button>
         <?php else: ?>
           <span class="btn-upgrade btn-upgrade--disabled">Pagamento indisponível</span>
         <?php endif; ?>
-      <?php elseif ($stripeLinks['mensal'] !== ''): ?>
-        <a href="<?= e($stripeLinks['mensal']) ?>" class="btn-upgrade btn-upgrade--outline"
-           target="_blank" rel="noopener"><?= $isPago ? 'Trocar para mensal' : 'Assinar mensal' ?></a>
+      <?php elseif ($stripeEnabled): ?>
+        <button type="button" class="btn-upgrade btn-upgrade--outline js-stripe-checkout"
+                data-plan="mensal"><?= $isPago ? 'Trocar para mensal' : 'Assinar mensal' ?></button>
       <?php elseif ($pixEnabled): ?>
         <button type="button" class="btn-upgrade btn-upgrade--outline js-pix-payment"
                 data-plan="mensal"><?= $isPago ? 'Trocar para mensal' : 'Pagar mensal via PIX' ?></button>
@@ -502,18 +494,18 @@ $cancelUrl = PlanoViewModel::cancelUrl($pixEnabled, $whatsappPhone, $cancelMessa
         <li>Funciona offline</li>
       </ul>
       <?php if ($plano === 'semestral'): ?>
-        <?php if ($stripeLinks['semestral'] !== ''): ?>
-          <a href="<?= e($stripeLinks['semestral']) ?>" class="btn-upgrade btn-upgrade--primary"
-             target="_blank" rel="noopener">Renovar semestral</a>
+        <?php if ($stripeEnabled): ?>
+          <button type="button" class="btn-upgrade btn-upgrade--primary js-stripe-checkout"
+                  data-plan="semestral">Renovar semestral</button>
         <?php elseif ($pixEnabled): ?>
           <button type="button" class="btn-upgrade btn-upgrade--primary js-pix-payment"
                   data-plan="semestral">Renovar via PIX</button>
         <?php else: ?>
           <span class="btn-upgrade btn-upgrade--disabled">Pagamento indisponível</span>
         <?php endif; ?>
-      <?php elseif ($stripeLinks['semestral'] !== ''): ?>
-        <a href="<?= e($stripeLinks['semestral']) ?>" class="btn-upgrade btn-upgrade--primary"
-           target="_blank" rel="noopener"><?= $isPago ? 'Trocar para semestral' : 'Assinar semestral' ?></a>
+      <?php elseif ($stripeEnabled): ?>
+        <button type="button" class="btn-upgrade btn-upgrade--primary js-stripe-checkout"
+                data-plan="semestral"><?= $isPago ? 'Trocar para semestral' : 'Assinar semestral' ?></button>
       <?php elseif ($pixEnabled): ?>
         <button type="button" class="btn-upgrade btn-upgrade--primary js-pix-payment"
                 data-plan="semestral"><?= $isPago ? 'Trocar para semestral' : 'Pagar semestral via PIX' ?></button>
@@ -537,18 +529,18 @@ $cancelUrl = PlanoViewModel::cancelUrl($pixEnabled, $whatsappPhone, $cancelMessa
         <li>Funciona offline</li>
       </ul>
       <?php if ($plano === 'anual'): ?>
-        <?php if ($stripeLinks['anual'] !== ''): ?>
-          <a href="<?= e($stripeLinks['anual']) ?>" class="btn-upgrade btn-upgrade--outline"
-             target="_blank" rel="noopener">Renovar anual</a>
+        <?php if ($stripeEnabled): ?>
+          <button type="button" class="btn-upgrade btn-upgrade--outline js-stripe-checkout"
+                  data-plan="anual">Renovar anual</button>
         <?php elseif ($pixEnabled): ?>
           <button type="button" class="btn-upgrade btn-upgrade--outline js-pix-payment"
                   data-plan="anual">Renovar via PIX</button>
         <?php else: ?>
           <span class="btn-upgrade btn-upgrade--disabled">Pagamento indisponível</span>
         <?php endif; ?>
-      <?php elseif ($stripeLinks['anual'] !== ''): ?>
-        <a href="<?= e($stripeLinks['anual']) ?>" class="btn-upgrade btn-upgrade--outline"
-           target="_blank" rel="noopener"><?= $isPago ? 'Trocar para anual' : 'Assinar anual' ?></a>
+      <?php elseif ($stripeEnabled): ?>
+        <button type="button" class="btn-upgrade btn-upgrade--outline js-stripe-checkout"
+                data-plan="anual"><?= $isPago ? 'Trocar para anual' : 'Assinar anual' ?></button>
       <?php elseif ($pixEnabled): ?>
         <button type="button" class="btn-upgrade btn-upgrade--outline js-pix-payment"
                 data-plan="anual"><?= $isPago ? 'Trocar para anual' : 'Pagar anual via PIX' ?></button>
@@ -691,5 +683,51 @@ $cancelUrl = PlanoViewModel::cancelUrl($pixEnabled, $whatsappPhone, $cancelMessa
 })();
 </script>
 <?php endif; ?>
+<script>
+(() => {
+  // ── Toast de retorno do checkout ──────────────────────────────────────────
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('checkout') === 'success') {
+    window.cifroToast && cifroToast('Pagamento recebido! Seu plano será ativado em instantes.', 'success');
+  } else if (params.get('checkout') === 'cancel') {
+    window.cifroToast && cifroToast('Pagamento cancelado. Seu plano não foi alterado.', 'info');
+  }
+
+  // ── Botões de Stripe Checkout ─────────────────────────────────────────────
+  document.querySelectorAll('.js-stripe-checkout').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const plano = btn.dataset.plan;
+      if (!plano) return;
+
+      btn.disabled = true;
+      const originalText = btn.textContent;
+      btn.textContent = 'Aguarde...';
+
+      try {
+        const res = await fetch('/api/stripe/create-checkout-session.php', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ plano }),
+        });
+        const data = await res.json();
+        if (data.ok && data.data && data.data.url) {
+          window.location = data.data.url;
+        } else {
+          window.cifroToast && cifroToast('Não foi possível iniciar o pagamento. Tente novamente.', 'error');
+          btn.disabled = false;
+          btn.textContent = originalText;
+        }
+      } catch (_) {
+        window.cifroToast && cifroToast('Erro de conexão. Tente novamente.', 'error');
+        btn.disabled = false;
+        btn.textContent = originalText;
+      }
+    });
+  });
+})();
+</script>
+<script>window.CIFRO_USER_ID = '<?= e($_SESSION['usuario']['id'] ?? '') ?>'; window.CIFRO_BAND_ID = '<?= e(current_band_id()) ?>';</script>
+<script src="<?= asset_url('/src/js/cifro-connectivity.js') ?>"></script>
+<script src="<?= asset_url('/src/js/cifro-sync.js') ?>"></script>
 </body>
 </html>

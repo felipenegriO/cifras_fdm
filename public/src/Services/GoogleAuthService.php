@@ -51,11 +51,17 @@ class GoogleAuthService
 
         $byGoogleSub = $this->users->findByGoogleSub($sub);
         if ($byGoogleSub) {
+            if (!($byGoogleSub['ativo'] ?? 1)) {
+                throw new \RuntimeException('Conta desativada.');
+            }
             return $byGoogleSub;
         }
 
         $byEmail = $this->users->findByEmail($email);
         if ($byEmail) {
+            if (!($byEmail['ativo'] ?? 1)) {
+                throw new \RuntimeException('Conta desativada.');
+            }
             $this->users->linkGoogleSub($byEmail['id'], $sub);
             return $byEmail;
         }

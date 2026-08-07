@@ -36,7 +36,9 @@
     importTabLink: document.getElementById('importTabLink'),
     importTabText: document.getElementById('importTabText'),
     importUrlInput: document.getElementById('importUrlInput'),
+    fetchImportButton: document.getElementById('fetchImportButton'),
     importFetchError: document.getElementById('importFetchError'),
+    importSourceUrl: document.getElementById('importSourceUrl'),
     importContent: document.getElementById('importContent'),
     importRights: document.getElementById('importRights'),
     importPreview: document.getElementById('importPreview'),
@@ -341,7 +343,11 @@
 
   async function parseJsonResponse(response) {
     const data = await response.json().catch(() => ({}));
-    if (!response.ok || !data.ok) throw new Error(data.error || `Erro HTTP ${response.status}`);
+    if (!response.ok || !data.ok) {
+      const error = new Error(data.error || `Erro HTTP ${response.status}`);
+      error.data = data;
+      throw error;
+    }
     return data;
   }
 
@@ -380,12 +386,38 @@
     };
 
     try {
-      const response = await fetch('api.php', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      const data = await parseJsonResponse(response);
+      let data;
+      try {
+        const response = await fetch('api.php', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        data = await parseJsonResponse(response);
+      } catch (error) {
+        if (!error.data?.duplicate) throw error;
+        const existing = error.data.existing;
+        const overwrite = await cifroConfirm({
+          title: 'Link já cadastrado',
+          message: `Já existe a música <strong>${String(existing.nome || '').replace(/[<>&]/g, '')}</strong> com esse link. Deseja sobrescrevê-la?`,
+          confirmText: 'Sobrescrever',
+          cancelText: 'Cancelar',
+          danger: true
+        });
+        if (!overwrite) {
+          setStatus('Cadastro cancelado: link já existe.', 'error');
+          return;
+        }
+        payload.id = existing.id;
+        payload.confirm_overwrite = true;
+        const response = await fetch('api.php', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        data = await parseJsonResponse(response);
+        state.selected = songs().find(song => String(song.id) === String(existing.id)) || null;
+      }
       const saved = state.selected || {};
       Object.assign(saved, payload, { id: data.id || saved.id, tom: detectedKey(content)?.key || '' });
       if (!state.selected) window.songs.push(saved);
@@ -635,7 +667,8 @@
 
     const url = elements.importUrlInput.value.trim();
     if (!url) {
-      elements.importPreview.hidden = true;
+      elements.importFetchError.textContent = 'Informe um link do CifraClub.';
+      elements.importFetchError.hidden = false;
       return;
     }
     if (!elements.importRights.checked) {
@@ -693,8 +726,9 @@
   function previewImport() {
     try {
       const parsed = parseImportedSong(elements.importContent.value);
+      const source = elements.importSourceUrl?.value.trim() || '';
       if (!elements.importRights.checked) throw new Error('Confirme que você tem autorização para usar o conteúdo.');
-      applyImportPreview(parsed, '');
+      applyImportPreview(parsed, source);
     } catch (error) {
       elements.importPreview.textContent = error.message;
       elements.importPreview.hidden = false;
@@ -903,6 +937,7 @@
     document.getElementById('previewImportButton')?.addEventListener('click', previewImport);
     elements.importTabLinkButton?.addEventListener('click', () => switchImportTab('link'));
     elements.importTabTextButton?.addEventListener('click', () => switchImportTab('text'));
+    elements.fetchImportButton?.addEventListener('click', fetchImportFromUrl);
     elements.importUrlInput?.addEventListener('blur', maybeAutoFetchImportUrl);
     elements.importUrlInput?.addEventListener('paste', () => setTimeout(maybeAutoFetchImportUrl, 0));
     elements.confirmImportButton?.addEventListener('click', confirmImport);

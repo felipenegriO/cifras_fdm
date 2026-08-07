@@ -27,6 +27,19 @@ class MusicaRepository {
         return $row ?: null;
     }
 
+    public function findBySourceUrl(string $sourceUrl, string $bandaId, ?int $excludeId = null): ?array {
+        $sql = 'SELECT * FROM musicas WHERE banda_id = ? AND source_url = ?';
+        $params = [$bandaId, $sourceUrl];
+        if ($excludeId !== null) {
+            $sql .= ' AND id != ?';
+            $params[] = $excludeId;
+        }
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($params);
+        $row = $stmt->fetch();
+        return $row ?: null;
+    }
+
     public function save(array $musica, string $bandaId): int {
         if (!empty($musica['id'])) {
             if (!$this->findById((int)$musica['id'], $bandaId)) throw new RuntimeException('Música não encontrada.');

@@ -9,6 +9,7 @@
          failOnWarning="true">
     <php>
         <env name="APP_ENV" value="test" force="true"/>
+        <env name="OPENSSL_CONF" value="C:\xampp\apache\conf\openssl.cnf" force="true"/>
     </php>
     <testsuites>
         <testsuite name="unit">

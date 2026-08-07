@@ -79,11 +79,61 @@ test.describe('Visualização de Cifra', () => {
 test.describe('Controles de Cifra', () => {
   test.beforeEach(async ({ page }) => {
     const id = await validSongId(page);
+    // Habilita a quick bar antes de navegar (simula usuário com barra de controles ativa)
+    await page.addInitScript(() => localStorage.setItem('musicShowQuickBar', '1'));
     await page.goto(`/music.php?id=${encodeURIComponent(id)}`, { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => window.cifroPresentation, { timeout: 10000 });
   });
 
-  test('page não tem erros PHP', async ({ page }) => {
+  test('página carrega sem erros de servidor', async ({ page }) => {
     const body = await page.locator('body').textContent();
     expect(body).not.toMatch(/Fatal error|Warning:|Notice:|Parse error/i);
+  });
+
+  test('músico sobe um tom e vê a tonalidade atualizada', async ({ page }) => {
+    await page.locator('button[data-music-action="increase-tom"]').first().click();
+    // Após transposição, o display deve mostrar o tom atual (não vazio)
+    await expect(page.locator('#song-tom-display')).not.toBeEmpty({ timeout: 5000 });
+  });
+
+  test('músico desce um tom e vê a tonalidade atualizada', async ({ page }) => {
+    await page.locator('button[data-music-action="decrease-tom"]').first().click();
+    await expect(page.locator('#song-tom-display')).not.toBeEmpty({ timeout: 5000 });
+  });
+
+  test('músico liga e desliga a rolagem automática pela barra de controles', async ({ page }) => {
+    // Garante conteúdo alto o suficiente para o scroll não parar imediatamente
+    await page.evaluate(() => {
+      const el = document.getElementById('song-cifra') || document.body;
+      el.style.minHeight = '400vh';
+    });
+    const btn = page.locator('#quickAutoScroll');
+    await expect(btn).toBeVisible();
+    await expect(btn).toHaveAttribute('aria-pressed', 'false');
+    await btn.click();
+    await expect(btn).toHaveAttribute('aria-pressed', 'true');
+    await btn.click();
+    await expect(btn).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  test('músico alterna entre visualizar cifra e somente letra', async ({ page }) => {
+    const btn = page.locator('#quickLyrics');
+    await expect(btn).toBeVisible();
+    await expect(btn).toHaveAttribute('aria-pressed', 'false');
+    await btn.click();
+    await expect(btn).toHaveAttribute('aria-pressed', 'true');
+    await btn.click();
+    await expect(btn).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  test('músico entra no modo apresentação pelo menu de ajustes e sai com Escape', async ({ page }) => {
+    // O botão fica dentro do drawer de ajustes — abre via #menuButton do header
+    await page.locator('#menuButton').click();
+    const btn = page.locator('button.music-secondary-action', { hasText: 'Modo apresentação' });
+    await expect(btn).toBeVisible({ timeout: 3000 });
+    await btn.click();
+    await expect(page.locator('body')).toHaveClass(/cifro-presenting/, { timeout: 5000 });
+    await page.keyboard.press('Escape');
+    await expect(page.locator('body')).not.toHaveClass(/cifro-presenting/);
   });
 });

@@ -52,7 +52,42 @@
           Clique no link para definir sua senha e ativar sua conta.<br><br>
           <small>Não recebeu? Verifique a pasta de spam.</small>
         </p>
+        <button id="resend-btn" onclick="resendActivation()" style="margin-top:16px;background:none;border:1px solid #444;color:#aaa;padding:8px 20px;border-radius:6px;cursor:pointer;font-size:13px;">
+          Reenviar e-mail
+        </button>
+        <p id="resend-msg" style="font-size:13px;margin-top:10px;display:none;"></p>
       </div>
+      <script>
+        async function resendActivation() {
+          const btn = document.getElementById('resend-btn');
+          const msg = document.getElementById('resend-msg');
+          btn.disabled = true;
+          btn.textContent = 'Enviando…';
+          try {
+            const res = await fetch('<?= base_url('/api/resend-activation.php') ?>', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email: '<?= htmlspecialchars($email ?? '', ENT_QUOTES) ?>' })
+            });
+            const data = await res.json();
+            if (res.ok && data.ok) {
+              msg.textContent = 'E-mail reenviado! Verifique também a pasta de spam.';
+              msg.style.color = '#6ee7b7';
+            } else {
+              msg.textContent = data.erro || 'Erro ao reenviar. Tente novamente.';
+              msg.style.color = '#f87171';
+              btn.disabled = false;
+              btn.textContent = 'Reenviar e-mail';
+            }
+          } catch {
+            msg.textContent = 'Erro de conexão. Tente novamente.';
+            msg.style.color = '#f87171';
+            btn.disabled = false;
+            btn.textContent = 'Reenviar e-mail';
+          }
+          msg.style.display = 'block';
+        }
+      </script>
     <?php else: ?>
       <h2>Criar conta grátis</h2>
 
@@ -112,7 +147,7 @@
         alert('Aceite os Termos de Uso e a Política de Privacidade para continuar.');
         return;
       }
-      event.currentTarget.href = '/api/auth/google/start.php?source=register&legal_acceptance=1';
+      event.currentTarget.href = '<?= base_url('/api/auth/google/start.php') ?>?source=register&legal_acceptance=1';
     });
   </script>
 </body>

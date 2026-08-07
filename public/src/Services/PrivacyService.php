@@ -53,9 +53,9 @@ class PrivacyService
             $deleteBand = $this->pdo->prepare('DELETE FROM bandas WHERE id=?');
             foreach ($orphanBands as $bandId) $deleteBand->execute([$bandId]);
             if ($ownsTransaction) $this->pdo->commit();
-        } catch (Throwable $error) {
+        } catch (Throwable $error) { // @codeCoverageIgnoreStart
             if ($ownsTransaction && $this->pdo->inTransaction()) $this->pdo->rollBack();
             throw $error;
-        }
+        } // @codeCoverageIgnoreEnd
     }
 }

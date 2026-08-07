@@ -110,7 +110,20 @@ export default defineConfig({
     {
       name: 'cifro',
       testDir: './tests/cifro',
-      testIgnore: [/12-planos\.spec\.js/, /26-offline-sync\.spec\.js/, /30-service-worker-coverage\.spec\.js/, coverageOnlyTests],
+      testIgnore: [
+        /26-offline-sync\.spec\.js/,
+        /30-service-worker-coverage\.spec\.js/,
+        coverageOnlyTests,
+      ],
+      dependencies: ['setup'],
+      use: {
+        storageState: 'tests/.auth/user.json',
+      },
+    },
+    {
+      name: 'serial',
+      testDir: './tests/cifro',
+      testMatch: [/32-rehearsal-real-flow\.spec\.js/, /34-rehearsal-state\.spec\.js/, /55-stripe-sandbox\.spec\.js/],
       dependencies: ['setup'],
       use: {
         storageState: 'tests/.auth/user.json',
@@ -170,10 +183,10 @@ export default defineConfig({
       ...webServerEnv,
       APP_ENV: 'test',
       E2E_DB_NAME: process.env.E2E_DB_NAME,
-      STRIPE_WEBHOOK_SECRET: 'whsec_playwright',
-      STRIPE_PRICE_MENSAL: 'price_test_mensal',
-      STRIPE_PRICE_SEMESTRAL: 'price_test_semestral',
-      STRIPE_PRICE_ANUAL: 'price_test_anual',
+      STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET || 'whsec_playwright',
+      STRIPE_PRICE_MENSAL: process.env.STRIPE_PRICE_MENSAL || 'price_test_mensal',
+      STRIPE_PRICE_SEMESTRAL: process.env.STRIPE_PRICE_SEMESTRAL || 'price_test_semestral',
+      STRIPE_PRICE_ANUAL: process.env.STRIPE_PRICE_ANUAL || 'price_test_anual',
       ...(collectPhpCoverage ? { XDEBUG_MODE: 'coverage', PHP_WEB_COVERAGE: '1' } : {}),
     },
     url: `${baseURL}/landing.php`,

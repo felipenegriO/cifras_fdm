@@ -190,7 +190,7 @@ test('rejeita snapshot com playlists, roteiros ou categorias fora do contrato', 
   }
 });
 
-test('snapshot válido sem plano/trial_expira_em usa os fallbacks null de writeSnapshot', async ({ page }) => {
+test('snapshot válido sem informações de plano é aceito pelo sistema', async ({ page }) => {
   // Linhas 87-88: `plano: json.plano ?? null` e `trial_expira_em: json.trial_expira_em ?? null`
   // só assumem o ramo `?? null` quando o snapshot remoto não envia essas chaves
   // (validateSnapshot não as exige, ao contrário de musicas/playlists/roteiros/categorias).
@@ -206,7 +206,7 @@ test('snapshot válido sem plano/trial_expira_em usa os fallbacks null de writeS
   await page.unroute('/api/sync/data.php');
 });
 
-test('applyMutation cobre todos os caminhos de mutação local (músicas, playlists, roteiros, categorias)', async ({ page }) => {
+test('alterações locais no repertório, playlists, roteiros e categorias são sincronizadas corretamente', async ({ page }) => {
   await page.goto('/index.php');
   await page.evaluate(() => cifroSync.sync(window.CIFRO_BAND_ID, { force: true }));
 
@@ -274,7 +274,7 @@ test('applyMutation cobre todos os caminhos de mutação local (músicas, playli
   expect(results.unknownPath).toBe(false);
 });
 
-test('cacheBands resolve actual_band_id a partir de actual_band_id, banda_id ou id', async ({ page }) => {
+test('cache de bandas aceita diferentes formatos de identificador de banda', async ({ page }) => {
   await page.goto('/index.php');
   await page.evaluate(() => cifroSync.sync(window.CIFRO_BAND_ID, { force: true }));
   const ok = await page.evaluate(async () => {
@@ -288,7 +288,7 @@ test('cacheBands resolve actual_band_id a partir de actual_band_id, banda_id ou 
   expect(ok).toBe(true);
 });
 
-test('reconcileOfflineBand (via evento online) recarrega em sucesso e invalida/redireciona em acesso negado', async ({ page }) => {
+test('ao reconectar, sistema reseleciona banda pendente ou redireciona em caso de acesso negado', async ({ page }) => {
   await page.goto('/index.php');
   await page.evaluate(() => cifroSync.sync(window.CIFRO_BAND_ID, { force: true }));
   const bandId = await page.evaluate(() => window.CIFRO_BAND_ID);
@@ -325,7 +325,7 @@ test('reconcileOfflineBand (via evento online) recarrega em sucesso e invalida/r
   await page.unroute('**/src/backend/bandas/selecionar.php');
 });
 
-test('reconcileOfflineBand com resposta ok mas sucesso false e sem acesso negado não recarrega nem redireciona', async ({ page }) => {
+test('erro genérico ao reselecionar banda não redireciona nem recarrega a página', async ({ page }) => {
   // Cobre o ramo em que nem `response.ok && json.sucesso` nem
   // `response.status === 403 || /acesso negado/i.test(json.mensagem)` são verdadeiros:
   // resposta 200 com sucesso:false e mensagem genérica (sem "acesso negado" e sem status 403).
@@ -348,7 +348,7 @@ test('reconcileOfflineBand com resposta ok mas sucesso false e sem acesso negado
   await page.evaluate(key => localStorage.removeItem(key), userKey);
 });
 
-test('reconcileOfflineBand ignora erro de rede silenciosamente (catch)', async ({ page }) => {
+test('falha de rede ao reselecionar banda não trava a aplicação', async ({ page }) => {
   await page.goto('/index.php');
   await page.evaluate(() => cifroSync.sync(window.CIFRO_BAND_ID, { force: true }));
   const bandId = await page.evaluate(() => window.CIFRO_BAND_ID);
@@ -363,7 +363,7 @@ test('reconcileOfflineBand ignora erro de rede silenciosamente (catch)', async (
   await page.evaluate(key => localStorage.removeItem(key), userKey);
 });
 
-test('revisão remota diferente baixa um único snapshot e não troca a cifra aberta', async ({ page }) => {
+test('sincronização com mudança remota baixa dados sem alterar a cifra que está sendo visualizada', async ({ page }) => {
   await page.goto('/index.php');
   await page.evaluate(() => cifroSync.sync(window.CIFRO_BAND_ID, { force: true }));
   const initial = await (await page.request.get('/api/sync/data.php')).json();
@@ -395,7 +395,7 @@ test('revisão remota diferente baixa um único snapshot e não troca a cifra ab
   expect(restored.ok()).toBeTruthy();
 });
 
-test('modo palco respeita keepAwake e recupera Wake Lock', async ({ page }) => {
+test('modo palco mantém a tela ligada e recupera o controle após soltar o bloqueio', async ({ page }) => {
   await page.addInitScript(() => {
     window.__wakeRequests = 0;
     Object.defineProperty(navigator, 'wakeLock', { configurable: true, value: {
@@ -467,7 +467,7 @@ test('alterna entre duas bandas preparadas após reinício offline', async ({ pa
   }
 });
 
-test('performSync com meta existente e version.banda_id divergente retorna false sem tocar no snapshot local', async ({ page }) => {
+test('sincronização ignorada quando o servidor retorna dados de outra banda', async ({ page }) => {
   // Linha 202: `if (version.banda_id !== bandaId) return false;` dentro do
   // ramo `!force && meta` — precisa de uma sincronização anterior bem
   // sucedida (para existir `meta`) e então uma resposta de version.php com
@@ -487,7 +487,7 @@ test('performSync com meta existente e version.banda_id divergente retorna false
   await page.unroute('/api/sync/version.php');
 });
 
-test('requestJson lança erro e sync cai no catch quando a API responde status de erro', async ({ page }) => {
+test('falha do servidor durante sincronização é tratada sem quebrar o aplicativo', async ({ page }) => {
   // Linha 127: `if (!res.ok) throw new Error('HTTP ' + res.status);` dentro
   // de requestJson, usada tanto por version.php quanto por data.php.
   await page.goto('/index.php');
@@ -497,7 +497,7 @@ test('requestJson lança erro e sync cai no catch quando a API responde status d
   await page.unroute('/api/sync/data.php');
 });
 
-test('applyMutation em banda sem meta/registros prévios usa os fallbacks de criação ({} e [])', async ({ page }) => {
+test('primeira sincronização de uma banda nova não causa erro', async ({ page }) => {
   // Linhas 246/252/253: `{ ...(metaReq.result || {}) ... }`, `req.result ||
   // { ... data: [] }` e `Array.isArray(row.data) ? row.data : []` só
   // assumem o ramo de fallback quando NÃO existe linha prévia no
@@ -516,7 +516,7 @@ test('applyMutation em banda sem meta/registros prévios usa os fallbacks de cri
   expect(result).toBe(true);
 });
 
-test('window.songs/playlistsSalvas/roteirosSalvos/categorias não-array são normalizados para [] no boot do cifro-sync.js', async ({ page }) => {
+test('módulo de sincronização normaliza dados corrompidos ao inicializar', async ({ page }) => {
   // cifro-sync.js roda `Array.isArray(window.songs) ? window.songs : []` (e
   // equivalentes para playlistsSalvas/roteirosSalvos/categorias) no topo do
   // módulo, antes de qualquer outro script. Um addInitScript injeta valores
@@ -554,7 +554,7 @@ test('window.songs/playlistsSalvas/roteirosSalvos/categorias não-array são nor
   expect(state.categorias).toEqual([]);
 });
 
-test('storageKey/offlineBandStorageKey/pendingBandStorageKey caem para "anonymous" sem CIFRO_USER_ID', async ({ page }) => {
+test('armazenamento local usa identificador anônimo quando usuário não está identificado', async ({ page }) => {
   // As três funções fazem `String(window.CIFRO_USER_ID || 'anonymous')`.
   // CIFRO_USER_ID normalmente é preenchido pelo backend antes de cifro-sync.js
   // rodar; forçamos undefined via addInitScript para cobrir o fallback.
@@ -592,7 +592,7 @@ test('storageKey/offlineBandStorageKey/pendingBandStorageKey caem para "anonymou
   expect(keys.bandIdSet).toBe(true);
 });
 
-test('CIFRO_BAND_ID assume pendingBand quando só existe pendingBandStorageKey (sem offlineBand)', async ({ page }) => {
+test('banda pendente é carregada quando não há banda offline selecionada', async ({ page }) => {
   // Linha 27: `if (offlineBand || pendingBand) window.CIFRO_BAND_ID = offlineBand || pendingBand;`
   // Cobre a execução do ramo verdadeiro com apenas pendingBand presente
   // (offlineBand ausente) via addInitScript, que roda antes de qualquer
@@ -619,7 +619,7 @@ test('CIFRO_BAND_ID assume pendingBand quando só existe pendingBandStorageKey (
   await page.evaluate(id => localStorage.removeItem('cifroPendingBandId:' + id), realUserId);
 });
 
-test('window.songs/playlistsSalvas/roteirosSalvos/categorias já em array no boot preservam a mesma referência (ramo verdadeiro do Array.isArray)', async ({ page }) => {
+test('módulo de sincronização preserva dados existentes ao inicializar', async ({ page }) => {
   // Cobre o ramo verdadeiro (não documentado ainda) de
   // `Array.isArray(window.songs) ? window.songs : []` e equivalentes em
   // cifro-sync.js linhas 12-15: quando o backend já preenche essas globais
@@ -643,4 +643,47 @@ test('window.songs/playlistsSalvas/roteirosSalvos/categorias já em array no boo
   expect(state.playlistsHasPreset).toBe(true);
   expect(state.roteirosHasPreset).toBe(true);
   expect(state.categoriasHasPreset).toBe(true);
+});
+
+test('editor exibe toast de erro ao salvar sem rede e salva com sucesso ao reconectar', async ({ page }) => {
+  const nomeMusica = `__OFFLINE_SYNC_${Date.now()}__`;
+  let createdId = null;
+
+  await page.goto('/src/backend/editor/editor.php');
+  await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+
+  // Preenche o formulário de nova música diretamente na UI do editor
+  await page.fill('#titulo', nomeMusica);
+  await page.evaluate(() => {
+    const editor = window.tinymce.get('cifraInput');
+    editor.setContent('<b>C G Am F</b><br>Verso offline');
+    editor.dispatch('input');
+  });
+
+  // Bloqueia o endpoint de salvar para simular ausência de rede
+  await page.route('**/editor/api.php', route => route.abort());
+  await page.locator('#saveButton').click();
+  // Aguarda o status de erro aparecer (setStatus define data-kind="error")
+  await expect(page.locator('#status')).toHaveAttribute('data-kind', 'error', { timeout: 8000 });
+
+  // Restaura a rede e salva novamente com sucesso
+  await page.unroute('**/editor/api.php');
+
+  // Intercepta a resposta de sucesso para obter o ID da música criada
+  const [response] = await Promise.all([
+    page.waitForResponse(r => r.url().includes('editor/api.php') && r.request().method() === 'POST'),
+    page.locator('#saveButton').click(),
+  ]);
+  await expect(page.locator('#status')).toHaveText('Música salva com sucesso.', { timeout: 10000 });
+  const body = await response.json().catch(() => null);
+  createdId = body?.id;
+
+  // Limpeza: deleta a música criada pelo teste
+  if (createdId) {
+    const csrf = await page.request.get('/api/csrf.php').then(r => r.json()).then(j => j.csrf_token);
+    await page.request.post('/src/backend/editor/api.php', {
+      data: JSON.stringify({ action: 'delete', id: createdId }),
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+    });
+  }
 });

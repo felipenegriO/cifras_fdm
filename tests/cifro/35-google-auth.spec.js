@@ -66,12 +66,15 @@ async function withExtraEnv(extraVars, run) {
 }
 
 test.describe('Login com Google — visibilidade do botão', () => {
-  test('login.php e register.php refletem a configuração atual do servidor', async ({ page }) => {
+  test('login.php e register.php refletem a configuração atual do servidor', async ({ browser }) => {
     const configured = isGoogleOauthConfiguredInEnv();
-    const googleButton = 'a[href="/api/auth/google/start.php"]';
+    // Usa contexto anônimo — login.php e register.php redirecionam usuários já autenticados
+    const ctx = await browser.newContext({ storageState: { cookies: [], origins: [] } });
+    const page = await ctx.newPage();
 
     const loginRes = await page.goto('/login.php');
     expect(loginRes.status()).toBe(200);
+    const googleButton = 'a[href="/api/auth/google/start.php"]';
     if (configured) {
       await expect(page.locator(googleButton)).toBeVisible();
     } else {
@@ -80,11 +83,45 @@ test.describe('Login com Google — visibilidade do botão', () => {
 
     const registerRes = await page.goto('/register.php');
     expect(registerRes.status()).toBe(200);
+    // register.php usa href com ?source=register — seletor mais flexível
+    const googleButtonRegister = 'a[href^="/api/auth/google/start.php"]';
     if (configured) {
-      await expect(page.locator(googleButton)).toBeVisible();
+      await expect(page.locator(googleButtonRegister)).toBeVisible();
     } else {
-      await expect(page.locator(googleButton)).toHaveCount(0);
+      await expect(page.locator(googleButtonRegister)).toHaveCount(0);
     }
+
+    await ctx.close();
+  });
+
+  test('botão de login com Google está com link correto quando configurado', async ({ page }) => {
+    const configured = isGoogleOauthConfiguredInEnv();
+    if (!configured) {
+      test.skip();
+      return;
+    }
+    await page.goto('/login.php');
+    const btn = page.locator('a[href="/api/auth/google/start.php"]').first();
+    await expect(btn).toBeVisible();
+    await expect(btn).toHaveAttribute('href', '/api/auth/google/start.php');
+    // Botão deve ter texto reconhecível
+    const text = await btn.textContent();
+    expect(text?.trim().length).toBeGreaterThan(0);
+  });
+
+  test('início do login com Google redireciona para o Google quando configurado', async ({ page }) => {
+    const configured = isGoogleOauthConfiguredInEnv();
+    if (!configured) {
+      test.skip();
+      return;
+    }
+    // start.php deve redirecionar para o Google (302)
+    const res = await page.request.get('/api/auth/google/start.php', { maxRedirects: 0 })
+      .catch(err => err.response ?? null);
+    const status = res?.status();
+    expect([302, 303]).toContain(status);
+    const location = res?.headers()['location'] ?? '';
+    expect(location).toMatch(/accounts\.google\.com|google\.com/);
   });
 });
 

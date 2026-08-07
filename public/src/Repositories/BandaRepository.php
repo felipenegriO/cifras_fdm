@@ -33,6 +33,22 @@ class BandaRepository {
         return (int)$stmt->fetchColumn();
     }
 
+    /**
+     * Conta quantas bandas no plano gratuito o usuário administra — usado
+     * para limitar a 1 banda gratuita por dono, independente de ele também
+     * administrar outras bandas pagas (o plano é da banda, mas o limite de
+     * "quantas bandas grátis eu posso ter" é do dono).
+     */
+    public function countGratuitasByUsuario(string $usuarioId): int {
+        $stmt = $this->pdo->prepare(
+            'SELECT COUNT(*) FROM bandas b
+             JOIN usuario_banda ub ON b.id = ub.banda_id
+             WHERE ub.usuario_id = ? AND ub.perfil = "administrador" AND b.plano = "gratuito"'
+        );
+        $stmt->execute([$usuarioId]);
+        return (int)$stmt->fetchColumn();
+    }
+
     public function findById(string $id): ?array {
         $stmt = $this->pdo->prepare('SELECT * FROM bandas WHERE id = ?');
         $stmt->execute([$id]);
@@ -90,8 +106,39 @@ class BandaRepository {
         $stmt->execute([$plano, $stripeSubId, $id]);
     }
 
+    /**
+     * Atualiza a data de expiração do plano (armazenada de current_period_end do Stripe).
+     * $periodEnd é um Unix timestamp UTC.
+     */
+    public function atualizarExpiracao(string $stripeSubId, int $periodEnd): void {
+        $stmt = $this->pdo->prepare(
+            'UPDATE bandas SET plano_expira_em = FROM_UNIXTIME(?) WHERE stripe_subscription_id = ?'
+        );
+        $stmt->execute([$periodEnd, $stripeSubId]);
+    }
+
+    /** Retorna a banda pelo stripe_subscription_id. */
+    public function findBySubscriptionId(string $subId): ?array {
+        $pdo  = Database::getConnection();
+        $stmt = $pdo->prepare('SELECT * FROM bandas WHERE stripe_subscription_id = ?');
+        $stmt->execute([$subId]);
+        $row = $stmt->fetch();
+        return $row ?: null;
+    }
+
     public function delete(string $id): void {
         $stmt = $this->pdo->prepare('DELETE FROM bandas WHERE id=?');
         $stmt->execute([$id]);
+    }
+
+    /** Retorna os administradores de uma banda (para notificações). */
+    public function getAdmins(string $bandaId): array {
+        $stmt = $this->pdo->prepare(
+            'SELECT u.id, u.nome, u.email FROM usuarios u
+             JOIN usuario_banda ub ON u.id = ub.usuario_id
+             WHERE ub.banda_id = ? AND ub.perfil = "administrador" AND u.ativo = 1'
+        );
+        $stmt->execute([$bandaId]);
+        return $stmt->fetchAll();
     }
 }

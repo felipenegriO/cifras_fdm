@@ -125,17 +125,20 @@
         <p>Cole o link de uma cifra do CifraClub e a aplicação busca o conteúdo automaticamente.</p>
         <label for="importUrlInput">Link do CifraClub</label>
         <input id="importUrlInput" type="url" placeholder="https://www.cifraclub.com.br/...">
+        <button type="button" class="btn btn--secondary" id="fetchImportButton">Buscar cifra</button>
         <div class="import-fetch-error" id="importFetchError" role="alert" hidden></div>
       </div>
 
       <div class="import-modal__panel" id="importTabText" hidden role="tabpanel">
-        <p>Cole o conteúdo da cifra.</p>
+        <p>Cole o conteúdo da cifra. Um link pode ser guardado como referência, mas não é acessado automaticamente.</p>
+        <label for="importSourceUrl">Link de origem (opcional)</label>
+        <input id="importSourceUrl" type="url" placeholder="https://www.cifraclub.com.br/...">
         <label for="importContent">Conteúdo da cifra</label>
         <textarea id="importContent" rows="14" placeholder="Nome da música&#10;Artista&#10;Tom: C&#10;&#10;C  G  Am  F"></textarea>
         <button type="button" class="btn btn--secondary" id="previewImportButton">Gerar preview</button>
       </div>
 
-      <label class="import-rights"><input id="importRights" type="checkbox" checked> Confirmo que tenho autorização para usar este conteúdo.</label>
+      <label class="import-rights"><input id="importRights" type="checkbox"> Confirmo que tenho autorização para usar este conteúdo.</label>
       <div class="import-preview" id="importPreview" role="status" aria-live="polite" hidden></div>
       <div class="import-modal__actions">
         <button type="button" class="btn btn--secondary" id="cancelImportButton">Cancelar</button>

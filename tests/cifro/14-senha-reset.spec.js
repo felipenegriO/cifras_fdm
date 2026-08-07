@@ -9,7 +9,7 @@ import { dbQuery } from '../helpers/db.js';
 
 // ── esqueci-senha.php ─────────────────────────────────────────────────────────
 test.describe('Esqueci senha — página pública', () => {
-  test('GET /esqueci-senha.php carrega sem erro', async ({ browser }) => {
+  test('página de recuperação de senha abre sem erro', async ({ browser }) => {
     const ctx = await browser.newContext({ storageState: { cookies: [], origins: [] } });
     const page = await ctx.newPage();
     const res = await page.goto('/esqueci-senha.php');
@@ -55,7 +55,7 @@ test.describe('Esqueci senha — página pública', () => {
 
 // ── reset-senha.php ───────────────────────────────────────────────────────────
 test.describe('Reset senha — token flows', () => {
-  test('GET /reset-senha.php sem token mostra erro', async ({ browser }) => {
+  test('redefinição sem token mostra mensagem de erro', async ({ browser }) => {
     const ctx = await browser.newContext({ storageState: { cookies: [], origins: [] } });
     const page = await ctx.newPage();
     await page.goto('/reset-senha.php');
@@ -65,7 +65,7 @@ test.describe('Reset senha — token flows', () => {
     await ctx.close();
   });
 
-  test('GET /reset-senha.php com token inválido mostra erro', async ({ browser }) => {
+  test('redefinição com token inválido mostra mensagem de erro', async ({ browser }) => {
     const ctx = await browser.newContext({ storageState: { cookies: [], origins: [] } });
     const page = await ctx.newPage();
     await page.goto('/reset-senha.php?token=tokeninvalido123');
@@ -74,7 +74,7 @@ test.describe('Reset senha — token flows', () => {
     await ctx.close();
   });
 
-  test('GET /reset-senha.php com token XSS não executa script', async ({ browser }) => {
+  test('página de redefinição não executa scripts injetados no token', async ({ browser }) => {
     const ctx = await browser.newContext({ storageState: { cookies: [], origins: [] } });
     const page = await ctx.newPage();
     await page.goto('/reset-senha.php?token=<script>window.__xss_reset=1</script>');
@@ -83,7 +83,7 @@ test.describe('Reset senha — token flows', () => {
     await ctx.close();
   });
 
-  test('POST /reset-senha.php sem CSRF retorna 403', async ({ browser }) => {
+  test('redefinição sem token de segurança é bloqueada', async ({ browser }) => {
     const ctx = await browser.newContext({ storageState: { cookies: [], origins: [] } });
     const page = await ctx.newPage();
     const res = await page.request.post('/reset-senha.php', {
@@ -93,7 +93,7 @@ test.describe('Reset senha — token flows', () => {
     await ctx.close();
   });
 
-  test('POST /reset-senha.php com senha curta retorna erro', async ({ browser }) => {
+  test('redefinição com senha muito curta mostra erro de validação', async ({ browser }) => {
     const ctx = await browser.newContext({ storageState: { cookies: [], origins: [] } });
     const page = await ctx.newPage();
     await page.goto('/reset-senha.php?token=faketoken123');
@@ -145,7 +145,7 @@ test.describe('Reset senha — token flows', () => {
 
 // ── definir-senha.php ─────────────────────────────────────────────────────────
 test.describe('Definir senha — token flows', () => {
-  test('GET /definir-senha.php sem token mostra erro', async ({ browser }) => {
+  test('definição de senha sem token mostra mensagem de erro', async ({ browser }) => {
     const ctx = await browser.newContext({ storageState: { cookies: [], origins: [] } });
     const page = await ctx.newPage();
     await page.goto('/definir-senha.php');
@@ -154,7 +154,7 @@ test.describe('Definir senha — token flows', () => {
     await ctx.close();
   });
 
-  test('GET /definir-senha.php com token inválido mostra erro', async ({ browser }) => {
+  test('definição de senha com token inválido mostra mensagem de erro', async ({ browser }) => {
     const ctx = await browser.newContext({ storageState: { cookies: [], origins: [] } });
     const page = await ctx.newPage();
     await page.goto('/definir-senha.php?token=tokeninvalido456');
@@ -163,7 +163,7 @@ test.describe('Definir senha — token flows', () => {
     await ctx.close();
   });
 
-  test('GET /definir-senha.php com token XSS não executa script', async ({ browser }) => {
+  test('página de definição de senha não executa scripts injetados no token', async ({ browser }) => {
     const ctx = await browser.newContext({ storageState: { cookies: [], origins: [] } });
     const page = await ctx.newPage();
     await page.goto('/definir-senha.php?token=<script>window.__xss_def=1</script>');
@@ -172,7 +172,7 @@ test.describe('Definir senha — token flows', () => {
     await ctx.close();
   });
 
-  test('POST /definir-senha.php sem CSRF retorna 403 ou redireciona com erro', async ({ browser }) => {
+  test('definição de senha sem token de segurança é bloqueada', async ({ browser }) => {
     const ctx = await browser.newContext({ storageState: { cookies: [], origins: [] } });
     const page = await ctx.newPage();
     const res = await page.request.post('/definir-senha.php', {
@@ -180,5 +180,85 @@ test.describe('Definir senha — token flows', () => {
     });
     expect([403, 400, 200]).toContain(res.status());
     await ctx.close();
+  });
+
+  test('fluxo completo de convite — clique real no formulário redireciona para login/app', async ({ browser }) => {
+    const ctx = await browser.newContext({ storageState: { cookies: [], origins: [] } });
+    const page = await ctx.newPage();
+
+    const userId = randomUUID();
+    const rawToken = randomUUID().replace(/-/g, '') + randomUUID().replace(/-/g, '');
+    const tokenHash = createHash('sha256').update(rawToken).digest('hex');
+
+    // Cria usuário sem senha (simulando convite de admin)
+    dbQuery(
+      'INSERT INTO usuarios (id, nome, email, senha_hash, perfil, ativo) VALUES (?, ?, ?, ?, ?, 1)',
+      [userId, 'Playwright Convite', `convite-${userId}@e2e.local`, '', 'usuario']
+    );
+    dbQuery(
+      'INSERT INTO password_reset_tokens (token, usuario_id, expira_em, usado) VALUES (?, ?, DATE_ADD(NOW(), INTERVAL 1 DAY), 0)',
+      [tokenHash, userId]
+    );
+
+    try {
+      await page.goto(`/definir-senha.php?token=${rawToken}`);
+
+      // Formulário deve estar visível
+      await expect(page.locator('form[method="post"]')).toBeVisible();
+      await expect(page.locator('#senha')).toBeVisible();
+      await expect(page.locator('#senha2')).toBeVisible();
+
+      // Preenche e submete pelo botão real
+      await page.fill('#senha', 'SenhaForteConvite#2026');
+      await page.fill('#senha2', 'SenhaForteConvite#2026');
+      await page.click('button[type="submit"]');
+
+      // Após sucesso: redireciona para login, select-banda ou index
+      await page.waitForURL(url =>
+        url.toString().match(/login\.php|select-banda\.php|index\.php/), { timeout: 8000 }
+      );
+      expect(page.url()).toMatch(/login\.php|select-banda\.php|index\.php/);
+
+      // Usuário deve ter senha_hash definida (conta ativada)
+      const row = dbQuery(
+        'SELECT senha_hash FROM usuarios WHERE id=?',
+        [userId]
+      ).rows[0];
+      expect(row?.senha_hash?.length).toBeGreaterThan(0);
+    } finally {
+      dbQuery('DELETE FROM usuarios WHERE id=?', [userId]);
+      await ctx.close();
+    }
+  });
+
+  test('token expirado mostra erro na tela — sem formulário', async ({ browser }) => {
+    const ctx = await browser.newContext({ storageState: { cookies: [], origins: [] } });
+    const page = await ctx.newPage();
+
+    const userId = randomUUID();
+    const rawToken = randomUUID().replace(/-/g, '');
+    const tokenHash = createHash('sha256').update(rawToken).digest('hex');
+
+    dbQuery(
+      'INSERT INTO usuarios (id, nome, email, senha_hash, perfil, ativo) VALUES (?, ?, ?, ?, ?, 1)',
+      [userId, 'Playwright Expirado', `expirado-${userId}@e2e.local`, '', 'usuario']
+    );
+    // Token já expirado (expira_em no passado)
+    dbQuery(
+      'INSERT INTO password_reset_tokens (token, usuario_id, expira_em, usado) VALUES (?, ?, DATE_SUB(NOW(), INTERVAL 1 HOUR), 0)',
+      [tokenHash, userId]
+    );
+
+    try {
+      await page.goto(`/definir-senha.php?token=${rawToken}`);
+
+      // Formulário NÃO deve aparecer — deve mostrar mensagem de erro
+      await expect(page.locator('form[method="post"]')).toHaveCount(0);
+      const body = await page.locator('body').textContent();
+      expect(body).toMatch(/expirado|inválido|token/i);
+    } finally {
+      dbQuery('DELETE FROM usuarios WHERE id=?', [userId]);
+      await ctx.close();
+    }
   });
 });

@@ -27,41 +27,89 @@ test.describe('Roteiro', () => {
 });
 
 test.describe('Setlist', () => {
-  test('exibe o tom detectado quando o item ainda não possui tom salvo', async ({ page }) => {
-    await page.goto('/index.php');
-    await page.waitForFunction(() => window.CifroChords && Array.isArray(window.songs));
+  test('lista de músicas exibe tom detectado quando item não tem tom salvo', async ({ page }) => {
+    const csrfRes = await page.request.get('/api/csrf.php');
+    const { csrf_token } = await csrfRes.json();
+    const headers = { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf_token };
 
-    const result = await page.evaluate(() => {
-      const song = { id: 'teste-tom', nome: 'Música teste', cifra: '<b>D A Bm G</b><br><b>Em A D</b>' };
-      window.songs = [song];
-      const expected = window.CifroChords.identifyKey(song.cifra).key;
-      window.playlistsSalvas = [{ nome: 'Teste de tom', itens: [song.id] }];
-      window.renderPlaylistsMenu();
-      return {
-        expected,
-        text: document.querySelector('.liPlaylist-musica')?.textContent || '',
-      };
+    // Cria música real com acorde D para detecção de tom
+    const songRes = await page.request.post('/src/backend/editor/api.php', {
+      data: JSON.stringify({ nome: '__E2E_TOM_INDEX__', cifra: '<b>D A Bm G</b>', artista: '', classificacao: '', bit: '' }),
+      headers,
+    });
+    const { id: songId } = await songRes.json();
+
+    const syncData = await (await page.request.get('/api/sync/data.php')).json();
+    const originalPlaylists = syncData.playlists || [];
+    await page.request.post('/src/backend/editor/salvar_playlists.php', {
+      data: JSON.stringify({ playlists: [...originalPlaylists, { nome: '__E2E_SETLIST_INDEX__', itens: [songId] }] }),
+      headers,
     });
 
-    expect(result.text).toContain(`[${result.expected}]`);
+    try {
+      await page.goto('/index.php');
+      await page.waitForFunction(() =>
+        window.CifroChords && Array.isArray(window.playlistsSalvas) &&
+        window.playlistsSalvas.some(p => p.nome === '__E2E_SETLIST_INDEX__'),
+        { timeout: 15000 });
+      const result = await page.evaluate(() => {
+        window.renderPlaylistsMenu();
+        const item = document.querySelector('.liPlaylist-musica');
+        return item ? item.textContent : '';
+      });
+      expect(result).toMatch(/\[D\]/);
+    } finally {
+      await page.request.post('/src/backend/editor/salvar_playlists.php', {
+        data: JSON.stringify({ playlists: originalPlaylists }),
+        headers,
+      });
+      await page.request.post('/src/backend/editor/api.php', {
+        data: JSON.stringify({ action: 'delete', id: songId }),
+        headers,
+      });
+    }
   });
 
   test('editor da setlist mostra e atualiza o tom escolhido', async ({ page }) => {
-    await page.goto('/src/backend/editor/editorplaylist.php');
-    await page.waitForFunction(() => window.CifroChords && typeof carregarPlaylistsDisponiveis === 'function');
-    await page.waitForFunction(() => {
-      const select = document.getElementById('playlistSelecionada');
-      return select && (select.options.length > 0 || document.querySelector('#musicasDisponiveis .empty-state'));
+    const csrfRes = await page.request.get('/api/csrf.php');
+    const { csrf_token } = await csrfRes.json();
+    const headers = { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf_token };
+
+    // Cria música real com acorde D para detecção de tom
+    const songRes = await page.request.post('/src/backend/editor/api.php', {
+      data: JSON.stringify({ nome: '__E2E_TOM__', cifra: '<b>D A Bm G</b>', artista: '', classificacao: '', bit: '' }),
+      headers,
     });
-    await page.evaluate(() => {
-      songs.splice(0, songs.length, { id: 987654, nome: 'Música teste', cifra: '<b>D A Bm G</b><br><b>Em A D</b>' });
-      playlistsSalvas.splice(0, playlistsSalvas.length, { nome: 'Teste de tom', itens: [987654] });
-      carregarPlaylistsDisponiveis();
+    const { id: songId } = await songRes.json();
+
+    const syncData = await (await page.request.get('/api/sync/data.php')).json();
+    const originalPlaylists = syncData.playlists || [];
+    await page.request.post('/src/backend/editor/salvar_playlists.php', {
+      data: JSON.stringify({ playlists: [...originalPlaylists, { nome: '__E2E_SETLIST__', itens: [songId] }] }),
+      headers,
     });
 
-    await expect(page.locator('.playlist-song-name')).toContainText('Música teste [D]');
-    await page.getByLabel('Tom de Música teste').selectOption('E');
-    await expect(page.locator('.playlist-song-name')).toContainText('Música teste [E]');
+    try {
+      await page.goto('/src/backend/editor/editorplaylist.php');
+      await page.waitForFunction(() => window.CifroChords && typeof carregarPlaylistsDisponiveis === 'function');
+      await page.waitForFunction(() => {
+        const sel = document.getElementById('playlistSelecionada');
+        return sel && Array.from(sel.options).some(o => o.text === '__E2E_SETLIST__');
+      }, { timeout: 15000 });
+      await page.locator('#playlistSelecionada').selectOption({ label: '__E2E_SETLIST__' });
+      await expect(page.locator('.playlist-song-name')).toContainText('__E2E_TOM__ [D]');
+      await page.getByLabel('Tom de __E2E_TOM__').selectOption('E');
+      await expect(page.locator('.playlist-song-name')).toContainText('__E2E_TOM__ [E]');
+    } finally {
+      await page.request.post('/src/backend/editor/salvar_playlists.php', {
+        data: JSON.stringify({ playlists: originalPlaylists }),
+        headers,
+      });
+      await page.request.post('/src/backend/editor/api.php', {
+        data: JSON.stringify({ action: 'delete', id: songId }),
+        headers,
+      });
+    }
   });
 });
 
@@ -82,5 +130,68 @@ test.describe('Editor de roteiros', () => {
     await page.getByRole('button', { name: /Limpar/ }).click();
     await page.getByLabel('Título do roteiro').fill('__ROTEIRO_UI__');
     await expect(page.getByLabel('Título do roteiro')).toHaveValue('__ROTEIRO_UI__');
+  });
+});
+
+test.describe('Validade de roteiro', () => {
+  let roteiroFuturoId = null;
+  let roteiroExpiradoId = null;
+  let csrf = null;
+  let headers = null;
+  let baseRevision = null;
+
+  test.beforeAll(async ({ request }) => {
+    const csrfRes = await request.get('/api/csrf.php');
+    csrf = (await csrfRes.json()).csrf_token;
+    headers = { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf };
+
+    const syncRes = await request.get('/api/sync/data.php');
+    baseRevision = (await syncRes.json()).content_revision;
+
+    const futuro = await request.post('/src/backend/editor/salvar_roteiros.php', {
+      data: JSON.stringify({ titulo: '__ROTEIRO_FUTURO__', conteudo: '<p>Conteúdo do ensaio</p>', visivel_ate: '2099-12-31', baseRevision }),
+      headers,
+    });
+    const fBody = await futuro.json();
+    roteiroFuturoId = fBody.id;
+    baseRevision = fBody.content_revision;
+
+    const expirado = await request.post('/src/backend/editor/salvar_roteiros.php', {
+      data: JSON.stringify({ titulo: '__ROTEIRO_EXPIRADO__', conteudo: '<p>Conteúdo expirado</p>', visivel_ate: '2020-01-01', baseRevision }),
+      headers,
+    });
+    const eBody = await expirado.json();
+    roteiroExpiradoId = eBody.id;
+    baseRevision = eBody.content_revision;
+  });
+
+  test.afterAll(async ({ request }) => {
+    const syncRes = await request.get('/api/sync/data.php');
+    const rev = (await syncRes.json()).content_revision;
+    if (roteiroFuturoId) {
+      await request.post('/src/backend/editor/salvar_roteiros.php', {
+        data: JSON.stringify({ deleteId: roteiroFuturoId, baseRevision: rev }),
+        headers,
+      });
+    }
+    if (roteiroExpiradoId) {
+      const syncRes2 = await request.get('/api/sync/data.php');
+      await request.post('/src/backend/editor/salvar_roteiros.php', {
+        data: JSON.stringify({ deleteId: roteiroExpiradoId, baseRevision: (await syncRes2.json()).content_revision }),
+        headers,
+      });
+    }
+  });
+
+  test('roteiro com validade futura exibe o conteúdo na tela', async ({ page }) => {
+    await page.goto(`/roteiro.php?id=${roteiroFuturoId}`);
+    await expect(page.locator('#roteiro-title')).toHaveText('__ROTEIRO_FUTURO__', { timeout: 10000 });
+    await expect(page.locator('#roteiro-body')).toBeVisible();
+  });
+
+  test('roteiro com validade expirada exibe mensagem de indisponibilidade', async ({ page }) => {
+    await page.goto(`/roteiro.php?id=${roteiroExpiradoId}`);
+    await expect(page.locator('#roteiro-title')).toHaveText('Roteiro indisponivel', { timeout: 10000 });
+    await expect(page.locator('#roteiro-body')).toBeEmpty();
   });
 });

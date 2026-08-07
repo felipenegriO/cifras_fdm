@@ -93,4 +93,23 @@ final class CifraClubImportProviderTest extends TestCase
         $this->expectExceptionMessage('Não foi possível extrair a cifra desta página.');
         $provider->import('https://www.cifraclub.com.br/artista/pagina/');
     }
+
+    public function testParseHttpStatusCodeReturnsNullForMalformedStatusLine(): void
+    {
+        $this->assertNull(CifraClubImportProvider::parseHttpStatusCode(['Not-a-valid-status-line']));
+    }
+
+    public function testThrowsWhenCifraBlockHasOnlyWhitespace(): void
+    {
+        $html = '<html><body>'
+            . '<h1>Título</h1><h2><a href="#">Artista</a></h2>'
+            . '<pre id="cifra_original">   ' . "\n\n\t" . '</pre>'
+            . '</body></html>';
+
+        $provider = new CifraClubImportProvider(['httpGet' => fn() => $html]);
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Não foi possível extrair a cifra desta página.');
+        $provider->import('https://www.cifraclub.com.br/artista/musica/');
+    }
 }

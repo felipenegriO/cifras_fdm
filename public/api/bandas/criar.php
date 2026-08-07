@@ -49,25 +49,22 @@ if (strlen($nome) > 120) {
 $userId    = $_SESSION['usuario']['id'] ?? null;
 $bandaRepo = new BandaRepository();
 
-// Verifica limite do plano — usa o plano da banda atual como referência do usuário.
+// Toda banda nova começa no plano gratuito — o limite de "quantas bandas
+// grátis eu posso ter" é do DONO (usuário), não da banda que ele tem
+// selecionada agora. Um dono com uma banda paga não ganha bandas grátis
+// ilimitadas por causa disso; ele só pode ter 1 banda no plano gratuito.
 // Master nunca tem limite.
 if (!is_master()) {
-    $planoAtual = $_SESSION['banda_atual']['plano'] ?? 'gratuito';
-    $limites    = cifro_plan_limits($planoAtual);
-    $limiteBandas = $limites['bandas'] ?? 1;
-
-    if ($limiteBandas !== -1) {
-        $totalBandas = $bandaRepo->countByUsuario($userId);
-        if ($totalBandas >= $limiteBandas) {
-            http_response_code(403);
-            echo json_encode([
-                'ok'          => false,
-                'sucesso'     => false,
-                'plano_limit' => true,
-                'mensagem'    => "Limite do plano " . cifro_plan_label($planoAtual) . " atingido: máximo de {$limiteBandas} banda(s). Faça upgrade para criar mais bandas.",
-            ]);
-            exit;
-        }
+    $limiteBandasGratuitas = cifro_plan_limits('gratuito')['bandas'] ?? 1;
+    if ($limiteBandasGratuitas !== -1 && $bandaRepo->countGratuitasByUsuario($userId) >= $limiteBandasGratuitas) {
+        http_response_code(403);
+        echo json_encode([
+            'ok'          => false,
+            'sucesso'     => false,
+            'plano_limit' => true,
+            'mensagem'    => "Limite do plano Gratuito atingido: máximo de {$limiteBandasGratuitas} banda(s) grátis. Faça upgrade para criar mais bandas.",
+        ]);
+        exit;
     }
 }
 

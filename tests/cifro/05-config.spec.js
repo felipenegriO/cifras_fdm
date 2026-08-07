@@ -12,7 +12,7 @@ test.describe('Configurações', () => {
     await page.waitForLoadState('networkidle');
   });
 
-  test('carrega sem erros PHP', async ({ page }) => {
+  test('página de configurações abre sem erros', async ({ page }) => {
     await expect(page.locator('body')).not.toContainText('Fatal error');
     await expect(page.locator('body')).not.toContainText('Warning:');
   });
@@ -21,17 +21,17 @@ test.describe('Configurações', () => {
     await expect(page.locator('.config-page-title, h1')).toContainText('Configurações');
   });
 
-  test('select de tema está presente', async ({ page }) => {
+  test('seletor de tema está disponível nas configurações', async ({ page }) => {
     await expect(page.locator('#cfgTheme')).toBeVisible();
     await expect(page.locator('#cfgTheme')).toHaveValue(/^(dark|light|auto)$/);
   });
 
-  test('select de tamanho de fonte está presente', async ({ page }) => {
+  test('seletor de tamanho de fonte está disponível nas configurações', async ({ page }) => {
     await expect(page.locator('#cfgCifraSize')).toBeVisible();
     await expect(page.locator('#cfgCifraSize')).toHaveValue(/^(14|16|18|20|22)$/);
   });
 
-  test('select de fonte tem rótulos amigáveis (não valores px)', async ({ page }) => {
+  test('opções de tamanho de fonte exibem nomes legíveis, não valores técnicos', async ({ page }) => {
     const options = await page.locator('#cfgCifraSize option').allTextContents();
     expect(options).toContain('Padrão');
     expect(options.some(o => o === 'Pequeno' || o === 'Médio' || o === 'Grande')).toBe(true);
@@ -60,7 +60,7 @@ test.describe('Configurações', () => {
     await expect(page.getByText('Alteração aplicada neste dispositivo, mas não foi salva na conta.')).toBeVisible();
   });
 
-  test('link de logout está presente', async ({ page }) => {
+  test('link de sair da conta está disponível nas configurações', async ({ page }) => {
     await expect(page.locator('a[href="/logout.php"]')).toBeVisible();
   });
 
@@ -76,11 +76,37 @@ test.describe('Configurações', () => {
     }
   });
 
-  test('select de velocidade de rolagem está presente', async ({ page }) => {
+  test('seletor de velocidade de rolagem está disponível nas configurações', async ({ page }) => {
     await expect(page.locator('#cfgScrollSpeed')).toBeVisible();
   });
 
-  test('botão "Sincronizar" dispara e retorna toast (sem erro)', async ({ page }) => {
+  test('troca de tema aplica o atributo data-theme no documento', async ({ page }) => {
+    await page.route('/src/backend/users/salvar_config.php', route => route.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify({ sucesso: true }),
+    }));
+
+    await page.locator('#cfgTheme').selectOption('light');
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+
+    await page.locator('#cfgTheme').selectOption('dark');
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  });
+
+  test('ajuste de tamanho da cifra atualiza a variável CSS da fonte', async ({ page }) => {
+    await page.route('/src/backend/users/salvar_config.php', route => route.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify({ sucesso: true }),
+    }));
+
+    await page.locator('#cfgCifraSize').selectOption('20');
+    const fontSize = await page.evaluate(() =>
+      getComputedStyle(document.documentElement).getPropertyValue('--cifra-size').trim()
+    );
+    expect(fontSize).toBe('20px');
+  });
+
+  test('sincronização manual não exibe mensagem de erro', async ({ page }) => {
     // Mock: intercepta a chamada de sync para não depender do servidor real
     await page.route('/api/sync/data.php*', route => route.fulfill({
       status: 200,

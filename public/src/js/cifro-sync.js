@@ -261,6 +261,7 @@ const cifroSync = (() => {
                 localStorage.removeItem(pendingBandStorageKey());
                 if (Number(version.content_revision) === Number(meta.content_revision || 0)) {
                     await updateMetaChecked(bandaId, meta, Number(version.content_revision));
+                    await markPrepared(bandaId);
                     return loadCached(bandaId);
                 }
             }
@@ -269,6 +270,7 @@ const cifroSync = (() => {
             localStorage.removeItem(pendingBandStorageKey());
             await writeSnapshot(bandaId, json);
             applySnapshot(bandaId, json, Boolean(meta));
+            await markPrepared(bandaId);
             return true;
         } catch (error) {
             console.warn('[cifroSync] sync failed:', error);
@@ -439,7 +441,7 @@ const cifroSync = (() => {
         const bandaId = localStorage.getItem(offlineBandStorageKey());
         if (!bandaId || !isOnline()) return;
         try {
-            const response = await fetch('/src/backend/bandas/selecionar.php', {
+            const response = await fetch((window.APP_BASE || '') + '/src/backend/bandas/selecionar.php', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bandaId })
             });
             const json = await response.json();
@@ -489,6 +491,17 @@ const cifroSync = (() => {
         if (document.visibilityState === 'visible') sync(window.CIFRO_BAND_ID, { throttle: true }).catch(() => {});
     });
     if (offlineBand && isOnline()) setTimeout(reconcileOfflineBand, 0);
+
+    // Prepara sync + disponibilidade offline automaticamente em qualquer
+    // página que carregue este script, mesmo que a própria página nunca
+    // chame cifroSync.load() explicitamente. Espera o DOM terminar de
+    // parsear para garantir que window.CIFRO_BAND_ID (definido por um
+    // <script> inline da página, às vezes depois deste arquivo) já exista.
+    // load() e sync() já são seguros para chamar de novo em páginas que
+    // também chamam load() explicitamente (dedupe por inFlight/throttle).
+    document.addEventListener('DOMContentLoaded', function () {
+        if (window.CIFRO_BAND_ID) load(window.CIFRO_BAND_ID).catch(() => {});
+    });
 
     if ('serviceWorker' in navigator && window.CIFRO_USER_ID) {
         navigator.serviceWorker.ready.then(registration => registration.active?.postMessage({ type: 'SET_CONTEXT', userId: window.CIFRO_USER_ID, bandId: window.CIFRO_BAND_ID })).catch(() => {});

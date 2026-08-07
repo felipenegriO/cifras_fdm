@@ -4,8 +4,8 @@
     {
       "name": "cifrasfdm",
       "runtimeExecutable": "C:\\xampp\\php\\php.exe",
-      "runtimeArgs": ["-S", "localhost:8000", "-t", "public"],
-      "port": 8000
+      "runtimeArgs": ["-S", "localhost:8090", "-t", "public", "router.php"],
+      "port": 8090
     }
   ]
 }

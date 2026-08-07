@@ -168,10 +168,12 @@ if ($isNew && $email !== '') {
             ['nome' => $banda['nome'] ?? ''],
             $token
         );
-        echo json_encode(['sucesso' => true, 'id' => $id, 'convite_enviado' => true]);
+        $e2eToken = env('APP_ENV', 'production') === 'test' ? $token : null;
+        echo json_encode(['sucesso' => true, 'id' => $id, 'convite_enviado' => true, 'activation_token' => $e2eToken]);
     } catch (Exception $e) {
         // Email failed but user was saved — don't fail the request
-        echo json_encode(['sucesso' => true, 'id' => $id, 'convite_enviado' => false, 'aviso' => 'Usuário salvo, mas não foi possível enviar o e-mail de convite.']);
+        $e2eToken = env('APP_ENV', 'production') === 'test' ? $token : null;
+        echo json_encode(['sucesso' => true, 'id' => $id, 'convite_enviado' => false, 'aviso' => 'Usuário salvo, mas não foi possível enviar o e-mail de convite.', 'activation_token' => $e2eToken]);
     }
     exit;
 }

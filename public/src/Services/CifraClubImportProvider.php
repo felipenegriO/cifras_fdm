@@ -1,14 +1,14 @@
 <?php
 class CifraClubImportProvider implements ChordImportProvider
 {
-    private const ALLOWED_HOSTS = ['cifraclub.com.br', 'www.cifraclub.com.br'];
+    public const ALLOWED_HOSTS = ['cifraclub.com.br', 'www.cifraclub.com.br'];
 
     /** @var callable(string $url, int $timeout): (string|false) */
     private $httpGet;
 
     public function __construct(array $deps = [])
     {
-        $this->httpGet = $deps['httpGet'] ?? function (string $url, int $timeout) {
+        $this->httpGet = $deps['httpGet'] ?? function (string $url, int $timeout) { // @codeCoverageIgnoreStart
             $context = stream_context_create([
                 'http' => [
                     'method' => 'GET',
@@ -24,7 +24,7 @@ class CifraClubImportProvider implements ChordImportProvider
                 return false;
             }
             return $html;
-        };
+        }; // @codeCoverageIgnoreEnd
     }
 
     public static function parseHttpStatusCode(array $responseHeaders): ?int

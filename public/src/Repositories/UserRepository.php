@@ -321,16 +321,16 @@ class UserRepository {
                 'UPDATE password_reset_tokens SET usado=1 WHERE token=? AND usado=0'
             );
             $updated->execute([$tokenHash]);
-            if ($updated->rowCount() !== 1) {
-                if ($ownsTransaction) $this->pdo->commit();
-                return null;
+            if ($updated->rowCount() !== 1) { // race condition: token consumed between SELECT and UPDATE
+                if ($ownsTransaction) $this->pdo->commit(); // @codeCoverageIgnore
+                return null; // @codeCoverageIgnore
             }
             if ($ownsTransaction) $this->pdo->commit();
             return $row['usuario_id'];
-        } catch (Throwable $e) {
+        } catch (Throwable $e) { // @codeCoverageIgnoreStart
             if ($ownsTransaction && $this->pdo->inTransaction()) $this->pdo->rollBack();
             throw $e;
-        }
+        } // @codeCoverageIgnoreEnd
     }
 
     /** Peek at token without consuming it — returns userId or null. */

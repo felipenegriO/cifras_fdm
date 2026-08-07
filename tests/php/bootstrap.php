@@ -1,6 +1,12 @@
 <?php
 // Bootstrap dos testes PHPUnit: autoload do Composer + helpers globais (env, etc).
-require_once __DIR__ . '/../../vendor/autoload.php';
+// OpenSSL on Windows/XAMPP needs the cnf path set before key generation.
+if (PHP_OS_FAMILY === 'Windows' && !getenv('OPENSSL_CONF')) {
+    foreach (['C:\\xampp\\apache\\conf\\openssl.cnf', 'C:\\Program Files\\OpenSSL-Win64\\bin\\openssl.cfg'] as $cnf) {
+        if (file_exists($cnf)) { putenv("OPENSSL_CONF=$cnf"); break; }
+    }
+}
+require_once __DIR__ . '/../../public/vendor/autoload.php';
 require_once __DIR__ . '/../../public/config/env.php';
 spl_autoload_register(function (string $class): void {
     foreach (['Services', 'Repositories', 'Controllers'] as $directory) {

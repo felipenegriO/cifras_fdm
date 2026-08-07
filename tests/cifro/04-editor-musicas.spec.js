@@ -383,13 +383,13 @@ test.describe('Editor de Músicas — Tela', () => {
         await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, id: 999999 }) });
       }
     });
-    await page.evaluate(() => { window.cifroConfirm = async () => true; });
 
     await page.locator('#saveButton').click();
     await expect(page.locator('#status')).toHaveText('Música salva com sucesso.');
 
     await page.locator('#moreActions').evaluate(el => { el.open = true; });
     await page.locator('#deleteSongButton').click();
+    await page.locator('.cifro-confirm-btn--danger').click();
     await expect(page.locator('#status')).toHaveText('Música excluída com sucesso.');
     expect(deleteCalled).toBe(true);
     await expect(page.locator('#titulo')).toHaveValue('');
@@ -408,14 +408,12 @@ test.describe('Editor de Músicas — Tela', () => {
       if (body.action === 'delete') { deleteCalled = true; }
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, id: 999998 }) });
     });
-    await page.evaluate(() => { window.cifroConfirm = async () => true; });
     await page.locator('#saveButton').click();
     await expect(page.locator('#status')).toHaveText('Música salva com sucesso.');
 
-    await page.evaluate(() => { window.cifroConfirm = async () => false; });
     await page.locator('#moreActions').evaluate(el => { el.open = true; });
     await page.locator('#deleteSongButton').click();
-    await page.waitForTimeout(150);
+    await page.locator('.cifro-confirm-btn--cancel').click();
     expect(deleteCalled).toBe(false);
     await expect(page.locator('#titulo')).toHaveValue('__TESTE_EXCLUIR_CANCELA__');
     await page.unroute('**/src/backend/editor/api.php');
@@ -581,19 +579,14 @@ test.describe('Editor de Músicas — Tela', () => {
     try {
       await page.goto('/src/backend/editor/editor.php');
       await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
-      const confirmMessage = await page.evaluate(async () => {
-        let captured = null;
-        window.cifroConfirm = async opts => { captured = opts.message; return false; };
-        document.getElementById('buscaMusica').value = '__TESTE_NOME_ESPECIAL__';
-        document.getElementById('buscaMusica').dispatchEvent(new Event('input'));
-        document.querySelector('#musicas li button').click();
-        await new Promise(r => setTimeout(r, 50));
-        document.getElementById('moreActions').open = true;
-        document.getElementById('deleteSongButton').click();
-        await new Promise(r => setTimeout(r, 50));
-        return captured;
-      });
-      expect(confirmMessage).toContain('__TESTE_NOME_ESPECIAL__');
+      await page.locator('#buscaMusica').fill('__TESTE_NOME_ESPECIAL__');
+      await page.locator('#musicas li button').first().click();
+      await expect(page.locator('#titulo')).toHaveValue('__TESTE_NOME_ESPECIAL__');
+      await page.locator('#moreActions').evaluate(el => { el.open = true; });
+      await page.locator('#deleteSongButton').click();
+      const dialogMessage = await page.locator('.cifro-confirm-message').textContent({ timeout: 3000 });
+      expect(dialogMessage).toContain('__TESTE_NOME_ESPECIAL__');
+      await page.locator('.cifro-confirm-btn--cancel').click();
     } finally {
       await page.request.post(API, {
         data: JSON.stringify({ action: 'delete', id: created.id }),
@@ -686,8 +679,8 @@ test.describe('Editor de Músicas — Tela', () => {
     // cai no ramo `else elements.textarea.value = value || ''`. Clicar em
     // "Nova música" chama newSong() -> setContent(''), exercitando esse
     // ramo diretamente (o boot inicial da página não chama setContent()).
-    await page.evaluate(() => { window.cifroConfirm = async () => true; });
     await page.locator('#newSongButton').click();
+    await page.locator('.cifro-confirm-btn--danger').click();
     await expect(page.locator('#cifraInput')).toHaveValue('');
 
     await page.unroute('**/tinymce.min.js*');
@@ -705,9 +698,9 @@ test.describe('Editor de Músicas — Tela', () => {
     await page.locator('#titulo').fill(firstTitle + ' __DIRTY__');
     await expect(page.locator('#dirtyIndicator')).toBeVisible();
 
-    await page.evaluate(() => { window.cifroConfirm = async () => false; });
     await buttons.nth(1).click();
-    await page.waitForTimeout(100);
+    await expect(page.locator('.cifro-confirm-overlay')).toBeVisible({ timeout: 3000 });
+    await page.locator('.cifro-confirm-btn--cancel').click();
     await expect(page.locator('#titulo')).toHaveValue(firstTitle + ' __DIRTY__');
   });
 
@@ -717,14 +710,9 @@ test.describe('Editor de Músicas — Tela', () => {
     await page.locator('#titulo').fill('__TESTE_NOVA_DIRTY__');
     await expect(page.locator('#dirtyIndicator')).toBeVisible();
 
-    let confirmCalled = false;
-    await page.evaluate(() => {
-      window.cifroConfirm = async opts => { window.__confirmCalled = true; return true; };
-    });
     await page.locator('#newSongMenuButton').evaluate(el => el.click());
-    await page.waitForTimeout(100);
-    confirmCalled = await page.evaluate(() => window.__confirmCalled === true);
-    expect(confirmCalled).toBe(true);
+    await expect(page.locator('.cifro-confirm-overlay')).toBeVisible({ timeout: 3000 });
+    await page.locator('.cifro-confirm-btn--danger').click();
     await expect(page.locator('#titulo')).toHaveValue('');
   });
 
@@ -747,9 +735,9 @@ test.describe('Editor de Músicas — Tela', () => {
       const idx = window.songs.findIndex(s => String(s.id) === String(id));
       if (idx >= 0) window.songs.splice(idx, 1);
     }, created.id);
-    await page.evaluate(() => { window.cifroConfirm = async () => true; });
     await page.locator('#moreActions').evaluate(el => { el.open = true; });
     await page.locator('#deleteSongButton').click();
+    await page.locator('.cifro-confirm-btn--danger').click();
     await expect(page.locator('#status')).toHaveText('Música excluída com sucesso.');
   });
 
@@ -767,12 +755,12 @@ test.describe('Editor de Músicas — Tela', () => {
         await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, id: 888888 }) });
       }
     });
-    await page.evaluate(() => { window.cifroConfirm = async () => true; });
     await page.locator('#saveButton').click();
     await expect(page.locator('#status')).toHaveText('Música salva com sucesso.');
 
     await page.locator('#moreActions').evaluate(el => { el.open = true; });
     await page.locator('#deleteSongButton').click();
+    await page.locator('.cifro-confirm-btn--danger').click();
     await expect(page.locator('#status')).toHaveAttribute('data-kind', 'error');
     await expect(page.locator('#status')).not.toHaveText('');
     await expect(page.locator('#deleteSongButton')).toBeEnabled();
@@ -1276,7 +1264,6 @@ test.describe('Editor de Músicas — ramos residuais', () => {
     await page.unroute('**/src/backend/editor/api.php');
 
     // Excluir com falha de rede, sem toast.
-    await page.evaluate(() => { window.cifroConfirm = async () => true; });
     await page.route('**/src/backend/editor/api.php', async route => {
       const body = JSON.parse(route.request().postData() || '{}');
       if (body.action === 'delete') await route.abort('failed');
@@ -1284,6 +1271,7 @@ test.describe('Editor de Músicas — ramos residuais', () => {
     });
     await page.locator('#moreActions').evaluate(el => { el.open = true; });
     await page.locator('#deleteSongButton').click();
+    await page.locator('.cifro-confirm-btn--danger').click();
     await expect(page.locator('#status')).toHaveAttribute('data-kind', 'error');
     await page.unroute('**/src/backend/editor/api.php');
 
@@ -1298,6 +1286,7 @@ test.describe('Editor de Músicas — ramos residuais', () => {
     await expect(page.locator('#status')).toHaveText('Música salva com sucesso.');
     await page.locator('#moreActions').evaluate(el => { el.open = true; });
     await page.locator('#deleteSongButton').click();
+    await page.locator('.cifro-confirm-btn--danger').click();
     await expect(page.locator('#status')).toHaveText('Música excluída com sucesso.');
     await page.unroute('**/src/backend/editor/api.php');
   });

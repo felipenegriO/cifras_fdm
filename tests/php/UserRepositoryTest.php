@@ -122,14 +122,16 @@ final class UserRepositoryTest extends TestCase
         self::assertSame(1, $this->repo->countByBanda($bandId));
     }
 
-    public function testSaveToBandaRejeitaEmailVazioPeloSchema(): void
+    public function testSaveToBandaComEmailVazioSalvaComNulo(): void
     {
         $bandId = 'phpunit-band-' . bin2hex(random_bytes(8));
         $this->pdo->prepare('INSERT INTO bandas (id, nome, plano) VALUES (?, ?, ?)')
             ->execute([$bandId, 'Banda Sem Email', 'gratuito']);
 
-        $this->expectException(PDOException::class);
-        $this->repo->saveToBanda(['nome' => 'Sem Email', 'email' => ''], $bandId, 'basico');
+        $id = $this->repo->saveToBanda(['nome' => 'Sem Email', 'email' => ''], $bandId, 'basico');
+        $user = $this->repo->findById($id);
+        self::assertNotNull($user);
+        self::assertNull($user['email']);
     }
 
     public function testAtivacaoSenhaETokensReais(): void
@@ -182,6 +184,61 @@ final class UserRepositoryTest extends TestCase
         $this->repo->save($base + ['bandas' => []]);
         self::assertSame([], $this->repo->getBandasDoUsuario($this->userId));
         self::assertSame([], $this->repo->findById($this->userId)['config']);
+    }
+
+    public function testFindByEmailRetornaUsuarioComBandas(): void
+    {
+        $bandId = 'phpunit-band-' . bin2hex(random_bytes(8));
+        $this->pdo->prepare('INSERT INTO bandas (id, nome, plano) VALUES (?, ?, ?)')
+            ->execute([$bandId, 'Banda Email Test', 'gratuito']);
+        $this->pdo->prepare('INSERT INTO usuario_banda (usuario_id, banda_id, perfil) VALUES (?, ?, ?)')
+            ->execute([$this->userId, $bandId, 'administrador']);
+
+        $found = $this->repo->findByEmail($this->email);
+
+        self::assertNotNull($found);
+        self::assertNotEmpty($found['bandas']);
+    }
+
+    public function testRecordLegalAcceptance(): void
+    {
+        $this->pdo->exec(
+            'CREATE TABLE IF NOT EXISTS user_legal_acceptances (
+                id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+                usuario_id CHAR(36) NOT NULL,
+                terms_version VARCHAR(40) NOT NULL,
+                privacy_version VARCHAR(40) NOT NULL,
+                accepted_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                ip_hash CHAR(64) DEFAULT NULL,
+                PRIMARY KEY (id),
+                INDEX idx_legal_acceptance_user (usuario_id),
+                FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4'
+        );
+
+        $this->repo->recordLegalAcceptance($this->userId, '1.0', '1.0', null);
+
+        $stmt = $this->pdo->prepare('SELECT COUNT(*) FROM user_legal_acceptances WHERE usuario_id = ?');
+        $stmt->execute([$this->userId]);
+        self::assertSame(1, (int)$stmt->fetchColumn());
+    }
+
+    public function testFindByIdInBandaAndBelongsToBanda(): void
+    {
+        $bandId = 'phpunit-band-' . bin2hex(random_bytes(8));
+        $this->pdo->prepare('INSERT INTO bandas (id, nome, plano) VALUES (?, ?, ?)')
+            ->execute([$bandId, 'Banda FindById Test', 'gratuito']);
+        $this->pdo->prepare('INSERT INTO usuario_banda (usuario_id, banda_id, perfil) VALUES (?, ?, ?)')
+            ->execute([$this->userId, $bandId, 'administrador']);
+
+        $found = $this->repo->findByIdInBanda($this->userId, $bandId);
+        self::assertNotNull($found);
+        self::assertSame($this->userId, $found['id']);
+
+        self::assertTrue($this->repo->belongsToBanda($this->userId, $bandId));
+
+        $outsider = 'phpunit-outsider-' . bin2hex(random_bytes(8));
+        self::assertFalse($this->repo->belongsToBanda($outsider, $bandId));
     }
 
     public function testFindByGoogleSubRetornaNullQuandoNaoExiste(): void

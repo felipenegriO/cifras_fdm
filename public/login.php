@@ -9,7 +9,7 @@ if (!empty($_GET['logout'])) {
         setcookie(session_name(), '', time() - 42000, $p['path'], $p['domain'], $p['secure'], $p['httponly']);
     }
     session_destroy();
-    header('Location: /landing.php'); exit;
+    header('Location: ' . base_url('/landing.php')); exit;
 }
 
 $appDebug = strtolower((string) env('APP_DEBUG', 'false')) === 'true';

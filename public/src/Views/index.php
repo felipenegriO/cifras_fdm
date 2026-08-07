@@ -336,6 +336,27 @@
         </div>
     </div>
 
+    <div class="modal fade" id="betaWelcomeModal" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="betaWelcomeModalLabel"
+        aria-hidden="true">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="betaWelcomeModalLabel">Bem-vindo ao Cifrô — versão beta</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <p>Esta aplicação está em fase beta. Alguns erros podem ocorrer durante o uso.</p>
+                    <p>Se precisar, você pode reportar problemas em <strong>Configurações &rarr; Sobre &rarr; Reportar problema</strong>.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" data-dismiss="modal">Entendi</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="/src/js/jquery-3.5.1.min.js" ></script>
     <script src="/src/js/bootstrap.min.js" defer></script>
     <script>window.CIFRO_USER_ID = '<?= e($_SESSION['usuario']['id'] ?? '') ?>'; window.CIFRO_BAND_ID = '<?= e(current_band_id()) ?>';</script>
@@ -343,6 +364,7 @@
     <script src="<?= asset_url('/src/js/cifro-sync.js') ?>"></script>
     <script src="<?= asset_url('/src/js/chords.js') ?>"></script>
     <script src="<?= asset_url('/src/js/script.js') ?>" defer></script>
+    <script src="<?= asset_url('/src/js/cifro-install.js') ?>" defer></script>
     <script src="<?= asset_url('/src/js/playlists.js') ?>" defer></script>
     <script src="<?= asset_url('/src/js/offline-tools.js') ?>"></script>
     <script src="<?= asset_url('/src/js/live.js') ?>"></script>
@@ -355,6 +377,20 @@
             toggle.addEventListener('change', function () {
                 window.cifroTheme.set(toggle.checked ? 'dark' : 'light');
             });
+        });
+
+        // Aviso de versão beta: aparece uma vez por navegador, na primeira
+        // vez que a pessoa abre o app depois de logar.
+        $(function () {
+            var BETA_WELCOME_KEY = 'cifroBetaWelcomeSeen';
+            try {
+                if (!localStorage.getItem(BETA_WELCOME_KEY)) {
+                    $('#betaWelcomeModal').modal('show');
+                    localStorage.setItem(BETA_WELCOME_KEY, '1');
+                }
+            } catch (error) {
+                // localStorage indisponível (modo privado etc.) — não bloqueia o uso.
+            }
         });
 
         function aplicarFiltro(classificacao) {

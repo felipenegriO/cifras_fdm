@@ -88,10 +88,26 @@ if ($classificacao !== '' && !(new CategoriaRepository())->existsByName($classif
     exit;
 }
 
+$sourceUrl = filter_var((string)($data['source_url'] ?? ''), FILTER_VALIDATE_URL) ?: null;
+
+if ($sourceUrl && empty($data['confirm_overwrite'])) {
+    $currentId = !empty($data['id']) ? (int)$data['id'] : null;
+    $duplicate = $repo->findBySourceUrl($sourceUrl, $bandaId, $currentId);
+    if ($duplicate) {
+        echo json_encode([
+            'ok' => false,
+            'duplicate' => true,
+            'existing' => ['id' => $duplicate['id'], 'nome' => $duplicate['nome']],
+            'error' => 'Já existe a música "' . $duplicate['nome'] . '" cadastrada com esse link.',
+        ]);
+        exit;
+    }
+}
+
 $payload = [
     'id' => $data['id'] ?? null, 'nome' => $nome, 'cifra' => $data['cifra'],
     'bit' => $data['bit'] ?? '', 'artista' => $data['artista'] ?? '', 'classificacao' => $classificacao,
-    'source_url' => filter_var((string)($data['source_url'] ?? ''), FILTER_VALIDATE_URL) ?: null,
+    'source_url' => $sourceUrl,
 ];
 try {
     $mutation = $revisionRepo->mutate($bandaId, $baseRevision, fn() => $repo->save($payload, $bandaId));

@@ -42,6 +42,15 @@
         .sb-card__info { flex: 1; min-width: 0; }
         .sb-card__name { font-size: var(--text-base); font-weight: var(--fw-medium); color: var(--text-1); margin: 0 0 2px; }
         .sb-card__role { font-size: var(--text-xs); color: var(--text-2); margin: 0; }
+        .sb-card__meta { display: flex; align-items: center; gap: var(--space-2); margin: 2px 0 0; }
+        .sb-card__plan {
+            display: inline-flex; align-items: center;
+            padding: 1px 8px; border-radius: 999px;
+            font-size: 11px; font-weight: var(--fw-medium);
+            border: 1px solid var(--border-1); color: var(--text-2);
+        }
+        .sb-card__plan--paid { color: var(--brand); border-color: var(--brand); }
+        .sb-card__plan--bloqueado { color: var(--danger); border-color: var(--danger); }
         .sb-card__arrow { color: var(--text-3); flex-shrink: 0; }
         .sb-empty { text-align: center; color: var(--text-2); padding: var(--space-8) 0; }
         .sb-logout { display: block; text-align: center; margin-top: var(--space-6); font-size: var(--text-sm); color: var(--text-2); text-decoration: none; }
@@ -102,12 +111,19 @@
                     $perfil = $banda['usuario_perfil'] ?? 'basico';
                     $perfilLabel = ['master' => 'Master', 'administrador' => 'Administrador', 'gestor' => 'Gestor', 'basico' => 'Básico'][$perfil] ?? ucfirst($perfil);
                     $logo = $banda['logo'] ?: '/src/images/cifro-mark.svg';
+                    $plano = (string)($banda['plano'] ?? 'gratuito');
+                    $planoLabel = cifro_plan_label($plano);
+                    $planoModifier = $plano === 'bloqueado' ? ' sb-card__plan--bloqueado'
+                        : (in_array($plano, ['mensal', 'semestral', 'anual', 'ativo'], true) ? ' sb-card__plan--paid' : '');
                 ?>
                 <a class="sb-card" data-band-id="<?= e($banda['id']) ?>" href="#" onclick="selecionarBanda('<?= e($banda['id']) ?>', event)">
                     <div class="sb-card__avatar"><img src="<?= e($logo) ?>" alt=""></div>
                     <div class="sb-card__info">
                         <p class="sb-card__name"><?= e($banda['nome']) ?></p>
-                        <p class="sb-card__role"><?= $perfilLabel ?><?= $banda['ativo'] ? '' : ' · Inativa' ?></p>
+                        <div class="sb-card__meta">
+                            <p class="sb-card__role"><?= $perfilLabel ?><?= $banda['ativo'] ? '' : ' · Inativa' ?></p>
+                            <span class="sb-card__plan<?= $planoModifier ?>"><?= e($planoLabel) ?></span>
+                        </div>
                     </div>
                     <svg class="sb-card__arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
                 </a>

@@ -86,6 +86,13 @@ try {
         if ($bandaId && $subId) {
             $plano = resolverPlanoByPrice($priceId);
             $bandaRepo->ativarPlano($bandaId, $plano, $subId);
+            $banda = $bandaRepo->findById($bandaId);
+            if ($banda) {
+                $validade  = (new DateTime())->modify(planoValidade($plano))->format('d/m/Y');
+                foreach ($bandaRepo->getAdmins($bandaId) as $admin) {
+                    try { MailService::sendPaymentConfirmation($admin, $banda, $plano, $validade); } catch (Throwable $e) { ErrorLogger::fromThrowable($e, 'Email confirmação pagamento (checkout)', 'stripe/webhook.php:checkout'); }
+                }
+            }
         }
         break;
 
@@ -95,10 +102,38 @@ try {
         if ($subId) {
             $banda = findBandaBySubscription($bandaRepo, $subId);
             if ($banda) {
-                // Descobre qual plano pelo preço da linha da invoice
-                $priceId = $obj['lines']['data'][0]['price']['id'] ?? null;
-                $plano   = resolverPlanoByPrice($priceId) ?: $banda['plano'];
+                $priceId   = $obj['lines']['data'][0]['price']['id'] ?? null;
+                $plano     = resolverPlanoByPrice($priceId) ?: $banda['plano'];
+                $periodEnd = (int)($obj['lines']['data'][0]['period']['end'] ?? $obj['period_end'] ?? 0);
                 $bandaRepo->ativarPlano($banda['id'], $plano, $subId);
+                if ($periodEnd > 0) {
+                    $bandaRepo->atualizarExpiracao($subId, $periodEnd);
+                }
+                $validade = $periodEnd > 0
+                    ? (new DateTime('@' . $periodEnd))->format('d/m/Y')
+                    : (new DateTime())->modify(planoValidade($plano))->format('d/m/Y');
+                foreach ($bandaRepo->getAdmins($banda['id']) as $admin) {
+                    try { MailService::sendPaymentConfirmation($admin, $banda, $plano, $validade); } catch (Throwable $e) { ErrorLogger::fromThrowable($e, 'Email confirmação pagamento (invoice.paid)', 'stripe/webhook.php:invoice.paid'); }
+                }
+            }
+        }
+        break;
+
+    // Aviso de renovação iminente (~7 dias antes — configurável no Stripe dashboard)
+    case 'invoice.upcoming':
+        $subId = $obj['subscription'] ?? null;
+        if ($subId) {
+            $banda = findBandaBySubscription($bandaRepo, $subId);
+            if ($banda) {
+                $periodEnd = (int)($obj['period_end'] ?? $obj['lines']['data'][0]['period']['end'] ?? 0);
+                $dataRenovacao = $periodEnd > 0
+                    ? (new DateTime('@' . $periodEnd))->format('d/m/Y')
+                    : '';
+                if ($dataRenovacao !== '') {
+                    foreach ($bandaRepo->getAdmins($banda['id']) as $admin) {
+                        try { MailService::sendPaymentReminder($admin, $banda, $banda['plano'], $dataRenovacao); } catch (Throwable $e) { ErrorLogger::fromThrowable($e, 'Email lembrete renovação (invoice.upcoming)', 'stripe/webhook.php:invoice.upcoming'); }
+                    }
+                }
             }
         }
         break;
@@ -110,6 +145,9 @@ try {
             $banda = findBandaBySubscription($bandaRepo, $subId);
             if ($banda) {
                 $bandaRepo->atualizarPlano($banda['id'], 'gratuito');
+                foreach ($bandaRepo->getAdmins($banda['id']) as $admin) {
+                    try { MailService::sendPlanExpired($admin, $banda); } catch (Throwable $e) { ErrorLogger::fromThrowable($e, 'Email plano expirado (subscription.deleted)', 'stripe/webhook.php:subscription.deleted'); }
+                }
             }
         }
         break;
@@ -159,6 +197,15 @@ function resolverPlanoByPrice(?string $priceId): string {
         env('STRIPE_PRICE_ANUAL',     '') => 'anual',
     ];
     return StripeWebhookHelper::resolverPlanoByPrice($priceId, $map);
+}
+
+function planoValidade(string $plano): string {
+    return match($plano) {
+        'mensal'    => '+1 month',
+        'semestral' => '+6 months',
+        'anual'     => '+1 year',
+        default     => '+1 month',
+    };
 }
 
 function findBandaBySubscription(BandaRepository $repo, string $subId): ?array {

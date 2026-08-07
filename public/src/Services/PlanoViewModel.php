@@ -21,13 +21,9 @@ class PlanoViewModel
         return $digits;
     }
 
-    public static function isStripeLinkValid(?string $secret, ?string $link): bool
+    public static function isStripeEnabled(string $secret): bool
     {
-        $secret = trim((string)$secret);
-        $link = trim((string)$link);
-        $stripeEnabled = str_starts_with($secret, 'sk_') && !str_contains($secret, '...');
-        $host = strtolower((string)parse_url($link, PHP_URL_HOST));
-        return $stripeEnabled && filter_var($link, FILTER_VALIDATE_URL) !== false && $host === 'buy.stripe.com';
+        return str_starts_with(trim($secret), 'sk_') && !str_contains($secret, '...');
     }
 
     /**

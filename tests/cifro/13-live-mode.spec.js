@@ -17,14 +17,14 @@ async function getCsrfToken(page) {
 
 // ── status.php ────────────────────────────────────────────────────────────────
 test.describe('Live — status.php', () => {
-  test('GET retorna JSON com estrutura esperada', async ({ page }) => {
+  test('status da live retorna JSON para usuário autenticado', async ({ page }) => {
     const res = await page.request.get('/api/live/status.php');
     expect(res.status()).toBe(200);
     const body = await res.json();
     expect(typeof body).toBe('object');
   });
 
-  test('GET sem autenticação retorna 401', async ({ browser }) => {
+  test('status da live bloqueia acesso sem autenticação', async ({ browser }) => {
     const ctx = await browser.newContext({ storageState: { cookies: [], origins: [] } });
     const page = await ctx.newPage();
     const res = await page.request.get('/api/live/status.php');
@@ -32,7 +32,7 @@ test.describe('Live — status.php', () => {
     await ctx.close();
   });
 
-  test('POST retorna 405', async ({ page }) => {
+  test('status da live não aceita escrita', async ({ page }) => {
     const res = await page.request.post('/api/live/status.php', {
       data: '{}',
       headers: { 'Content-Type': 'application/json' },
@@ -43,7 +43,7 @@ test.describe('Live — status.php', () => {
 
 // ── host.php ──────────────────────────────────────────────────────────────────
 test.describe('Live — host.php', () => {
-  test('POST sem CSRF retorna 403', async ({ page }) => {
+  test('iniciar host sem token de segurança é bloqueado', async ({ page }) => {
     const res = await page.request.post('/api/live/host.php', {
       data: JSON.stringify({ action: 'start' }),
       headers: { 'Content-Type': 'application/json' },
@@ -51,7 +51,7 @@ test.describe('Live — host.php', () => {
     expect([403, 401]).toContain(res.status());
   });
 
-  test('POST sem autenticação retorna 401', async ({ browser }) => {
+  test('iniciar host sem autenticação é bloqueado', async ({ browser }) => {
     const ctx = await browser.newContext({ storageState: { cookies: [], origins: [] } });
     const page = await ctx.newPage();
     const res = await page.request.post('/api/live/host.php', {
@@ -62,12 +62,12 @@ test.describe('Live — host.php', () => {
     await ctx.close();
   });
 
-  test('GET retorna 405', async ({ page }) => {
+  test('endpoint de host não aceita GET', async ({ page }) => {
     const res = await page.request.get('/api/live/host.php');
     expect(res.status()).toBe(405);
   });
 
-  test('POST autenticado com CSRF retorna JSON', async ({ page }) => {
+  test('iniciar host autenticado retorna resposta JSON', async ({ page }) => {
     const csrf = await getCsrfToken(page);
     const res = await page.request.post('/api/live/host.php', {
       data: JSON.stringify({ action: 'start' }),
@@ -78,7 +78,7 @@ test.describe('Live — host.php', () => {
     expect(typeof body).toBe('object');
   });
 
-  test('POST autenticado aceita formulário real', async ({ page }) => {
+  test('iniciar host com formulário cria sessão com sucesso', async ({ page }) => {
     const csrf = await getCsrfToken(page);
     const res = await page.request.post('/api/live/host.php', {
       form: { action: 'start' },
@@ -91,7 +91,7 @@ test.describe('Live — host.php', () => {
 
 // ── update.php ────────────────────────────────────────────────────────────────
 test.describe('Live — update.php', () => {
-  test('POST sem CSRF retorna 403', async ({ page }) => {
+  test('atualizar estado do host sem token de segurança é bloqueado', async ({ page }) => {
     const res = await page.request.post('/api/live/update.php', {
       data: JSON.stringify({ hostId: 'test', cifraAtual: '1' }),
       headers: { 'Content-Type': 'application/json' },
@@ -99,7 +99,7 @@ test.describe('Live — update.php', () => {
     expect([403, 401]).toContain(res.status());
   });
 
-  test('POST sem autenticação retorna 401', async ({ browser }) => {
+  test('atualizar estado do host sem autenticação é bloqueado', async ({ browser }) => {
     const ctx = await browser.newContext({ storageState: { cookies: [], origins: [] } });
     const page = await ctx.newPage();
     const res = await page.request.post('/api/live/update.php', {
@@ -110,12 +110,12 @@ test.describe('Live — update.php', () => {
     await ctx.close();
   });
 
-  test('GET retorna 405', async ({ page }) => {
+  test('endpoint de atualização de host não aceita GET', async ({ page }) => {
     const res = await page.request.get('/api/live/update.php');
     expect(res.status()).toBe(405);
   });
 
-  test('POST autenticado com CSRF e payload mínimo retorna JSON', async ({ page }) => {
+  test('atualizar estado do host autenticado retorna JSON', async ({ page }) => {
     const csrf = await getCsrfToken(page);
     const res = await page.request.post('/api/live/update.php', {
       data: JSON.stringify({ hostId: 'test-host', keepAlive: true }),
@@ -126,7 +126,7 @@ test.describe('Live — update.php', () => {
     expect(typeof body).toBe('object');
   });
 
-  test('POST com cifraAtual vazia string aceita', async ({ page }) => {
+  test('atualização de host com cifra vazia é aceita pelo servidor', async ({ page }) => {
     const csrf = await getCsrfToken(page);
     const res = await page.request.post('/api/live/update.php', {
       data: JSON.stringify({ hostId: 'test-host', cifraAtual: '' }),
@@ -135,7 +135,7 @@ test.describe('Live — update.php', () => {
     expect([200, 400, 422]).toContain(res.status());
   });
 
-  test('POST com payload JSON inválido (string pura) retorna erro', async ({ page }) => {
+  test('atualização de host com corpo inválido retorna erro sem quebrar o servidor', async ({ page }) => {
     const csrf = await getCsrfToken(page);
     const res = await page.request.post('/api/live/update.php', {
       data: 'não é json',
@@ -148,7 +148,7 @@ test.describe('Live — update.php', () => {
 
 // ── livePlayerLer.php (legacy) ────────────────────────────────────────────────
 test.describe('Live — livePlayerLer.php (legacy GET)', () => {
-  test('GET sem autenticação retorna 401', async ({ browser }) => {
+  test('leitura de live bloqueia acesso sem autenticação', async ({ browser }) => {
     const ctx = await browser.newContext({ storageState: { cookies: [], origins: [] } });
     const page = await ctx.newPage();
     const res = await page.request.get('/src/backend/livePlayerLer.php');
@@ -156,7 +156,7 @@ test.describe('Live — livePlayerLer.php (legacy GET)', () => {
     await ctx.close();
   });
 
-  test('GET autenticado retorna resposta', async ({ page }) => {
+  test('leitura de live autenticado retorna resposta', async ({ page }) => {
     const res = await page.request.get('/src/backend/livePlayerLer.php');
     expect([200, 400]).toContain(res.status());
   });
@@ -164,7 +164,7 @@ test.describe('Live — livePlayerLer.php (legacy GET)', () => {
 
 // ── livePlayerSalvar.php (legacy POST) ───────────────────────────────────────
 test.describe('Live — livePlayerSalvar.php (legacy POST)', () => {
-  test('POST sem CSRF retorna 403', async ({ page }) => {
+  test('salvar estado do seguidor sem token de segurança é bloqueado', async ({ page }) => {
     const res = await page.request.post('/src/backend/livePlayerSalvar.php', {
       data: 'cifraAtual=1',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -172,7 +172,7 @@ test.describe('Live — livePlayerSalvar.php (legacy POST)', () => {
     expect([403, 401]).toContain(res.status());
   });
 
-  test('POST sem autenticação retorna 401', async ({ browser }) => {
+  test('salvar estado do seguidor sem autenticação é bloqueado', async ({ browser }) => {
     const ctx = await browser.newContext({ storageState: { cookies: [], origins: [] } });
     const page = await ctx.newPage();
     const res = await page.request.post('/src/backend/livePlayerSalvar.php', {
@@ -183,7 +183,7 @@ test.describe('Live — livePlayerSalvar.php (legacy POST)', () => {
     await ctx.close();
   });
 
-  test('GET retorna 405', async ({ page }) => {
+  test('endpoint de salvar seguidor não aceita GET', async ({ page }) => {
     const res = await page.request.get('/src/backend/livePlayerSalvar.php');
     expect(res.status()).toBe(405);
     expect(await res.text()).toContain('Metodo nao permitido');
@@ -214,7 +214,7 @@ test.describe('Live — livePlayerSalvar.php (legacy POST)', () => {
 
 // ── live.js (window.LiveMode) — módulo cliente ──────────────────────────────
 test.describe('Live — módulo cliente (window.LiveMode)', () => {
-  test('consultarStatus sem host mostra "Aguardando host"', async ({ page }) => {
+  test('painel de live exibe "Aguardando host" quando nenhum host está ativo', async ({ page }) => {
     await page.route('**/api/live/status.php*', route => route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -243,7 +243,7 @@ test.describe('Live — módulo cliente (window.LiveMode)', () => {
     await expect(page.locator('#entrarlivePlay')).toHaveText('Entrar na sessão');
   });
 
-  test('assumirHost enquanto offline mostra desconectado sem chamar a API', async ({ page, context }) => {
+  test('tentar iniciar live sem conexão não cria sessão no servidor', async ({ page, context }) => {
     let called = false;
     await page.route('**/api/live/host.php', route => { called = true; route.abort(); });
     await page.goto('/index.php');
@@ -254,7 +254,7 @@ test.describe('Live — módulo cliente (window.LiveMode)', () => {
     await context.setOffline(false);
   });
 
-  test('falha de rede ao assumir host mostra "Live desconectada"', async ({ page }) => {
+  test('falha de rede ao iniciar live exibe status desconectado', async ({ page }) => {
     await page.route('**/api/live/host.php', route => route.fulfill({
       status: 500,
       contentType: 'application/json',
@@ -265,7 +265,7 @@ test.describe('Live — módulo cliente (window.LiveMode)', () => {
     await expect(page.locator('#liveStatus')).toHaveText('Live desconectada');
   });
 
-  test('consultarStatus com status de rede inválido mostra desconectado', async ({ page }) => {
+  test('resposta inválida do servidor mostra live como desconectada', async ({ page }) => {
     await page.route('**/api/live/status.php*', route => route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -276,7 +276,7 @@ test.describe('Live — módulo cliente (window.LiveMode)', () => {
     await expect(page.locator('#liveStatus')).toHaveText('Live desconectada');
   });
 
-  test('assumirHost bem-sucedido muda status para host e para de fazer polling', async ({ page }) => {
+  test('iniciar live com sucesso exibe status de host e para de sondar o servidor', async ({ page }) => {
     await page.route('**/api/live/host.php', route => route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -293,7 +293,7 @@ test.describe('Live — módulo cliente (window.LiveMode)', () => {
     await expect(page.locator('#livePlay, #liveHostButton')).toHaveText('Você está transmitindo');
   });
 
-  test('assumirHostComConfirmacao quando já é host apenas reforça o host', async ({ page }) => {
+  test('usuário que já é host ao clicar no botão reforça a sessão ativa', async ({ page }) => {
     await page.route('**/api/live/host.php', route => route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -320,7 +320,7 @@ test.describe('Live — módulo cliente (window.LiveMode)', () => {
     await expect(page.locator('#liveStatus')).toHaveText('Voce e o host');
   });
 
-  test('atualizarHost sem hostId salvo limpa o modo e mostra desconectado', async ({ page }) => {
+  test('sessão de host sem ID salvo encerra e exibe live desconectada', async ({ page }) => {
     await page.goto('/index.php');
     await page.evaluate((key) => {
       sessionStorage.setItem(key, 'host');
@@ -329,7 +329,7 @@ test.describe('Live — módulo cliente (window.LiveMode)', () => {
     await expect(page.locator('#liveStatus')).toHaveText('Live desconectada');
   });
 
-  test('atualizarHost com hostId salvo mas offline mostra desconectado sem chamar API', async ({ page, context }) => {
+  test('host sem conexão não chama servidor e exibe live desconectada', async ({ page, context }) => {
     let called = false;
     await page.route('**/api/live/update.php', route => { called = true; route.abort(); });
     await page.goto('/index.php');
@@ -344,7 +344,7 @@ test.describe('Live — módulo cliente (window.LiveMode)', () => {
     await context.setOffline(false);
   });
 
-  test('startPolling não agenda timer quando a página está oculta', async ({ page }) => {
+  test('seguidor em aba oculta não dispara sondagem ao entrar na sessão', async ({ page }) => {
     await page.route('**/api/live/status.php*', route => route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -365,7 +365,7 @@ test.describe('Live — módulo cliente (window.LiveMode)', () => {
     expect(result).toBe('follow');
   });
 
-  test('visibilitychange oculta para de sondar; visível novamente retoma follow', async ({ page }) => {
+  test('ao minimizar e restaurar aba em modo follow, sondagem retoma corretamente', async ({ page }) => {
     await page.route('**/api/live/status.php*', route => route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -386,7 +386,7 @@ test.describe('Live — módulo cliente (window.LiveMode)', () => {
     await expect(page.locator('#liveStatus')).toHaveText('Seguindo live');
   });
 
-  test('visibilitychange visível retoma host com atualizarHost', async ({ page }) => {
+  test('ao minimizar e restaurar aba em modo host, atualização é retomada', async ({ page }) => {
     await page.route('**/api/live/host.php', route => route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -412,7 +412,7 @@ test.describe('Live — módulo cliente (window.LiveMode)', () => {
     await expect(page.locator('#liveStatus')).toHaveText('Voce e o host');
   });
 
-  test('evento online retoma atualizarHost quando em modo host', async ({ page }) => {
+  test('reconexão à internet enquanto host retoma atualização da sessão', async ({ page }) => {
     let updateCalls = 0;
     await page.route('**/api/live/host.php', route => route.fulfill({
       status: 200,
@@ -435,7 +435,7 @@ test.describe('Live — módulo cliente (window.LiveMode)', () => {
     await expect.poll(() => updateCalls).toBeGreaterThan(before);
   });
 
-  test('evento online retoma consultarStatus quando em modo follow', async ({ page }) => {
+  test('reconexão à internet enquanto seguidor retoma sondagem de status', async ({ page }) => {
     let statusCalls = 0;
     await page.route('**/api/live/status.php*', route => {
       statusCalls++;
@@ -453,7 +453,7 @@ test.describe('Live — módulo cliente (window.LiveMode)', () => {
     await expect.poll(() => statusCalls).toBeGreaterThan(before);
   });
 
-  test('consultarStatus detecta mudança de versão e não navega quando página é a mesma', async ({ page }) => {
+  test('seguidor permanece na mesma página quando host está no mesmo local', async ({ page }) => {
     let call = 0;
     await page.route('**/api/live/status.php*', route => {
       call++;
@@ -474,7 +474,7 @@ test.describe('Live — módulo cliente (window.LiveMode)', () => {
     expect(page.url()).toContain('index.php');
   });
 
-  test('setLiveShortcut não mostra link quando os elementos não existem na página', async ({ page }) => {
+  test('atalho de live não causa erro quando elementos da UI estão ausentes', async ({ page }) => {
     await page.route('**/api/live/status.php*', route => route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -492,7 +492,7 @@ test.describe('Live — módulo cliente (window.LiveMode)', () => {
     await expect(page.locator('#liveStatus')).toHaveText('Seguindo live');
   });
 
-  test('salaId usa window.CIFRO_BAND_ID real do servidor (chave de storage não é "default" para usuário com banda)', async ({ page }) => {
+  test('storage da sessão usa ID real da banda do servidor como chave', async ({ page }) => {
     // O IIFE de live.js lê `window.CIFRO_BAND_ID` na primeira execução, e o
     // inline <script> do próprio index.php (que roda antes, no <head>/body)
     // já define esse valor a partir de current_band_id() no servidor — não é
@@ -512,7 +512,7 @@ test.describe('Live — módulo cliente (window.LiveMode)', () => {
     expect(mode).toBe('follow');
   });
 
-  test('currentPageState em music.php com playlistTom inválido não inclui playlistTom no payload publicado', async ({ page }) => {
+  test('tom inválido não é publicado no estado do host', async ({ page }) => {
     const data = await (await page.request.get('/api/sync/data.php')).json();
     const songId = data.musicas && data.musicas.length > 0 ? data.musicas[0].id : null;
     test.skip(!songId, 'Nenhuma música disponível para o teste');
@@ -541,7 +541,7 @@ test.describe('Live — módulo cliente (window.LiveMode)', () => {
     expect(capturedPayload.paginaAtual).not.toContain('playlistTom');
   });
 
-  test('consultarStatus com resposta success:false e response.ok mostra desconectado (throw pelo !data.success)', async ({ page }) => {
+  test('resposta de sala fechada exibe live como desconectada', async ({ page }) => {
     await page.route('**/api/live/status.php*', route => route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -552,7 +552,7 @@ test.describe('Live — módulo cliente (window.LiveMode)', () => {
     await expect(page.locator('#liveStatus')).toHaveText('Live desconectada');
   });
 
-  test('setLiveShortcut mostra o link "IR PARA LIVE" quando o host está em outra página válida', async ({ page }) => {
+  test('atalho de live exibe link "IR PARA LIVE" quando host está em outra página', async ({ page }) => {
     await page.route('**/api/live/status.php*', route => route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -567,7 +567,7 @@ test.describe('Live — módulo cliente (window.LiveMode)', () => {
     }
   });
 
-  test('applyFollowerScroll ignora quando status.canSyncScroll é falso', async ({ page }) => {
+  test('sincronização de scroll desativada não move a tela do seguidor', async ({ page }) => {
     await page.route('**/api/live/status.php*', route => route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -581,7 +581,7 @@ test.describe('Live — módulo cliente (window.LiveMode)', () => {
     await expect(page.locator('#liveStatus')).toHaveText('Seguindo live');
   });
 
-  test('applyFollowerScroll com canSyncScroll true mas conteúdo não rolável usa fallback scrollTop', async ({ page }) => {
+  test('sincronização de scroll em página sem rolagem não causa erro', async ({ page }) => {
     // Container sem overflow (max <= 0) força o ramo "else" do ternário de
     // `top` em applyFollowerScroll (linha 201: `Number(status.scrollTop || 0)`),
     // nunca exercitado porque os testes anteriores sempre tinham conteúdo
@@ -606,7 +606,7 @@ test.describe('Live — módulo cliente (window.LiveMode)', () => {
     // Não deve lançar erro; o ramo de fallback foi exercitado sem quebrar o fluxo.
   });
 
-  test('currentPageState em music.php com id e playlistTom válidos inclui playlistTom no payload', async ({ page }) => {
+  test('tom válido é incluído no estado publicado pelo host', async ({ page }) => {
     const data = await (await page.request.get('/api/sync/data.php')).json();
     const songId = data.musicas && data.musicas.length > 0 ? data.musicas[0].id : null;
     test.skip(!songId, 'Nenhuma música disponível para o teste');
@@ -628,7 +628,7 @@ test.describe('Live — módulo cliente (window.LiveMode)', () => {
     expect(capturedPayload.paginaAtual).toBe(`music.php?id=${songId}&playlistTom=C`);
   });
 
-  test('currentPageState em music.php sem id no query string retorna cifraAtual vazio', async ({ page }) => {
+  test('host em página sem ID de música publica estado sem cifra', async ({ page }) => {
     await page.route('**/api/live/host.php', route => route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -654,7 +654,7 @@ test.describe('Live — módulo cliente (window.LiveMode)', () => {
     expect(capturedPayload.keepAlive).toBe(true);
   });
 
-  test('publishScrollIfChanged em página sem overflow publica assinatura "none" e ignora repetição', async ({ page }) => {
+  test('scroll repetido sem mudança real não gera chamadas redundantes ao servidor', async ({ page }) => {
     await page.route('**/api/live/host.php', route => route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -687,22 +687,17 @@ test.describe('Live — módulo cliente (window.LiveMode)', () => {
     expect(updateCalls).toBe(afterFirst);
   });
 
-  test('assumirHostComConfirmacao cancelado via cifroConfirm não chama assumirHost', async ({ page }) => {
+  test('músico cancela confirmação de iniciar live e nenhuma sessão de host é criada', async ({ page }) => {
     let hostCalled = false;
     await page.route('**/api/live/host.php', route => { hostCalled = true; route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, hostId: 'x' }) }); });
     await page.goto('/index.php');
-    await page.evaluate(() => {
-      window.cifroConfirm = () => Promise.resolve(false);
-    });
-    await page.evaluate(() => {
-      const btn = document.getElementById('livePlay') || document.getElementById('liveHostButton');
-      btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-    });
-    await page.waitForTimeout(200);
+    const btn = page.locator('#livePlay, #liveHostButton').first();
+    await btn.evaluate(el => el.click());
+    await page.locator('.cifro-confirm-btn--cancel').click();
     expect(hostCalled).toBe(false);
   });
 
-  test('document.readyState "complete" na carga do script chama bind() diretamente', async ({ page }) => {
+  test('módulo de live inicializa corretamente quando carregado após o documento pronto', async ({ page }) => {
     // Recarrega o módulo live.js manualmente após o carregamento completo da
     // página (via injeção dinâmica de <script>), forçando o ramo else de
     // `document.readyState === 'loading'` (linha 527) — no carregamento normal

@@ -70,10 +70,95 @@ tests/php/            # testes unitários PHPUnit
 
 ## Deploy (Hostinger)
 
-1. `composer install --no-dev` e enviar o projeto com `vendor/` (o MailService espera `vendor/` na raiz, um nível acima do document root)
-2. Document root → `public/`
-3. Criar `.env` na raiz (fora do document root) com todas as chaves de `.env.example`
-4. Configurar o webhook do Stripe apontando para `/api/stripe/webhook.php`
-5. **Não enviar**: `scripts/`, `tests/`, `node_modules/`, arquivos de debug
+### 1. Subir os arquivos
 
-Ver também [HOSTINGER_SETUP.md](HOSTINGER_SETUP.md) (específico do Modo Ensaio).
+Via **File Manager do Hostinger** ou **FTP** (FileZilla etc.):
+
+- Copie o conteúdo de `public/` para `public_html/` do seu domínio.
+- Copie a pasta `vendor/` para **um nível acima** de `public_html/` (raiz do projeto no servidor) — o `MailService` espera `vendor/` nesse caminho.
+- **Não sobe**: `node_modules/`, `tests/`, `docs/`, `coverage/`, `scripts/`, arquivos `.env` locais, `*.spec.js`, `playwright*`, `composer.phar`, arquivos de debug.
+
+### 2. Configurar o `.env`
+
+Crie o arquivo `.env` na **raiz do projeto no servidor** (fora de `public_html/`). Use `.env.example` como base e preencha:
+
+```
+DB_HOST=srv1576.hstgr.io
+DB_USER=u925167420_cifroadmin
+DB_PASS=<sua senha>
+DB_NAME=u925167420_cifro
+
+APP_ENV=production
+APP_DEBUG=false
+APP_URL=https://seudominio.com.br
+
+ENCRYPTION_KEY=<chave aleatória de 32 chars>
+CSRF_TOKEN_LIFETIME=300
+
+MAIL_HOST=smtp.hostinger.com
+MAIL_PORT=465
+MAIL_USER=noreply@cifro.online
+MAIL_PASS=<senha do email>
+MAIL_FROM_NAME=Cifrô
+
+PAYMENT_PIX_PHONE=55019982594834
+PAYMENT_WHATSAPP_PHONE=55019982594834
+PAYMENT_PIX_RECIPIENT=Felipe Negri de Oliveira
+```
+
+Stripe: deixe em branco até configurar as chaves de produção (ver seção Stripe abaixo).
+
+### 3. Criar/migrar o banco de dados
+
+**Primeira vez (banco vazio):** suba temporariamente `scripts/setup/setup_db.php` para `public_html/setup_db.php`, acesse via browser e **remova o arquivo imediatamente** após executar:
+
+```
+https://seudominio.com.br/setup_db.php
+```
+
+**Banco já existente (atualização de estrutura):** suba apenas a migration necessária da pasta `scripts/setup/`, acesse via browser e remova logo após:
+
+| Migration | Quando usar |
+|---|---|
+| `migrate_planos.php` | Alterações na tabela de planos/bandas |
+| `migrate_privacy.php` | Campos de aceite de termos/privacidade |
+| `migrate_stripe_events.php` | Tabelas de idempotência do webhook Stripe |
+| `migrate_performance_indexes.php` | Índices de performance (pode rodar a qualquer momento) |
+
+> **Nunca deixe scripts de setup/migração acessíveis em produção após executar.**
+
+### 4. Criar pasta do modo ensaio
+
+Via File Manager do Hostinger, dentro de `public_html/`:
+- Criar pasta: `rehearsal-audio/`
+- Permissões: `755`
+
+### 5. Configurar Stripe (quando disponível)
+
+Adicione ao `.env`:
+
+```
+STRIPE_SECRET_KEY=sk_live_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+STRIPE_PRICE_MENSAL=price_...
+STRIPE_PRICE_SEMESTRAL=price_...
+STRIPE_PRICE_ANUAL=price_...
+```
+
+Configure o webhook no Stripe Dashboard apontando para:
+
+```
+https://seudominio.com.br/api/stripe/webhook.php
+```
+
+Eventos necessários: `checkout.session.completed`, `invoice.paid`, `customer.subscription.deleted`, `customer.subscription.updated`.
+
+### 6. Verificar após o deploy
+
+- Login e cadastro funcionando
+- Criar uma música e abrir o editor
+- Abrir modo ensaio com upload de áudio local (teste mais simples)
+- Acessar `/plano.php` e verificar que o PIX aparece (se configurado)
+- Console do browser sem erros (`F12 → Console`)
+
+Ver também [HOSTINGER_SETUP.md](HOSTINGER_SETUP.md) (detalhes específicos do Modo Ensaio / YouTube).

@@ -233,6 +233,28 @@ final class YoutubeAudioDownloadServiceTest extends TestCase
         rmdir($dir);
     }
 
+    public function testSaveRemoteFileAcceptsMp3FrameSyncMagicBytes(): void
+    {
+        // MP3 frame sync: first byte 0xFF, second byte high-3-bits set (0xE0)
+        $mp3Content = "\xFF\xE3" . str_repeat('a', 1500);
+        $svc = new YoutubeAudioDownloadService([
+            'httpGet' => fn() => $mp3Content,
+            'filePutContents' => fn() => strlen($mp3Content),
+        ]);
+        self::assertNotNull($svc->saveRemoteFile('https://example.com/a.mp3', 'a.mp3', '/tmp/'));
+    }
+
+    public function testSaveRemoteFileAcceptsMp4FtypMagicBytes(): void
+    {
+        // MP4: 4 arbitrary bytes + 'ftyp'
+        $mp4Content = "\x00\x00\x00\x20ftyp" . str_repeat('b', 1500);
+        $svc = new YoutubeAudioDownloadService([
+            'httpGet' => fn() => $mp4Content,
+            'filePutContents' => fn() => strlen($mp4Content),
+        ]);
+        self::assertNotNull($svc->saveRemoteFile('https://example.com/a.mp4', 'a.mp4', '/tmp/'));
+    }
+
     private static function readPrivateClosure(YoutubeAudioDownloadService $svc, string $prop): callable
     {
         return self::readPrivateProp($svc, $prop);

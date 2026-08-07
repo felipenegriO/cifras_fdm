@@ -33,31 +33,31 @@ final class PlanoViewModelTest extends TestCase
         self::assertSame('', PlanoViewModel::normalizePhone(''));
     }
 
-    // ---- isStripeLinkValid ----
+    // ---- isStripeEnabled ----
 
-    public function testStripeLinkInvalidWhenSecretMissing(): void
+    public function testStripeDisabledWhenSecretMissing(): void
     {
-        self::assertFalse(PlanoViewModel::isStripeLinkValid('', 'https://buy.stripe.com/abc'));
+        self::assertFalse(PlanoViewModel::isStripeEnabled(''));
     }
 
-    public function testStripeLinkInvalidWhenSecretIsPlaceholder(): void
+    public function testStripeDisabledWhenSecretDoesNotStartWithSkPrefix(): void
     {
-        self::assertFalse(PlanoViewModel::isStripeLinkValid('sk_live_...', 'https://buy.stripe.com/abc'));
+        self::assertFalse(PlanoViewModel::isStripeEnabled('pk_live_abc'));
     }
 
-    public function testStripeLinkInvalidWhenNotAUrl(): void
+    public function testStripeDisabledWhenSecretIsPlaceholder(): void
     {
-        self::assertFalse(PlanoViewModel::isStripeLinkValid('sk_live_abc', 'not-a-url'));
+        self::assertFalse(PlanoViewModel::isStripeEnabled('sk_live_...'));
     }
 
-    public function testStripeLinkInvalidWhenWrongHost(): void
+    public function testStripeEnabledWhenSecretIsValid(): void
     {
-        self::assertFalse(PlanoViewModel::isStripeLinkValid('sk_live_abc', 'https://evil.com/abc'));
+        self::assertTrue(PlanoViewModel::isStripeEnabled('sk_live_abc'));
     }
 
-    public function testStripeLinkValid(): void
+    public function testStripeEnabledIgnoresWhitespace(): void
     {
-        self::assertTrue(PlanoViewModel::isStripeLinkValid('sk_live_abc', 'https://buy.stripe.com/abc'));
+        self::assertTrue(PlanoViewModel::isStripeEnabled('  sk_live_abc  '));
     }
 
     // ---- usageBar ----

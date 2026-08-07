@@ -23,7 +23,7 @@
         state = 'verificando';
         var controller = new AbortController();
         var timer = setTimeout(function () { controller.abort(); }, options.timeout || TIMEOUT);
-        inFlight = fetch('/health.php?probe=' + now, {
+        inFlight = fetch((window.APP_BASE || '') + '/health.php?probe=' + now, {
             method: 'GET',
             cache: 'no-store',
             credentials: 'same-origin',

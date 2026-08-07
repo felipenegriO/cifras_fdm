@@ -7,6 +7,73 @@ require_once __DIR__ . '/backup_helpers.php';
 require_once __DIR__ . '/../Views/partials/icons.php';
 $GLOBALS['__cifro_request_started_at'] = microtime(true);
 
+// Rewrite absolute HTML paths when APP_BASE is set (subfolder deploys)
+if (($GLOBALS['__cifro_app_base'] = rtrim((string)getenv('APP_BASE'), '/')) !== '') {
+    ob_start(function (string $buffer): string {
+        $base = $GLOBALS['__cifro_app_base'];
+        // Inject window.APP_BASE so static .js files can use it
+        $buffer = preg_replace(
+            '/(<head[^>]*>)/i',
+            '$1<script>window.APP_BASE=' . json_encode($base) . ';</script>',
+            $buffer, 1
+        );
+        // HTML attributes: href="/ src="/ action="/
+        $buffer = preg_replace('/((?:href|src|action)=")\/(?!\/)/', '$1' . $base . '/', $buffer);
+        // JS inline: location.href = '/' / window.location.href = "/" / fetch('/
+        $buffer = preg_replace("/((?:window\.)?location(?:\.href)?\s*=\s*['\"])\/(?!\/)/", '$1' . $base . '/', $buffer);
+        $buffer = preg_replace("/(fetch\(['\"])\/(?!\/)/", '$1' . $base . '/', $buffer);
+        return $buffer;
+    });
+}
+
+// ── Inject JS error reporter into every HTML response ───────────────────────
+ob_start(function (string $buffer): string {
+    if (stripos($buffer, '</body>') === false) return $buffer;
+    $tag = '<script src="' . (rtrim((string)getenv('APP_BASE'), '/')) . '/src/js/cifro-error-reporter.js" defer></script>';
+    return str_ireplace('</body>', $tag . '</body>', $buffer);
+});
+
+// ── Global error/exception handlers ─────────────────────────────────────────
+set_exception_handler(function (Throwable $e): void {
+    _cifro_log_error($e->getMessage(), get_class($e) . ' at ' . $e->getFile() . ':' . $e->getLine(), [
+        'exception' => get_class($e),
+        'file'      => $e->getFile(),
+        'line'      => $e->getLine(),
+        'trace'     => array_slice(explode("\n", $e->getTraceAsString()), 0, 8),
+    ]);
+    if (!headers_sent()) http_response_code(500);
+});
+
+set_error_handler(function (int $errno, string $errstr, string $errfile, int $errline): bool {
+    if (!($errno & error_reporting())) return false;
+    if (in_array($errno, [E_NOTICE, E_USER_NOTICE, E_DEPRECATED, E_USER_DEPRECATED], true)) return false;
+    _cifro_log_error($errstr, $errfile . ':' . $errline, ['errno' => $errno]);
+    return false;
+});
+
+register_shutdown_function(function (): void {
+    $err = error_get_last();
+    if ($err && in_array($err['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR], true)) {
+        _cifro_log_error($err['message'], $err['file'] . ':' . $err['line'], ['type' => $err['type']]);
+    }
+});
+
+function _cifro_log_error(string $descricao, string $referencia, array $detalhes = []): void {
+    try {
+        $pdo = Database::getConnection();
+        $pdo->prepare(
+            'INSERT INTO app_error_logs (nivel, referencia, descricao, detalhes) VALUES (?, ?, ?, ?)'
+        )->execute([
+            'error',
+            mb_substr($referencia, 0, 255),
+            mb_substr($descricao,  0, 500),
+            json_encode($detalhes, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        ]);
+    } catch (Throwable) {
+        error_log('[cifro] error-log failed: ' . $descricao);
+    }
+}
+
 spl_autoload_register(function ($class) {
     $baseDir = __DIR__ . '/../';
     $paths = [
@@ -81,7 +148,7 @@ if (!headers_sent()) {
     header('X-Frame-Options: SAMEORIGIN');
     header('Referrer-Policy: strict-origin-when-cross-origin');
     header('Permissions-Policy: camera=(), microphone=(), geolocation=()');
-    header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://www.youtube.com; img-src 'self' data: https://img.youtube.com;");
+    header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://www.youtube.com; img-src 'self' data: https://img.youtube.com https://i.ytimg.com;");
 }
 
 // ===== Secure session cookie params =====
@@ -217,7 +284,7 @@ function send_no_cache_headers() {
 
 function require_auth() {
     if (!isset($_SESSION['autenticado']) || $_SESSION['autenticado'] !== true) {
-        if (!headers_sent()) header('Location: /landing.php');
+        if (!headers_sent()) header('Location: ' . base_url('/landing.php'));
         cifro_terminate();
     }
 
@@ -228,7 +295,7 @@ function require_auth() {
             setcookie(session_name(), '', time() - 42000, $params['path'], $params['domain'], $params['secure'], $params['httponly']);
         }
         if (session_status() === PHP_SESSION_ACTIVE) session_destroy();
-        if (!headers_sent()) header('Location: /login.php?expirado=1');
+        if (!headers_sent()) header('Location: ' . base_url('/login.php?expirado=1'));
         cifro_terminate();
     }
 
@@ -236,7 +303,7 @@ function require_auth() {
     $page = basename((string) ($_SERVER['PHP_SELF'] ?? ''));
     if (!in_array($page, ['select-banda.php', 'logout.php', 'beta-indisponivel.php'], true) && !$policy->allows(current_band_id())) {
         OperationalLogger::log('warning', 'beta.access_denied', ['result' => 'blocked', 'http_status' => 302]);
-        if (!headers_sent()) header('Location: /beta-indisponivel.php');
+        if (!headers_sent()) header('Location: ' . base_url('/beta-indisponivel.php'));
         cifro_terminate();
     }
     cifro_check_plano();
@@ -249,7 +316,7 @@ function cifro_check_plano(): void {
     $plano = $banda['plano'] ?? 'gratuito';
     if ($plano === 'bloqueado') {
         if (!in_array(basename($_SERVER['PHP_SELF'] ?? ''), ['plano-expirado.php', 'plano.php'], true)) {
-            if (!headers_sent()) header('Location: /plano-expirado.php');
+            if (!headers_sent()) header('Location: ' . base_url('/plano-expirado.php'));
             cifro_terminate();
         }
         return;
@@ -383,18 +450,37 @@ function cifro_session_user_expired(): bool {
     return $dataValidade < $hoje;
 }
 
+function app_base(): string {
+    static $base = null;
+    if ($base === null) {
+        $base = rtrim((string) env('APP_BASE', ''), '/');
+    }
+    return $base;
+}
+
+function base_url(string $path = ''): string {
+    return app_base() . '/' . ltrim($path, '/');
+}
+
 function asset_url($path) {
     $path = (string) $path;
     if ($path === '') {
         return $path;
     }
 
-    $filePath = $path[0] === '/' ? ($_SERVER['DOCUMENT_ROOT'] . $path) : $path;
-    if (file_exists($filePath)) {
-        return $path . '?v=' . filemtime($filePath);
+    // Absolute filesystem path (e.g. from tempnam) — version directly
+    if (file_exists($path)) {
+        return $path . '?v=' . filemtime($path);
     }
 
-    return $path;
+    $base     = app_base();
+    $absPath  = $base . ($path[0] === '/' ? $path : '/' . $path);
+    $filePath = ($_SERVER['DOCUMENT_ROOT'] ?? '') . $absPath;
+    if (file_exists($filePath)) {
+        return $absPath . '?v=' . filemtime($filePath);
+    }
+
+    return $absPath;
 }
 
 function render_view($view, $data = []) {

@@ -24,4 +24,10 @@ final class ChordImportProviderResolverTest extends TestCase
         $this->expectException(InvalidArgumentException::class);
         ChordImportProviderResolver::forUrl('não é uma url');
     }
+
+    public function testRejectsNonHttpScheme(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        ChordImportProviderResolver::forUrl('ftp://cifraclub.com.br/artista/musica/');
+    }
 }

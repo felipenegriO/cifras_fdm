@@ -115,8 +115,8 @@ class RegisterController {
                 ['nome' => $bandaNome],
                 $token
             );
-        } catch (Exception $e) {
-            // Log but don't block user — they can request resend later
+        } catch (Throwable $e) {
+            ErrorLogger::fromThrowable($e, 'Falha ao enviar e-mail de boas-vindas no cadastro', 'RegisterController::handle');
         }
 
         $success = true;

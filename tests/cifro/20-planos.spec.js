@@ -84,7 +84,7 @@ async function withCurrentBandPlan(page, plano, run) {
 
 // ── Página /plano.php ─────────────────────────────────────────────────────────
 test.describe('Plano — página', () => {
-  test('GET /plano.php carrega autenticado', async ({ page }) => {
+  test('página de plano abre sem erros para usuário logado', async ({ page }) => {
     const res = await page.goto('/plano.php');
     expect(res.status()).toBe(200);
   });
@@ -165,17 +165,19 @@ test.describe('Plano — página', () => {
 
   test('pagamento só aparece quando o meio está configurado', async ({ page }) => {
     await page.goto('/plano.php');
-    const actions = page.locator('.js-pix-payment, a.btn-upgrade[href^="https://buy.stripe.com/"], .btn-upgrade--disabled');
+    const actions = page.locator('.js-pix-payment, .js-stripe-checkout, .btn-upgrade--disabled');
     expect(await actions.count()).toBeGreaterThanOrEqual(1);
-    const invalidStripe = page.locator('a.btn-upgrade[href="#"], a.btn-upgrade[href=""]');
-    await expect(invalidStripe).toHaveCount(0);
+    // Não deve existir nenhum link de pagamento com href vazio ou "#"
+    const invalidLink = page.locator('a.btn-upgrade[href="#"], a.btn-upgrade[href=""]');
+    await expect(invalidLink).toHaveCount(0);
   });
 
   test('fluxo PIX mostra chave e envio do comprovante', async ({ page }) => {
     await page.goto('/plano.php');
     const button = page.locator('.js-pix-payment').first();
     if (await button.count() === 0) {
-      await expect(page.locator('.btn-upgrade--disabled, a.btn-upgrade[href^="https://buy.stripe.com/"]').first()).toBeVisible();
+      // Stripe habilitado — PIX não exibido nos cards; verificar que há botão Stripe
+      await expect(page.locator('.js-stripe-checkout, .btn-upgrade--disabled').first()).toBeVisible();
       return;
     }
     await button.click();
@@ -232,42 +234,27 @@ test.describe('Plano — página', () => {
     });
   });
 
-  test('cards não-atuais exibem link Stripe quando configurado (mensal ativo)', async ({ page }) => {
-    await withExtraEnv({
-      STRIPE_SECRET_KEY: 'sk_test_playwright_stripe_key',
-      STRIPE_LINK_MENSAL: 'https://buy.stripe.com/test_mensal',
-      STRIPE_LINK_SEMESTRAL: 'https://buy.stripe.com/test_semestral',
-      STRIPE_LINK_ANUAL: 'https://buy.stripe.com/test_anual',
-    }, async () => {
-      await withCurrentBandPlan(page, 'mensal', async () => {
-        await page.goto('/plano.php');
-        // Card atual (mensal): stripeLinks[tipo] !== '' -> link real "Renovar mensal"
-        const mensalCard = page.locator('.price-card--current');
-        await expect(mensalCard.locator('a.btn-upgrade')).toHaveAttribute('href', 'https://buy.stripe.com/test_mensal');
-        await expect(mensalCard.locator('a.btn-upgrade')).toContainText('Renovar mensal');
-        // Cards não-atuais (semestral, anual), isPago=true -> "Trocar para X" com link Stripe
-        const links = page.locator('a.btn-upgrade[href^="https://buy.stripe.com/test_"]');
-        await expect(links).toHaveCount(3);
-        await expect(page.locator('a.btn-upgrade[href="https://buy.stripe.com/test_semestral"]')).toContainText('Trocar para semestral');
-        await expect(page.locator('a.btn-upgrade[href="https://buy.stripe.com/test_anual"]')).toContainText('Trocar para anual');
-      });
+  test('cards exibem botões Stripe (js-stripe-checkout) quando Stripe configurado — plano mensal ativo', async ({ page }) => {
+    await withCurrentBandPlan(page, 'mensal', async () => {
+      await page.goto('/plano.php');
+      // Card atual (mensal): botão "Renovar mensal"
+      const mensalCard = page.locator('.price-card--current');
+      await expect(mensalCard.locator('button.js-stripe-checkout[data-plan="mensal"]')).toContainText('Renovar mensal');
+      // Cards não-atuais (isPago=true): "Trocar para semestral" e "Trocar para anual"
+      await expect(page.locator('button.js-stripe-checkout[data-plan="semestral"]')).toContainText('Trocar para semestral');
+      await expect(page.locator('button.js-stripe-checkout[data-plan="anual"]')).toContainText('Trocar para anual');
+      // Total: 3 botões Stripe (1 por card)
+      await expect(page.locator('button.js-stripe-checkout')).toHaveCount(3);
     });
   });
 
-  test('cards exibem link Stripe com rótulo "Assinar" quando plano é gratuito', async ({ page }) => {
-    await withExtraEnv({
-      STRIPE_SECRET_KEY: 'sk_test_playwright_stripe_key',
-      STRIPE_LINK_MENSAL: 'https://buy.stripe.com/test_mensal',
-      STRIPE_LINK_SEMESTRAL: 'https://buy.stripe.com/test_semestral',
-      STRIPE_LINK_ANUAL: 'https://buy.stripe.com/test_anual',
-    }, async () => {
-      await page.goto('/plano.php');
-      const links = page.locator('a.btn-upgrade[href^="https://buy.stripe.com/test_"]');
-      await expect(links).toHaveCount(3);
-      await expect(page.locator('a.btn-upgrade[href="https://buy.stripe.com/test_mensal"]')).toContainText('Assinar mensal');
-      await expect(page.locator('a.btn-upgrade[href="https://buy.stripe.com/test_semestral"]')).toContainText('Assinar semestral');
-      await expect(page.locator('a.btn-upgrade[href="https://buy.stripe.com/test_anual"]')).toContainText('Assinar anual');
-    });
+  test('cards exibem botão "Assinar X" quando plano é gratuito e Stripe está configurado', async ({ page }) => {
+    // Stripe ativado via STRIPE_SECRET_KEY em .env.local — plano gratuito (padrão de teste)
+    await page.goto('/plano.php');
+    await expect(page.locator('button.js-stripe-checkout[data-plan="mensal"]')).toContainText('Assinar mensal');
+    await expect(page.locator('button.js-stripe-checkout[data-plan="semestral"]')).toContainText('Assinar semestral');
+    await expect(page.locator('button.js-stripe-checkout[data-plan="anual"]')).toContainText('Assinar anual');
+    await expect(page.locator('button.js-stripe-checkout')).toHaveCount(3);
   });
 
   test('link WhatsApp do PIX usa telefone PIX quando WhatsApp específico não está configurado', async ({ page }) => {
@@ -285,26 +272,18 @@ test.describe('Plano — página', () => {
     });
   });
 
-  test('cards Semestral e Anual mostram link Stripe "Renovar" quando são o plano atual', async ({ page }) => {
-    await withExtraEnv({
-      STRIPE_SECRET_KEY: 'sk_test_playwright_stripe_key',
-      STRIPE_LINK_MENSAL: 'https://buy.stripe.com/test_mensal',
-      STRIPE_LINK_SEMESTRAL: 'https://buy.stripe.com/test_semestral',
-      STRIPE_LINK_ANUAL: 'https://buy.stripe.com/test_anual',
-    }, async () => {
-      for (const [plano, label] of [['semestral', 'Renovar semestral'], ['anual', 'Renovar anual']]) {
-        await withCurrentBandPlan(page, plano, async () => {
-          await page.goto('/plano.php');
-          const currentCard = page.locator('.price-card--current');
-          await expect(currentCard.locator('a.btn-upgrade')).toHaveAttribute('href', `https://buy.stripe.com/test_${plano}`);
-          await expect(currentCard.locator('a.btn-upgrade')).toContainText(label);
-        });
-      }
-    });
+  test('cards Semestral e Anual mostram botão "Renovar" quando são o plano atual', async ({ page }) => {
+    for (const [plano, label] of [['semestral', 'Renovar semestral'], ['anual', 'Renovar anual']]) {
+      await withCurrentBandPlan(page, plano, async () => {
+        await page.goto('/plano.php');
+        const currentCard = page.locator('.price-card--current');
+        await expect(currentCard.locator(`button.js-stripe-checkout[data-plan="${plano}"]`)).toContainText(label);
+      });
+    }
   });
 
-  test('pagamento indisponível quando PIX está desabilitado e Stripe não configurado (cards próprios e alheios)', async ({ page }) => {
-    await withExtraEnv({ PAYMENT_PIX_PHONE: '', PAYMENT_WHATSAPP_PHONE: '' }, async () => {
+  test('pagamento indisponível quando PIX e Stripe estão desabilitados (cards próprios e alheios)', async ({ page }) => {
+    await withExtraEnv({ PAYMENT_PIX_PHONE: '', PAYMENT_WHATSAPP_PHONE: '', STRIPE_SECRET_KEY: '' }, async () => {
       for (const plano of ['mensal', 'semestral', 'anual']) {
         await withCurrentBandPlan(page, plano, async () => {
           await page.goto('/plano.php');
@@ -349,9 +328,92 @@ test.describe('Topnav — link de plano', () => {
   });
 });
 
+// ── Checkout Stripe — fluxo de clique real ───────────────────────────────────
+test.describe('Checkout Stripe — fluxo de clique', () => {
+  test('clicar em "Assinar mensal" envia POST para create-checkout-session.php com plano correto', async ({ page }) => {
+    await page.route('**/create-checkout-session.php', async route => {
+      await route.fulfill({ json: { ok: true, data: { url: '/plano.php?checkout=ok' } } });
+    });
+
+    await page.goto('/plano.php');
+    const btn = page.locator('button.js-stripe-checkout[data-plan="mensal"]').first();
+    await expect(btn).toBeVisible();
+
+    const [request] = await Promise.all([
+      page.waitForRequest(req =>
+        req.url().includes('create-checkout-session.php') && req.method() === 'POST'
+      ),
+      btn.click(),
+    ]);
+
+    const body = JSON.parse(request.postData() || '{}');
+    expect(body.plano).toBe('mensal');
+  });
+
+  test('exibe toast de erro quando create-checkout-session.php retorna falha', async ({ page }) => {
+    await page.route('**/create-checkout-session.php', async route => {
+      await route.fulfill({ json: { ok: false, error: 'stripe_not_configured' } });
+    });
+
+    await page.goto('/plano.php');
+    const btn = page.locator('button.js-stripe-checkout[data-plan="semestral"]').first();
+    await expect(btn).toBeVisible();
+    await btn.click();
+
+    // Toast de erro deve aparecer
+    await expect(page.locator('.cifro-toast, [role="alert"], .toast')).toBeVisible({ timeout: 5000 });
+    // Botão deve ser re-habilitado com texto original
+    await expect(btn).toBeEnabled({ timeout: 5000 });
+    await expect(btn).toContainText('Assinar semestral');
+  });
+
+  test('create-checkout-session.php retorna 405 para GET', async ({ page }) => {
+    const res = await page.request.get('/api/stripe/create-checkout-session.php');
+    expect(res.status()).toBe(405);
+  });
+
+  test('create-checkout-session.php retorna 403 sem CSRF', async ({ page }) => {
+    const res = await page.request.post('/api/stripe/create-checkout-session.php', {
+      data: JSON.stringify({ plano: 'mensal' }),
+      headers: { 'Content-Type': 'application/json' },
+    });
+    expect(res.status()).toBe(403);
+  });
+
+  test('create-checkout-session.php retorna 400 para plano inválido', async ({ page }) => {
+    const csrf = await getCsrf(page);
+    const res = await page.request.post('/api/stripe/create-checkout-session.php', {
+      data: JSON.stringify({ plano: 'inexistente' }),
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+    });
+    expect(res.status()).toBe(400);
+  });
+});
+
+// ── Página plano-expirado.php ─────────────────────────────────────────────────
+test.describe('Plano expirado — página de aviso', () => {
+  test('plano-expirado.php carrega sem erros PHP', async ({ page }) => {
+    await page.goto('/plano-expirado.php');
+    const body = await page.locator('body').textContent();
+    expect(body).not.toMatch(/Fatal error|Warning:|Parse error/i);
+  });
+
+  test('plano-expirado.php sem autenticação redireciona para landing/login', async ({ browser }) => {
+    const ctx = await browser.newContext({ storageState: { cookies: [], origins: [] } });
+    const page = await ctx.newPage();
+    await page.goto('/plano-expirado.php');
+    await page.waitForURL(url =>
+      url.toString().includes('landing.php') || url.toString().includes('login.php'),
+      { timeout: 5000 }
+    );
+    expect(page.url()).toMatch(/landing\.php|login\.php/);
+    await ctx.close();
+  });
+});
+
 // ── Limite de músicas no plano gratuito ───────────────────────────────────────
 test.describe('Limite do plano — músicas', () => {
-  test('cifro_require_plan_limit bloqueia 11ª música no plano gratuito (API retorna 403 com plano_limit)', async ({ page }) => {
+  test('plano gratuito bloqueia ao tentar adicionar mais de 10 músicas', async ({ page }) => {
     const csrf = await getCsrf(page);
 
     // Cria músicas até o limite (10) — pode já existir algumas, então
@@ -399,7 +461,7 @@ test.describe('Limite do plano — músicas', () => {
     expect(typeof hitLimit).toBe('boolean');
   });
 
-  test('resposta de limite tem campo plano_limit:true e mensagem', async ({ page }) => {
+  test('resposta de bloqueio por limite inclui indicador de plano e mensagem de erro', async ({ page }) => {
     // Simula chamada direta ao cifro_require_plan_limit via mock de contagem
     // Verificamos que a estrutura JSON do erro de limite está correta chamando
     // o endpoint com plano bloqueado (sem sessão válida de banda)
@@ -423,7 +485,7 @@ test.describe('Limite do plano — músicas', () => {
 
 // ── Webhook Stripe ────────────────────────────────────────────────────────────
 test.describe('Stripe webhook', () => {
-  test('POST sem assinatura retorna 400', async ({ page }) => {
+  test('webhook sem assinatura é rejeitado', async ({ page }) => {
     const res = await page.request.post('/api/stripe/webhook.php', {
       data: JSON.stringify({ type: 'invoice.paid', data: { object: {} } }),
       headers: { 'Content-Type': 'application/json' },
@@ -432,7 +494,7 @@ test.describe('Stripe webhook', () => {
     expect([400, 500]).toContain(res.status());
   });
 
-  test('POST com assinatura inválida retorna 400', async ({ page }) => {
+  test('webhook com assinatura incorreta é rejeitado', async ({ page }) => {
     const res = await page.request.post('/api/stripe/webhook.php', {
       data: JSON.stringify({ type: 'invoice.paid', data: { object: {} } }),
       headers: {
@@ -443,7 +505,7 @@ test.describe('Stripe webhook', () => {
     expect([400, 500]).toContain(res.status());
   });
 
-  test('GET retorna 405', async ({ page }) => {
+  test('webhook rejeita requisições GET', async ({ page }) => {
     const res = await page.request.get('/api/stripe/webhook.php');
     expect([405, 400, 500]).toContain(res.status());
   });
