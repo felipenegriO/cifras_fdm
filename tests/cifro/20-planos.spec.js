@@ -607,10 +607,15 @@ test.describe('Landing page — preços corretos', () => {
     await expect(cards).toHaveCount(4);
   });
 
-  test('todos os botões de CTA levam para register.php', async ({ page }) => {
+  test('cada plano pago leva o visitante ao cadastro carregando o plano escolhido', async ({ page }) => {
     await page.goto('/landing.php');
-    const btns = page.locator('.pricing-grid a.btn-plan[href="/register.php"]');
-    const count = await btns.count();
-    expect(count).toBeGreaterThanOrEqual(3); // mensal, semestral, anual
+    for (const plano of ['mensal', 'semestral', 'anual']) {
+      await expect(page.locator(`.pricing-grid a.btn-plan[href="/register.php?plano=${plano}"]`)).toHaveCount(1);
+    }
+  });
+
+  test('o plano gratuito leva ao cadastro simples, sem plano na URL', async ({ page }) => {
+    await page.goto('/landing.php');
+    await expect(page.locator('.pricing-grid a.btn-plan[href="/register.php"]')).toHaveCount(1);
   });
 });

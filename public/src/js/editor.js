@@ -36,7 +36,6 @@
     importTabLink: document.getElementById('importTabLink'),
     importTabText: document.getElementById('importTabText'),
     importUrlInput: document.getElementById('importUrlInput'),
-    fetchImportButton: document.getElementById('fetchImportButton'),
     importFetchError: document.getElementById('importFetchError'),
     importSourceUrl: document.getElementById('importSourceUrl'),
     importContent: document.getElementById('importContent'),
@@ -827,7 +826,7 @@
       const editors = await tinymce.init({
         selector: '#cifraInput',
         license_key: 'gpl',
-        base_url: '/src/vendor/tinymce',
+        base_url: (window.APP_BASE || '') + '/src/vendor/tinymce',
         suffix: '.min',
         language: 'pt_BR',
         plugins: 'code',
@@ -937,7 +936,6 @@
     document.getElementById('previewImportButton')?.addEventListener('click', previewImport);
     elements.importTabLinkButton?.addEventListener('click', () => switchImportTab('link'));
     elements.importTabTextButton?.addEventListener('click', () => switchImportTab('text'));
-    elements.fetchImportButton?.addEventListener('click', fetchImportFromUrl);
     elements.importUrlInput?.addEventListener('blur', maybeAutoFetchImportUrl);
     elements.importUrlInput?.addEventListener('paste', () => setTimeout(maybeAutoFetchImportUrl, 0));
     elements.confirmImportButton?.addEventListener('click', confirmImport);

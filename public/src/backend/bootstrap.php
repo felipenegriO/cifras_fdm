@@ -17,11 +17,13 @@ if (($GLOBALS['__cifro_app_base'] = rtrim((string)getenv('APP_BASE'), '/')) !== 
             '$1<script>window.APP_BASE=' . json_encode($base) . ';</script>',
             $buffer, 1
         );
+        // Only rewrite paths that start with / but do NOT already start with APP_BASE
+        $noBase = preg_quote(ltrim($base, '/'), '/');
         // HTML attributes: href="/ src="/ action="/
-        $buffer = preg_replace('/((?:href|src|action)=")\/(?!\/)/', '$1' . $base . '/', $buffer);
+        $buffer = preg_replace('/((?:href|src|action)=")\/(?!\/)(?!' . $noBase . ')/', '$1' . $base . '/', $buffer);
         // JS inline: location.href = '/' / window.location.href = "/" / fetch('/
-        $buffer = preg_replace("/((?:window\.)?location(?:\.href)?\s*=\s*['\"])\/(?!\/)/", '$1' . $base . '/', $buffer);
-        $buffer = preg_replace("/(fetch\(['\"])\/(?!\/)/", '$1' . $base . '/', $buffer);
+        $buffer = preg_replace("/((?:window\.)?location(?:\.href)?\s*=\s*['\"])\/(?!\/)(?!{$noBase})/", '$1' . $base . '/', $buffer);
+        $buffer = preg_replace("/(fetch\(['\"])\/(?!\/)(?!{$noBase})/", '$1' . $base . '/', $buffer);
         return $buffer;
     });
 }

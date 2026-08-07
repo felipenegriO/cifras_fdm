@@ -1,9 +1,10 @@
 {
   "version": "0.0.1",
+  "autoPort": false,
   "configurations": [
     {
-      "name": "cifrasfdm",
-      "runtimeExecutable": "C:\\xampp\\php\\php.exe",
+      "name": "cifro-php",
+      "runtimeExecutable": "C:/xampp/php/php.exe",
       "runtimeArgs": ["-S", "localhost:8090", "-t", "public", "router.php"],
       "port": 8090
     }

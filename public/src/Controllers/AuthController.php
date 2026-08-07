@@ -98,7 +98,7 @@ class AuthController {
 
     /** Isolated seam so tests can observe the redirect without exit() killing the process. */
     protected function redirect(string $location): void {
-        header('Location: ' . $location);
+        header('Location: ' . base_url($location));
         exit;
     }
 

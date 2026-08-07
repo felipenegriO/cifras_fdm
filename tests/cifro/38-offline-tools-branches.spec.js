@@ -57,8 +57,9 @@ test('offline-tools.js — datas, progresso, prepareShell e mensagens de erro', 
     const originalSync = { ...window.cifroSync };
     Object.assign(window.cifroSync, {
       sync: async () => true,
-      markPrepared: async () => true,
-      getSyncStatus: async () => ({ snapshotValid: true, contentRevision: 1, lastSync: Date.now(), appVersion: 'x' }),
+      getRevision: async () => 1,
+      markShellPrepared: async () => true,
+      getSyncStatus: async () => ({ snapshotValid: true, shellReady: true, contentRevision: 1, lastSync: Date.now(), appVersion: 'x' }),
     });
     delete window.cifroToast;
     // Recria a barra de progresso e o botão, pois prepareOffline() os usa.
@@ -76,6 +77,7 @@ test('offline-tools.js — datas, progresso, prepareShell e mensagens de erro', 
     }
     await OT.prepareOffline();
     const statusViaWaiting = document.getElementById('offlineToolsStatus').textContent;
+    const buttonLabelAposSucesso = button.textContent;
 
     // prepareShell: nem active nem waiting -> throw 'Service worker indisponível'.
     Object.defineProperty(navigator, 'serviceWorker', {
@@ -95,14 +97,13 @@ test('offline-tools.js — datas, progresso, prepareShell e mensagens de erro', 
         }),
       },
     });
-    Object.assign(window.cifroSync, { sync: async () => false, markPrepared: async () => true, getSyncStatus: async () => null });
+    Object.assign(window.cifroSync, { sync: async () => false, getSyncStatus: async () => null });
     await OT.prepareOffline();
     const statusSyncFail = document.getElementById('offlineToolsStatus').textContent;
 
     // Erro sem .message (objeto lançado sem "message") -> fallback padrão.
     Object.assign(window.cifroSync, {
       sync: async () => { throw { code: 'X' }; },
-      markPrepared: async () => true,
       getSyncStatus: async () => null,
     });
     await OT.prepareOffline();
@@ -118,11 +119,11 @@ test('offline-tools.js — datas, progresso, prepareShell e mensagens de erro', 
         }),
       },
     });
-    Object.assign(window.cifroSync, { sync: async () => true, markPrepared: async () => true, getSyncStatus: async () => null });
+    Object.assign(window.cifroSync, { sync: async () => true, getSyncStatus: async () => null });
     await OT.prepareOffline();
     const statusPacoteFalho = document.getElementById('offlineToolsStatus').textContent;
 
-    // navigator.storage ausente (sem persist) — não deve lançar; markPrepared falso.
+    // navigator.storage ausente (sem persist) — não deve lançar; segue e conclui com sucesso.
     Object.defineProperty(navigator, 'storage', { configurable: true, value: undefined });
     Object.defineProperty(navigator, 'serviceWorker', {
       configurable: true,
@@ -133,9 +134,22 @@ test('offline-tools.js — datas, progresso, prepareShell e mensagens de erro', 
         }),
       },
     });
-    Object.assign(window.cifroSync, { sync: async () => true, markPrepared: async () => false, getSyncStatus: async () => null });
+    Object.assign(window.cifroSync, {
+      sync: async () => true, getRevision: async () => 2, markShellPrepared: async () => true,
+      getSyncStatus: async () => ({ snapshotValid: true, shellReady: true, contentRevision: 2, lastSync: Date.now(), appVersion: 'x' }),
+    });
     await OT.prepareOffline();
-    const statusNaoValidado = document.getElementById('offlineToolsStatus').textContent;
+    const statusSemStoragePersist = document.getElementById('offlineToolsStatus').textContent;
+
+    // markShellPrepared lança erro -> mensagem de erro chega ao status.
+    Object.assign(window.cifroSync, {
+      sync: async () => true,
+      getRevision: async () => 3,
+      markShellPrepared: async () => { throw new Error('IndexedDB indisponível'); },
+      getSyncStatus: async () => null,
+    });
+    await OT.prepareOffline();
+    const statusMarkShellFalhou = document.getElementById('offlineToolsStatus').textContent;
 
     Object.assign(window.cifroSync, originalSync);
 
@@ -151,18 +165,20 @@ test('offline-tools.js — datas, progresso, prepareShell e mensagens de erro', 
     const reloadedOk = Boolean(window.OfflineTools);
 
     return {
-      semData, comData, statusViaWaiting, statusNoWorker, statusSyncFail,
-      statusNoMessage, statusPacoteFalho, statusNaoValidado, reloadedOk,
+      semData, comData, statusViaWaiting, buttonLabelAposSucesso, statusNoWorker, statusSyncFail,
+      statusNoMessage, statusPacoteFalho, statusSemStoragePersist, statusMarkShellFalhou, reloadedOk,
     };
   });
 
   expect(result.semData).toContain('preparado em nunca');
   expect(result.comData).not.toContain('nunca');
   expect(result.statusViaWaiting).toContain('Pronto para palco');
+  expect(result.buttonLabelAposSucesso).toBe('Sincronizar');
   expect(result.statusNoWorker).toContain('Service worker indisponível');
   expect(result.statusSyncFail).toContain('Falha ao atualizar os dados');
   expect(result.statusNoMessage).toContain('a versão salva foi mantida');
   expect(result.statusPacoteFalho).toContain('Falha no pacote');
-  expect(result.statusNaoValidado).toContain('Dados offline não validados');
+  expect(result.statusSemStoragePersist).toContain('Pronto para palco');
+  expect(result.statusMarkShellFalhou).toContain('IndexedDB indisponível');
   expect(result.reloadedOk).toBe(true);
 });

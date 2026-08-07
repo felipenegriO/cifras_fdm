@@ -1,6 +1,26 @@
 import { test, expect } from '../fixtures/coverage.js';
 import { dbQuery } from '../helpers/db.js';
 
+// Evita que o modal "Bem-vindo ao Cifrô — versão beta" (mostrado uma vez
+// por navegador via localStorage) intercepte cliques no menu — não é o que
+// estes testes de sincronização offline verificam.
+//
+// Também garante que cada teste comece sem service worker nem Cache Storage
+// residual de execuções anteriores: STATIC_CACHE é aberto pelo nome fixo
+// (não pela query "?v="), então uma vez populado ele fica servindo os
+// mesmos bytes até o app inteiro trocar de versão — sem essa limpeza, um
+// teste pode validar comportamento de uma versão antiga do código sem que
+// ninguém perceba.
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('cifroBetaWelcomeSeen', '1'));
+  await page.addInitScript(async () => {
+    const registrations = await navigator.serviceWorker.getRegistrations();
+    await Promise.all(registrations.map(registration => registration.unregister()));
+    const cacheNames = await caches.keys();
+    await Promise.all(cacheNames.map(name => caches.delete(name)));
+  });
+});
+
 test.afterEach(async ({ page }) => {
   if (page.isClosed()) return;
   await Promise.race([
@@ -32,7 +52,7 @@ test('mantém palco utilizável offline no celular', async ({ page, context }) =
   await page.goto('/index.php');
   const snapshot = await (await page.request.get('/api/sync/data.php')).json();
   await page.getByRole('button', { name: 'Abrir menu' }).first().click();
-  await page.getByRole('button', { name: 'Preparar para offline' }).click();
+  await page.getByRole('button', { name: 'Sincronizar' }).click();
   await expect(page.locator('#offlineToolsStatus')).toContainText('Pronto para palco', { timeout: 30000 });
   await page.getByRole('button', { name: 'Fechar notificação' }).click();
   await expect(page.locator('.cifro-toast')).toHaveCount(0, { timeout: 1000 });
@@ -66,7 +86,7 @@ test('trata preparação offline indisponível e cancela limpeza do cache', asyn
   await page.getByLabel('Alternar tema escuro').click();
 
   await context.setOffline(true);
-  await page.getByRole('button', { name: 'Preparar para offline' }).click();
+  await page.getByRole('button', { name: 'Sincronizar' }).click();
   await expect(page.locator('#offlineToolsStatus')).toContainText('Servidor indisponível');
   await context.setOffline(false);
 
@@ -439,13 +459,17 @@ test('alterna entre duas bandas preparadas após reinício offline', async ({ pa
 
   for (const { id: bandId } of bands) {
     await page.goto('/select-banda.php');
-    const prepared = await page.evaluate(id => cifroSync.getOfflineStatus(id).then(status => status.ready), bandId);
+    const prepared = await page.evaluate(id => cifroSync.canUseOffline(id), bandId);
     if (prepared) continue;
     await page.locator(`.sb-card[data-band-id="${bandId}"]`).click();
     await expect(page).toHaveURL(/index\.php/);
     await page.getByRole('button', { name: 'Abrir menu' }).first().click();
-    await page.getByRole('button', { name: 'Preparar para offline' }).click();
+    await page.getByRole('button', { name: 'Sincronizar' }).click();
     await expect(page.locator('#offlineToolsStatus')).toContainText('Pronto para palco', { timeout: 30000 });
+    // Aguarda qualquer preparação automática adiada (setTimeout) que possa
+    // ainda estar em andamento em segundo plano assentar antes de seguir —
+    // evita ir offline no meio de um PREPARE_OFFLINE ainda em voo.
+    await page.waitForTimeout(500);
   }
 
   await context.setOffline(true);

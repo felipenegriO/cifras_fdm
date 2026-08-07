@@ -117,6 +117,29 @@ class BandaRepository {
         $stmt->execute([$periodEnd, $stripeSubId]);
     }
 
+    /**
+     * Marca que o administrador pediu o cancelamento. Não mexe no plano: o
+     * acesso continua até plano_expira_em e o downgrade é feito pelo webhook
+     * customer.subscription.deleted quando o período terminar.
+     */
+    public function agendarCancelamento(string $id, int $periodEnd = 0): void {
+        if ($periodEnd > 0) {
+            $stmt = $this->pdo->prepare(
+                'UPDATE bandas SET cancelamento_agendado_em = NOW(), plano_expira_em = FROM_UNIXTIME(?) WHERE id = ?'
+            );
+            $stmt->execute([$periodEnd, $id]);
+            return;
+        }
+        $stmt = $this->pdo->prepare('UPDATE bandas SET cancelamento_agendado_em = NOW() WHERE id = ?');
+        $stmt->execute([$id]);
+    }
+
+    /** Limpa a marca de cancelamento (ex.: quando a banda reassina). */
+    public function limparCancelamento(string $id): void {
+        $stmt = $this->pdo->prepare('UPDATE bandas SET cancelamento_agendado_em = NULL WHERE id = ?');
+        $stmt->execute([$id]);
+    }
+
     /** Retorna a banda pelo stripe_subscription_id. */
     public function findBySubscriptionId(string $subId): ?array {
         $pdo  = Database::getConnection();

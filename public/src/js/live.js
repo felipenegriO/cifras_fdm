@@ -1,6 +1,6 @@
 (function () {
     const salaId = (window.CIFRO_BAND_ID && window.CIFRO_BAND_ID !== '') ? window.CIFRO_BAND_ID : 'default';
-    const apiBase = '/api/live';
+    const apiBase = (window.APP_BASE || '') + '/api/live';
     const hostIdKey = 'cifroLiveHostId_' + salaId;
     const modeKey = 'cifroLiveMode_' + salaId;
     const pollMs = 2500;

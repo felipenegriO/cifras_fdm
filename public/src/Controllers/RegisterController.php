@@ -103,6 +103,7 @@ class RegisterController {
             $pdo->commit();
         } catch (Exception $e) {
             $pdo->rollBack();
+            ErrorLogger::fromThrowable($e, 'Falha na transação de cadastro (usuário/banda/vínculo)', 'RegisterController::handle');
             $erro = 'Erro ao criar conta. Tente novamente.';
             render_view('register', compact('erro', 'success'));
             return;

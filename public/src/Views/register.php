@@ -64,7 +64,7 @@
           btn.disabled = true;
           btn.textContent = 'Enviando…';
           try {
-            const res = await fetch('<?= base_url('/api/resend-activation.php') ?>', {
+            const res = await fetch((window.APP_BASE || '') + '/api/resend-activation.php', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ email: '<?= htmlspecialchars($email ?? '', ENT_QUOTES) ?>' })
@@ -90,6 +90,21 @@
       </script>
     <?php else: ?>
       <h2>Criar conta grátis</h2>
+
+      <?php
+        $planoEscolhido = $_SESSION['cifro_plano_intencao'] ?? '';
+        $planoRotulos = [
+            'mensal'    => ['Mensal', 'R$ 9,90 por mês'],
+            'semestral' => ['Semestral', 'R$ 49,90 a cada 6 meses'],
+            'anual'     => ['Anual', 'R$ 89,90 por ano'],
+        ];
+      ?>
+      <?php if (isset($planoRotulos[$planoEscolhido])): ?>
+        <div style="background:rgba(124,58,237,.12);border:1px solid rgba(124,58,237,.45);border-radius:8px;padding:11px 14px;font-size:13px;color:#c4b5fd;margin-bottom:14px;line-height:1.5">
+          Você escolheu o plano <strong><?= e($planoRotulos[$planoEscolhido][0]) ?></strong> (<?= e($planoRotulos[$planoEscolhido][1]) ?>).
+          Crie a conta primeiro — <strong>nada é cobrado agora</strong>. Assim que você definir a senha, levamos você para o pagamento.
+        </div>
+      <?php endif; ?>
 
       <?php if ($erro): ?>
         <div class="error"><?= htmlspecialchars($erro) ?></div>

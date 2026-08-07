@@ -7,7 +7,7 @@ final class PasswordResetValidatorTest extends TestCase
     public function testRejeitaSenhaCurta(): void
     {
         self::assertSame(
-            'A senha deve ter pelo menos 12 caracteres.',
+            'A senha deve ter pelo menos 6 caracteres.',
             PasswordResetValidator::validateNewPassword('123', '123')
         );
     }
@@ -25,9 +25,9 @@ final class PasswordResetValidatorTest extends TestCase
         self::assertNull(PasswordResetValidator::validateNewPassword('SenhaForte!2026', 'SenhaForte!2026'));
     }
 
-    public function testLimiteExatoDeDozeCaracteresEhAceito(): void
+    public function testLimiteExatoDeSeisCaracteresEhAceito(): void
     {
-        self::assertNull(PasswordResetValidator::validateNewPassword('Abcdef!23456', 'Abcdef!23456'));
+        self::assertNull(PasswordResetValidator::validateNewPassword('Abc!23', 'Abc!23'));
     }
 
     public function testRejeitaSenhaComprometida(): void

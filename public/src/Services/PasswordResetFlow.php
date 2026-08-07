@@ -24,21 +24,21 @@ class PasswordResetFlow
 
     /**
      * POST: validates the new password, consumes the token, and updates it.
-     * @return array{erro: ?string, ok: bool, userId: ?string}
+     * @return array{erro: ?string, ok: bool, userId: ?string, tokenInvalido: bool}
      */
     public function handleSubmit(string $token, string $senha, string $senha2): array
     {
         $erro = PasswordResetValidator::validateNewPassword($senha, $senha2);
         if ($erro !== null) {
-            return ['erro' => $erro, 'ok' => false, 'userId' => null];
+            return ['erro' => $erro, 'ok' => false, 'userId' => null, 'tokenInvalido' => false];
         }
 
         $userId = $this->repo->consumeToken($token);
         if (!$userId) {
-            return ['erro' => 'Link inválido ou expirado. Solicite um novo.', 'ok' => false, 'userId' => null];
+            return ['erro' => 'Link inválido ou expirado. Solicite um novo.', 'ok' => false, 'userId' => null, 'tokenInvalido' => true];
         }
 
         $this->repo->updatePassword($userId, password_hash($senha, PASSWORD_DEFAULT));
-        return ['erro' => null, 'ok' => true, 'userId' => $userId];
+        return ['erro' => null, 'ok' => true, 'userId' => $userId, 'tokenInvalido' => false];
     }
 }

@@ -38,8 +38,9 @@ final class PasswordResetFlowTest extends TestCase
         $repo->expects(self::never())->method('consumeToken');
         $flow = new PasswordResetFlow($repo);
         $result = $flow->handleSubmit('tok', '123', '123');
-        self::assertSame('A senha deve ter pelo menos 12 caracteres.', $result['erro']);
+        self::assertSame('A senha deve ter pelo menos 6 caracteres.', $result['erro']);
         self::assertFalse($result['ok']);
+        self::assertFalse($result['tokenInvalido'], 'Erro de validação de senha não deve invalidar o token.');
     }
 
     public function testHandleSubmitRejeitaTokenInvalido(): void
@@ -51,6 +52,7 @@ final class PasswordResetFlowTest extends TestCase
         $result = $flow->handleSubmit('tok-invalido', 'SegredoForte!2026', 'SegredoForte!2026');
         self::assertSame('Link inválido ou expirado. Solicite um novo.', $result['erro']);
         self::assertFalse($result['ok']);
+        self::assertTrue($result['tokenInvalido']);
     }
 
     public function testHandleSubmitSucessoAtualizaSenha(): void

@@ -10,6 +10,7 @@
   <link href="/src/css/theme.css" rel="stylesheet">
   <script src="<?= asset_url('/src/js/cifro-toast.js') ?>"></script>
   <script src="<?= asset_url('/src/js/cifro-csrf.js') ?>"></script>
+  <script src="<?= asset_url('/src/js/cifro-confirm.js') ?>"></script>
   <style>
     body { margin: 0; padding: 0; }
     .plan-wrap { max-width: 760px; margin: 0 auto; padding: var(--space-4); }
@@ -211,6 +212,12 @@
       font-size: var(--text-sm); font-weight: 700;
     }
     .plan-management__action:hover { border-color: #ef4444; color: #f87171; }
+    button.plan-management__action { background: transparent; font-family: inherit; cursor: pointer; }
+    button.plan-management__action:disabled { opacity: .6; cursor: default; }
+    .plan-management__action--done {
+      border-color: rgba(74,222,128,.45); color: #86efac; cursor: default;
+    }
+    .plan-management__action--done:hover { border-color: rgba(74,222,128,.45); color: #86efac; }
 
     /* ── Blocked banner ── */
     .plan-blocked {
@@ -308,6 +315,23 @@ foreach ($paymentPlans as $tipo => &$paymentPlan) {
 unset($paymentPlan);
 $cancelMessage = "Olá! Quero solicitar o cancelamento do plano " . cifro_plan_label($plano) . " do Cifrô. Banda: {$bandaNome}. Referência: {$paymentReference}.";
 $cancelUrl = PlanoViewModel::cancelUrl($pixEnabled, $whatsappPhone, $cancelMessage);
+
+// Cancelamento self-service: só é possível quando existe assinatura recorrente
+// no Stripe. Quem pagou por Pix não tem recorrência para cancelar, e só o
+// administrador da banda pode encerrar a cobrança.
+$bandaAtual            = null;
+if ($bandaId) {
+    try { $bandaAtual = (new BandaRepository())->findById($bandaId); }
+    catch (Throwable $e) { $bandaAtual = null; }
+}
+$assinaturaStripe      = trim((string) ($bandaAtual['stripe_subscription_id'] ?? ''));
+$cancelamentoAgendado  = trim((string) ($bandaAtual['cancelamento_agendado_em'] ?? '')) !== '';
+$podeCancelarSozinho   = $isPago && $stripeEnabled && $assinaturaStripe !== '' && can_manage_band_users();
+$expiraEmLabel         = '';
+if (!empty($bandaAtual['plano_expira_em'])) {
+    try { $expiraEmLabel = (new DateTimeImmutable((string) $bandaAtual['plano_expira_em']))->format('d/m/Y'); }
+    catch (Throwable $e) { $expiraEmLabel = ''; }
+}
 ?>
 
 <div class="plan-wrap">
@@ -552,12 +576,31 @@ $cancelUrl = PlanoViewModel::cancelUrl($pixEnabled, $whatsappPhone, $cancelMessa
   </div>
 
   <?php if ($isPago): ?>
-  <div class="plan-management">
-    <div>
-      <strong>Cancelamento</strong>
-      <p>Solicite o cancelamento pelo atendimento. Seu acesso permanece ativo até a confirmação.</p>
-    </div>
-    <a href="<?= e($cancelUrl) ?>" class="plan-management__action" target="_blank" rel="noopener">Solicitar cancelamento</a>
+  <div class="plan-management" id="plan-cancel-block">
+    <?php if ($cancelamentoAgendado): ?>
+      <div>
+        <strong>Cancelamento agendado</strong>
+        <p>Nenhuma nova cobrança será feita. Você continua com o plano
+          <?= e(cifro_plan_label($plano)) ?><?= $expiraEmLabel !== '' ? ' até ' . e($expiraEmLabel) : ' até o fim do período já pago' ?>
+          e depois a conta volta para o plano gratuito. Suas cifras continuam salvas.</p>
+      </div>
+      <span class="plan-management__action plan-management__action--done" data-cancel-state="agendado">Cancelamento agendado</span>
+    <?php elseif ($podeCancelarSozinho): ?>
+      <div>
+        <strong>Cancelamento</strong>
+        <p>Você mesmo cancela, na hora e sem falar com ninguém. O acesso continua
+          <?= $expiraEmLabel !== '' ? 'até ' . e($expiraEmLabel) : 'até o fim do período já pago' ?>
+          e nenhuma nova cobrança é feita. Sem multa e sem fidelidade.</p>
+      </div>
+      <button type="button" class="plan-management__action js-cancel-plan" id="btn-cancelar-plano">Cancelar assinatura</button>
+    <?php else: ?>
+      <div>
+        <strong>Cancelamento</strong>
+        <p>Este plano não tem cobrança recorrente para cancelar automaticamente.
+          Solicite pelo atendimento — seu acesso permanece ativo até a confirmação.</p>
+      </div>
+      <a href="<?= e($cancelUrl) ?>" class="plan-management__action" target="_blank" rel="noopener">Solicitar cancelamento</a>
+    <?php endif; ?>
   </div>
   <?php endif; ?>
 
@@ -724,6 +767,46 @@ $cancelUrl = PlanoViewModel::cancelUrl($pixEnabled, $whatsappPhone, $cancelMessa
       }
     });
   });
+
+  // ── Cancelamento self-service ─────────────────────────────────────────────
+  const btnCancelar = document.getElementById('btn-cancelar-plano');
+  if (btnCancelar) {
+    btnCancelar.addEventListener('click', async () => {
+      const confirmado = window.cifroConfirm
+        ? await cifroConfirm({
+            title: 'Cancelar assinatura?',
+            message: 'Nenhuma nova cobrança será feita. Você continua com o plano pago até o fim do período que já pagou e depois a conta volta para o plano gratuito. Suas cifras não são apagadas.',
+            confirmText: 'Sim, cancelar',
+            cancelText: 'Voltar',
+          })
+        : window.confirm('Cancelar a assinatura? Você mantém o acesso até o fim do período já pago.');
+      if (!confirmado) return;
+
+      btnCancelar.disabled = true;
+      const textoOriginal = btnCancelar.textContent;
+      btnCancelar.textContent = 'Cancelando...';
+
+      try {
+        const res = await fetch('/api/plano/cancelar.php', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        });
+        const data = await res.json();
+        if (data.ok) {
+          window.cifroToast && cifroToast(data.data?.mensagem || 'Cancelamento agendado.', 'success');
+          setTimeout(() => window.location.reload(), 1800);
+        } else {
+          window.cifroToast && cifroToast(data.error || data.mensagem || 'Não foi possível cancelar agora.', 'error');
+          btnCancelar.disabled = false;
+          btnCancelar.textContent = textoOriginal;
+        }
+      } catch (_) {
+        window.cifroToast && cifroToast('Erro de conexão. Tente novamente.', 'error');
+        btnCancelar.disabled = false;
+        btnCancelar.textContent = textoOriginal;
+      }
+    });
+  }
 })();
 </script>
 <script>window.CIFRO_USER_ID = '<?= e($_SESSION['usuario']['id'] ?? '') ?>'; window.CIFRO_BAND_ID = '<?= e(current_band_id()) ?>';</script>

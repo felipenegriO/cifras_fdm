@@ -80,15 +80,14 @@ test('admin convida novo membro e membro ativa conta pelo link', async ({ browse
   await expect(member.locator('#senha')).toBeVisible();
   await expect(member.getByRole('button', { name: /ativar minha conta/i })).toBeVisible();
 
-  // ── 4. Senha fraca é rejeitada (o PHP exibe erro sem o formulário) ──────────
+  // ── 4. Senha fraca é rejeitada no próprio JS, sem perder o formulário ───────
   await member.fill('#senha', '123');
   await member.fill('#senha2', '123');
   await member.click('button[type="submit"]');
-  await expect(member.locator('.error')).toContainText(/pelo menos 12 caracteres/i);
-
-  // ── 5. Novo membro volta ao link e define senha correta ───────────────────────
-  await member.goto(`/definir-senha.php?token=${activationToken}`);
+  await expect(member.locator('.error')).toContainText(/pelo menos 6 caracteres/i);
   await expect(member.locator('#senha')).toBeVisible();
+
+  // ── 5. Novo membro corrige e define a senha válida ──────────────────────────
   await member.fill('#senha', SENHA);
   await member.fill('#senha2', SENHA);
   await member.click('button[type="submit"]');

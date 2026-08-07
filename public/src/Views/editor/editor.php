@@ -125,7 +125,6 @@
         <p>Cole o link de uma cifra do CifraClub e a aplicação busca o conteúdo automaticamente.</p>
         <label for="importUrlInput">Link do CifraClub</label>
         <input id="importUrlInput" type="url" placeholder="https://www.cifraclub.com.br/...">
-        <button type="button" class="btn btn--secondary" id="fetchImportButton">Buscar cifra</button>
         <div class="import-fetch-error" id="importFetchError" role="alert" hidden></div>
       </div>
 
@@ -138,7 +137,7 @@
         <button type="button" class="btn btn--secondary" id="previewImportButton">Gerar preview</button>
       </div>
 
-      <label class="import-rights"><input id="importRights" type="checkbox"> Confirmo que tenho autorização para usar este conteúdo.</label>
+      <label class="import-rights"><input id="importRights" type="checkbox" checked> Confirmo que tenho autorização para usar este conteúdo.</label>
       <div class="import-preview" id="importPreview" role="status" aria-live="polite" hidden></div>
       <div class="import-modal__actions">
         <button type="button" class="btn btn--secondary" id="cancelImportButton">Cancelar</button>

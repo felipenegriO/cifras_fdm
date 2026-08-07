@@ -86,6 +86,9 @@ try {
         if ($bandaId && $subId) {
             $plano = resolverPlanoByPrice($priceId);
             $bandaRepo->ativarPlano($bandaId, $plano, $subId);
+            // Assinou de novo depois de ter cancelado: a marca de cancelamento
+            // precisa sumir, senão a tela de plano segue dizendo "agendado".
+            $bandaRepo->limparCancelamento($bandaId);
             $banda = $bandaRepo->findById($bandaId);
             if ($banda) {
                 $validade  = (new DateTime())->modify(planoValidade($plano))->format('d/m/Y');
@@ -106,6 +109,7 @@ try {
                 $plano     = resolverPlanoByPrice($priceId) ?: $banda['plano'];
                 $periodEnd = (int)($obj['lines']['data'][0]['period']['end'] ?? $obj['period_end'] ?? 0);
                 $bandaRepo->ativarPlano($banda['id'], $plano, $subId);
+                $bandaRepo->limparCancelamento($banda['id']);
                 if ($periodEnd > 0) {
                     $bandaRepo->atualizarExpiracao($subId, $periodEnd);
                 }

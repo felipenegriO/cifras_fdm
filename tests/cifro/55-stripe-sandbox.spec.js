@@ -12,8 +12,19 @@
  */
 import { test, expect } from '../fixtures/coverage.js';
 import crypto from 'node:crypto';
+import { fazerLogin } from '../helpers/auth.js';
 
 test.use({ storageState: 'tests/.auth/user.json' });
+
+// tests/.auth/user.json é compartilhado entre todos os specs; a fixture
+// automática `isolatedSession` (tests/fixtures/coverage.js) chama
+// session_regenerate_id() a cada teste, o que pode invalidar o cookie salvo
+// para quem rodar depois. fazerLogin() é um no-op se a sessão ainda for
+// válida e reloga se não for — sem isso, este arquivo é flaky dependendo da
+// ordem de execução da suíte completa.
+test.beforeEach(async ({ page }) => {
+  await fazerLogin(page);
+});
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 

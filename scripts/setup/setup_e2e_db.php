@@ -14,7 +14,11 @@ $server = new PDO("mysql:host={$host};port={$port};charset=utf8mb4", $user, $pas
 $server->exec("DROP DATABASE IF EXISTS `{$database}`");
 $server->exec("CREATE DATABASE `{$database}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
 $pdo = new PDO("mysql:host={$host};port={$port};dbname={$database};charset=utf8mb4", $user, $pass, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
-$schema = file_get_contents(__DIR__ . '/../../public/create_tables.sql');
+$schemaPath = __DIR__ . '/../../create_tables.sql';
+if (!is_file($schemaPath)) {
+    throw new RuntimeException("Schema não encontrado em {$schemaPath}. O banco E2E ficaria vazio.");
+}
+$schema = file_get_contents($schemaPath);
 $statements = preg_split('/;\s*(?:\r?\n|$)/', preg_replace('/^\s*--.*$/m', '', $schema));
 foreach ($statements as $statement) {
     if (trim($statement) === '') continue;

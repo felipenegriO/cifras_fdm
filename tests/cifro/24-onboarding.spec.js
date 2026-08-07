@@ -122,7 +122,7 @@ test.describe.serial('Onboarding — jornada completa', () => {
     await page.fill('#senha', '123');
     await page.fill('#senha2', '123');
     await page.click('button[type="submit"]');
-    await expect(page.locator('.error')).toContainText(/pelo menos 12 caracteres/i);
+    await expect(page.locator('.error')).toContainText(/pelo menos 6 caracteres/i);
   });
 
   test('senhas divergentes são rejeitadas', async ({ page }) => {

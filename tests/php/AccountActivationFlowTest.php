@@ -39,6 +39,7 @@ final class AccountActivationFlowTest extends TestCase
         $result = $flow->handleSubmit('tok', '123', '123');
         self::assertFalse($result['ok']);
         self::assertNotNull($result['erro']);
+        self::assertFalse($result['tokenInvalido'], 'Erro de validação de senha não deve invalidar o token.');
     }
 
     public function testHandleSubmitRejeitaTokenInvalido(): void
@@ -50,6 +51,7 @@ final class AccountActivationFlowTest extends TestCase
         $result = $flow->handleSubmit('tok', 'SegredoForte!2026', 'SegredoForte!2026');
         self::assertFalse($result['ok']);
         self::assertNotNull($result['erro']);
+        self::assertTrue($result['tokenInvalido']);
     }
 
     public function testHandleSubmitSemUsuarioEncontradoRetornaOkSemSessao(): void

@@ -144,7 +144,7 @@ const cifroSync = (() => {
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
         try {
-            const res = await fetch(url, { credentials: 'same-origin', cache: 'no-store', signal: controller.signal });
+            const res = await fetch((window.APP_BASE || '') + url, { credentials: 'same-origin', cache: 'no-store', signal: controller.signal });
             if (!res.ok) throw new Error('HTTP ' + res.status);
             return await res.json();
         } finally {
@@ -217,19 +217,50 @@ const cifroSync = (() => {
         });
     }
 
-    async function load(bandaId) {
-        if (!bandaId) return false;
+    // Dedupe no nível do load() inteiro (não só do fetch dentro de sync()).
+    // Duas chamadas a load() para a mesma banda quase simultâneas (ex.: o
+    // auto-load deste módulo e uma chamada explícita da própria página)
+    // fazem cada uma sua própria leitura assíncrona em loadCached() antes
+    // de sequer chegar em sync() — sem esse dedupe aqui, a corrida entre
+    // essas duas leituras pode fazer as duas chamarem sync() em momentos
+    // diferentes o bastante para escapar do dedupe interno de sync(),
+    // duplicando a checagem de revisão a cada abertura.
+    const loadInFlight = new Map();
+
+    // O dedupe precisa cobrir a duração TOTAL do sync() disparado por baixo
+    // — não só até o momento em que load() decide "cache pronto, retornar
+    // já" — senão uma segunda chamada a load() pode chegar bem depois desse
+    // ponto (mas ainda enquanto o sync() de fundo da primeira chamada segue
+    // em andamento) e escapar do dedupe, iniciando seu próprio sync()
+    // independente. Por isso o valor PÚBLICO que load() retorna (resolvido
+    // assim que o cache local está pronto, sem esperar a rede) é separado
+    // da entrada usada para dedupe (que só sai do mapa quando o sync() de
+    // fundo realmente termina).
+    function load(bandaId) {
+        if (!bandaId) return Promise.resolve(false);
+        const existing = loadInFlight.get(bandaId);
+        if (existing) return existing.publicResult;
+        let resolvePublic;
+        const publicResult = new Promise(resolve => { resolvePublic = resolve; });
+        const fullTask = performLoad(bandaId, resolvePublic).finally(() => loadInFlight.delete(bandaId));
+        loadInFlight.set(bandaId, { fullTask, publicResult });
+        return publicResult;
+    }
+
+    async function performLoad(bandaId, resolvePublic) {
         window.CIFRO_BAND_ID = bandaId;
         const cached = await loadCached(bandaId);
         if (!isOnline()) {
             if (cached) checkOfflinePlanBanner(bandaId);
-            return cached;
+            resolvePublic(cached);
+            return;
         }
         if (cached) {
-            sync(bandaId, { throttle: true }).catch(() => {});
-            return true;
+            resolvePublic(true);
+            await sync(bandaId, { throttle: true }).catch(() => {});
+            return;
         }
-        return sync(bandaId, { force: true });
+        resolvePublic(await sync(bandaId, { force: true }));
     }
 
     function sync(bandaId, options = {}) {
@@ -262,6 +293,7 @@ const cifroSync = (() => {
                 if (Number(version.content_revision) === Number(meta.content_revision || 0)) {
                     await updateMetaChecked(bandaId, meta, Number(version.content_revision));
                     await markPrepared(bandaId);
+                    notifySyncChecked(bandaId, Number(version.content_revision));
                     return loadCached(bandaId);
                 }
             }
@@ -271,6 +303,7 @@ const cifroSync = (() => {
             await writeSnapshot(bandaId, json);
             applySnapshot(bandaId, json, Boolean(meta));
             await markPrepared(bandaId);
+            notifySyncChecked(bandaId, Number(json.content_revision));
             return true;
         } catch (error) {
             console.warn('[cifroSync] sync failed:', error);
@@ -377,9 +410,67 @@ const cifroSync = (() => {
         });
     }
 
+    // Marca que o pacote OFFLINE COMPLETO (shell do app + páginas de cada
+    // música, via service worker) foi preparado com sucesso para a revisão
+    // de conteúdo informada. Distinto de markPrepared(), que só reflete que
+    // os DADOS foram sincronizados — o shell pode nunca ter sido cacheado
+    // mesmo com os dados válidos.
+    async function markShellPrepared(bandaId, revision) {
+        const meta = await idbGet('cifro_sync_meta', bandaId);
+        const db = await openDb();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction(['cifro_bandas', 'cifro_sync_meta'], 'readwrite');
+            const bandStore = tx.objectStore('cifro_bandas');
+            const key = storageKey(bandaId);
+            const shellPreparedAt = Date.now();
+            const bandReq = bandStore.get(key);
+            bandReq.onsuccess = () => bandStore.put({
+                ...(bandReq.result || {}), banda_id: key, actual_band_id: bandaId,
+                shell_prepared_revision: Number(revision), shell_prepared_at: shellPreparedAt,
+            });
+            tx.objectStore('cifro_sync_meta').put({
+                ...(meta || {}), banda_id: key, actual_band_id: bandaId,
+                shell_prepared_revision: Number(revision), shell_prepared_at: shellPreparedAt,
+            });
+            tx.oncomplete = () => { db.close(); resolve(true); };
+            tx.onerror = () => { db.close(); reject(tx.error); };
+        });
+    }
+
+    // Dispara um evento leve toda vez que um sync (com ou sem mudança de
+    // dados) termina — offline-tools.js escuta para decidir, de forma
+    // independente, se o pacote offline completo (shell) precisa ser
+    // refeito para a revisão atual.
+    // setTimeout (não dispatch síncrono) de propósito: a preparação do
+    // shell que este evento pode disparar (probe de conectividade + várias
+    // buscas via service worker) não pode competir por I/O/agendamento do
+    // event loop com o próprio boot da página — duas chamadas independentes
+    // a load() no carregamento inicial (o auto-load deste módulo e uma
+    // chamada explícita da própria view) dependem de uma janela de tempo
+    // apertada para o dedupe interno de sync() funcionar; um despacho
+    // síncrono aqui já observou atrapalhar esse timing o bastante para
+    // fazer essa janela escapar e duplicar a checagem de revisão.
+    function notifySyncChecked(bandaId, contentRevision) {
+        setTimeout(() => {
+            document.dispatchEvent(new CustomEvent('cifro:sync-checked', { detail: { bandaId, contentRevision } }));
+        }, 0);
+    }
+
+    // Um shell é considerado pronto quando foi preparado com sucesso E para
+    // a MESMA revisão de conteúdo que os dados têm agora — se o conteúdo
+    // mudou depois do último shell preparado, o shell é considerado velho.
+    function shellReadyFor(band) {
+        return Boolean(
+            band?.shell_prepared_revision !== undefined &&
+            band?.shell_prepared_revision !== null &&
+            Number(band.shell_prepared_revision) === Number(band?.content_revision || 0)
+        );
+    }
+
     async function canUseOffline(bandaId) {
         const [band, meta] = await Promise.all([idbGet('cifro_bandas', bandaId), idbGet('cifro_sync_meta', bandaId)]);
-        return Boolean(band?.snapshot_valid && band?.prepared_at && meta?.snapshot_valid && meta?.prepared_at);
+        const dataOk = Boolean(band?.snapshot_valid && band?.prepared_at && meta?.snapshot_valid && meta?.prepared_at);
+        return dataOk && shellReadyFor(band);
     }
 
     async function getOfflineStatus(bandaId) {
@@ -388,6 +479,9 @@ const cifroSync = (() => {
             ready: Boolean(band?.snapshot_valid && band?.prepared_at),
             preparedAt: Number(band?.prepared_at || 0),
             contentRevision: Number(band?.content_revision || 0),
+            shellReady: shellReadyFor(band),
+            shellPreparedRevision: Number(band?.shell_prepared_revision ?? -1),
+            shellPreparedAt: Number(band?.shell_prepared_at || 0),
         };
     }
 
@@ -397,12 +491,17 @@ const cifroSync = (() => {
             idbGet('cifro_snapshot_current', bandaId),
             idbGet('cifro_snapshot_previous', bandaId)
         ]);
+        const contentRevision = Number(current?.content_revision ?? meta?.content_revision ?? 0);
+        const shellPreparedRevision = Number(meta?.shell_prepared_revision ?? -1);
         return {
             bandaId,
-            contentRevision: Number(current?.content_revision ?? meta?.content_revision ?? 0),
+            contentRevision,
             lastSync: Number(meta?.last_sync || 0),
             preparedAt: Number(meta?.prepared_at || 0),
             snapshotValid: Boolean(meta?.snapshot_valid),
+            shellReady: shellPreparedRevision === contentRevision,
+            shellPreparedRevision,
+            shellPreparedAt: Number(meta?.shell_prepared_at || 0),
             previousAvailable: Boolean(previous?.data),
             previousRevision: Number(previous?.content_revision || 0),
             previousSavedAt: Number(previous?.saved_at || 0),
@@ -507,6 +606,6 @@ const cifroSync = (() => {
         navigator.serviceWorker.ready.then(registration => registration.active?.postMessage({ type: 'SET_CONTEXT', userId: window.CIFRO_USER_ID, bandId: window.CIFRO_BAND_ID })).catch(() => {});
     }
 
-    return { load, sync, isOnline, getRevision, getSyncStatus, cacheBands, selectOnlineBand, selectOfflineBand, canUseOffline, getOfflineStatus, markPrepared, applyMutation, restorePreviousSnapshot };
+    return { load, sync, isOnline, getRevision, getSyncStatus, cacheBands, selectOnlineBand, selectOfflineBand, canUseOffline, getOfflineStatus, markPrepared, markShellPrepared, applyMutation, restorePreviousSnapshot };
 })();
 window.cifroSync = cifroSync;

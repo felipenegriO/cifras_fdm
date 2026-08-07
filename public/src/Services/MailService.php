@@ -3,6 +3,9 @@ use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\SMTP;
 
 class MailService {
+    /** @var string[] Transcrição SMTP bruta da última tentativa de envio (para diagnóstico). */
+    private static array $smtpDebugLog = [];
+
     private static function mailer(?string $vendorAutoload = null): PHPMailer {
         $vendorAutoload ??= __DIR__ . '/../../vendor/autoload.php';
         if (!file_exists($vendorAutoload)) {
@@ -22,6 +25,14 @@ class MailService {
         $mail->Timelimit  = (int) env('MAIL_TIMEOUT_SECONDS', 10);
         $mail->CharSet    = PHPMailer::CHARSET_UTF8;
 
+        // Captura a transcrição SMTP (comandos + respostas do servidor) para
+        // diagnosticar rejeições genéricas como "data not accepted".
+        self::$smtpDebugLog = [];
+        $mail->SMTPDebug   = SMTP::DEBUG_SERVER;
+        $mail->Debugoutput = function (string $str, int $level): void {
+            self::$smtpDebugLog[] = trim($str);
+        };
+
         $fromEmail = env('MAIL_USER', 'noreply@cifro.com.br');
         $fromName  = env('MAIL_FROM_NAME', 'Cifrô');
         $mail->setFrom($fromEmail, $fromName);
@@ -31,7 +42,7 @@ class MailService {
 
     /** Boas-vindas + link para definir senha (novo cadastro). */
     public static function sendWelcome(array $usuario, array $banda, string $token, ?PHPMailer $mail = null): void {
-        $appUrl = rtrim(env('APP_URL', 'https://cifro.com.br'), '/');
+        $appUrl = rtrim(env('APP_URL', 'https://cifro.com.br'), '/') . app_base();
         $link   = $appUrl . '/definir-senha.php?token=' . urlencode($token);
 
         $mail ??= self::mailer();
@@ -51,7 +62,7 @@ class MailService {
 
     /** Convite quando admin cria usuário pelo painel. */
     public static function sendInvite(array $usuario, array $banda, string $token, ?PHPMailer $mail = null): void {
-        $appUrl = rtrim(env('APP_URL', 'https://cifro.com.br'), '/');
+        $appUrl = rtrim(env('APP_URL', 'https://cifro.com.br'), '/') . app_base();
         $link   = $appUrl . '/definir-senha.php?token=' . urlencode($token);
 
         $mail ??= self::mailer();
@@ -71,7 +82,7 @@ class MailService {
 
     /** Reset de senha. */
     public static function sendPasswordReset(array $usuario, string $token, ?PHPMailer $mail = null): void {
-        $appUrl = rtrim(env('APP_URL', 'https://cifro.com.br'), '/');
+        $appUrl = rtrim(env('APP_URL', 'https://cifro.com.br'), '/') . app_base();
         $link   = $appUrl . '/reset-senha.php?token=' . urlencode($token);
 
         $mail ??= self::mailer();
@@ -91,7 +102,7 @@ class MailService {
 
     /** Confirmação de pagamento / assinatura ativada. */
     public static function sendPaymentConfirmation(array $usuario, array $banda, string $plano, string $validade, ?PHPMailer $mail = null): void {
-        $appUrl   = rtrim(env('APP_URL', 'https://cifro.online'), '/');
+        $appUrl   = rtrim(env('APP_URL', 'https://cifro.online'), '/') . app_base();
         $planoLabel = match($plano) {
             'mensal'    => 'Mensal',
             'semestral' => 'Semestral',
@@ -118,7 +129,7 @@ class MailService {
 
     /** Lembrete de renovação (disparado por invoice.upcoming, ~7 dias antes). */
     public static function sendPaymentReminder(array $usuario, array $banda, string $plano, string $dataRenovacao, ?PHPMailer $mail = null): void {
-        $appUrl = rtrim(env('APP_URL', 'https://cifro.online'), '/');
+        $appUrl = rtrim(env('APP_URL', 'https://cifro.online'), '/') . app_base();
         $planoLabel = match($plano) {
             'mensal'    => 'Mensal',
             'semestral' => 'Semestral',
@@ -144,7 +155,7 @@ class MailService {
 
     /** Aviso de plano expirado. */
     public static function sendPlanExpired(array $usuario, array $banda, ?PHPMailer $mail = null): void {
-        $appUrl = rtrim(env('APP_URL', 'https://cifro.online'), '/');
+        $appUrl = rtrim(env('APP_URL', 'https://cifro.online'), '/') . app_base();
 
         $mail ??= self::mailer();
         $mail->addAddress($usuario['email'], $usuario['nome']);
@@ -168,6 +179,14 @@ class MailService {
             OperationalLogger::log('info', 'email.sent', ['provider' => 'smtp', 'operation' => $operation, 'result' => 'success']);
         } catch (Throwable $error) {
             OperationalLogger::log('error', 'email.failed', ['provider' => 'smtp', 'operation' => $operation, 'result' => 'failed', 'error_type' => get_class($error)]);
+            if (class_exists('ErrorLogger')) {
+                ErrorLogger::log(
+                    'SMTP rejeitou o envio: ' . $error->getMessage(),
+                    'MailService::sendLogged:' . $operation,
+                    'error',
+                    ['smtp_transcript' => self::$smtpDebugLog]
+                );
+            }
             throw $error;
         }
     }

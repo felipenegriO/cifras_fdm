@@ -532,6 +532,9 @@ input[type="range"]:not(.unstyled) {
 .empty-state__title { font-size: var(--text-lg); color: var(--text-1); margin: 0 0 var(--space-2); font-weight: var(--fw-semibold); }
 .empty-state__desc { margin: 0 0 var(--space-4); font-size: var(--text-sm); }
 
+/* ===== Bootstrap modals: fundo sempre branco, então força texto escuro ===== */
+#betaWelcomeModal .modal-content { color: var(--text-inverse); }
+
 /* ===== Foco acessível ===== */
 :focus-visible {
     outline: 2px solid var(--brand);

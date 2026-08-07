@@ -431,6 +431,7 @@ $configPlanoLabel = $configPlano === 'ativo' ? 'Mensal' : cifro_plan_label($conf
     <script>window.CIFRO_USER_ID = '<?= e($usuario['id'] ?? '') ?>';</script>
     <script src="<?= asset_url('/src/js/cifro-connectivity.js') ?>"></script>
     <script src="<?= asset_url('/src/js/cifro-sync.js') ?>"></script>
+    <script src="<?= asset_url('/src/js/offline-tools.js') ?>"></script>
     <script>
         window.CIFRO_BAND_ID = '<?= e(current_band_id()) ?>';
         // Config vinda do servidor (PHP → JS)
@@ -594,7 +595,7 @@ $configPlanoLabel = $configPlano === 'ativo' ? 'Mensal' : cifro_plan_label($conf
                 var btn = document.getElementById('btnSyncDados');
                 if (btn) { btn.disabled = true; btn.textContent = 'Sincronizando…'; }
                 try {
-                    var ok = await cifroSync.sync(window.CIFRO_BAND_ID);
+                    var ok = await window.OfflineTools.forceSync(window.CIFRO_BAND_ID);
                     cifroToast && cifroToast(ok ? 'Dados sincronizados!' : 'Servidor indisponível. Seus dados locais foram mantidos; tente sincronizar novamente mais tarde.', ok ? 'success' : 'error', { duration: 4000 });
                 } finally {
                     if (btn) { btn.disabled = false; btn.innerHTML = '<?= addslashes(cifro_icon('refresh', 14)) ?> Sincronizar'; }

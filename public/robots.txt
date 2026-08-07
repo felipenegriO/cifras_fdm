@@ -1,0 +1,28 @@
+User-agent: *
+Allow: /$
+Allow: /landing.php
+Allow: /login.php
+Allow: /register.php
+Allow: /termos.php
+Allow: /privacidade.php
+
+# Área autenticada — nada aqui é útil para busca
+Disallow: /index.php
+Disallow: /music.php
+Disallow: /roteiro.php
+Disallow: /categorias.php
+Disallow: /bandas.php
+Disallow: /users.php
+Disallow: /plano.php
+Disallow: /tom.php
+Disallow: /select-banda.php
+Disallow: /config.php
+Disallow: /definir-senha.php
+Disallow: /reset-senha.php
+Disallow: /esqueci-senha.php
+Disallow: /api/
+Disallow: /src/
+Disallow: /storage/
+Disallow: /vendor/
+
+Sitemap: https://cifro.online/sitemap.xml

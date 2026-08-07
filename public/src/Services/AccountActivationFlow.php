@@ -27,18 +27,18 @@ class AccountActivationFlow
     /**
      * POST: validates the new password, activates the account, and builds
      * the session data for auto-login.
-     * @return array{erro: ?string, ok: bool, session: ?array, redirect: ?string}
+     * @return array{erro: ?string, ok: bool, session: ?array, redirect: ?string, tokenInvalido: bool}
      */
     public function handleSubmit(string $token, string $senha, string $senha2): array
     {
         $erro = PasswordResetValidator::validateNewPassword($senha, $senha2);
         if ($erro !== null) {
-            return ['erro' => $erro, 'ok' => false, 'session' => null, 'redirect' => null];
+            return ['erro' => $erro, 'ok' => false, 'session' => null, 'redirect' => null, 'tokenInvalido' => false];
         }
 
         $userId = $this->users->consumeToken($token);
         if (!$userId) {
-            return ['erro' => 'Link inválido ou expirado. Solicite um novo.', 'ok' => false, 'session' => null, 'redirect' => null];
+            return ['erro' => 'Link inválido ou expirado. Solicite um novo.', 'ok' => false, 'session' => null, 'redirect' => null, 'tokenInvalido' => true];
         }
 
         $hash = password_hash($senha, PASSWORD_DEFAULT);
@@ -46,7 +46,7 @@ class AccountActivationFlow
 
         $user = $this->users->findById($userId);
         if (!$user) {
-            return ['erro' => null, 'ok' => true, 'session' => null, 'redirect' => null];
+            return ['erro' => null, 'ok' => true, 'session' => null, 'redirect' => null, 'tokenInvalido' => false];
         }
 
         $bandasDoUsuario = $this->users->getBandasDoUsuario($userId);
@@ -79,6 +79,6 @@ class AccountActivationFlow
             }
         }
 
-        return ['erro' => null, 'ok' => true, 'session' => $session, 'redirect' => $redirect];
+        return ['erro' => null, 'ok' => true, 'session' => $session, 'redirect' => $redirect, 'tokenInvalido' => false];
     }
 }

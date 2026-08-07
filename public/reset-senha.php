@@ -7,6 +7,8 @@ $ok    = false;
 $repo  = new UserRepository();
 $flow  = new PasswordResetFlow($repo);
 
+$tokenInvalido = false;
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     require_csrf();
     $senha  = $_POST['senha']  ?? '';
@@ -15,6 +17,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $result = $flow->handleSubmit($token, $senha, $senha2);
     $erro = $result['erro'];
     $ok = $result['ok'];
+    $tokenInvalido = $result['tokenInvalido'];
     if ($ok) {
         // Invalidate any existing session for this user
         if (session_status() === PHP_SESSION_ACTIVE && !headers_sent()) {
@@ -24,6 +27,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 } else {
     $erro = $flow->checkTokenForDisplay($token) ?? '';
+    $tokenInvalido = $erro !== '';
 }
 ?>
 <!DOCTYPE html>
@@ -62,25 +66,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         Senha redefinida com sucesso!<br>
         <a href="/login.php" style="color:#7c3aed">Entrar agora</a>
       </p>
-    <?php elseif ($erro): ?>
+    <?php elseif ($tokenInvalido): ?>
       <div class="error"><?= htmlspecialchars($erro) ?></div>
       <div class="link"><a href="/esqueci-senha.php">Solicitar novo link</a></div>
     <?php else: ?>
-      <form method="post" novalidate>
+      <?php if ($erro): ?>
+        <div class="error" id="server-erro"><?= htmlspecialchars($erro) ?></div>
+      <?php endif; ?>
+      <form method="post" novalidate id="senha-form">
         <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(csrf_token()) ?>">
         <input type="hidden" name="token" value="<?= htmlspecialchars($token) ?>">
 
         <div class="form-group">
           <label for="senha">Nova senha</label>
-          <input type="password" id="senha" name="senha" placeholder="Mínimo 12 caracteres" minlength="12" autocomplete="new-password" required>
+          <input type="password" id="senha" name="senha" placeholder="Mínimo 6 caracteres" minlength="6" autocomplete="new-password" required>
         </div>
         <div class="form-group">
           <label for="senha2">Confirmar senha</label>
           <input type="password" id="senha2" name="senha2" placeholder="Repita a senha" required>
         </div>
+        <div class="error" id="client-erro" style="display:none"></div>
 
         <button type="submit" class="btn">Salvar nova senha</button>
       </form>
+      <script>
+        document.getElementById('senha-form').addEventListener('submit', function (e) {
+          var senha = document.getElementById('senha').value;
+          var senha2 = document.getElementById('senha2').value;
+          var erroEl = document.getElementById('client-erro');
+          var msg = '';
+          if (senha.length < 6) {
+            msg = 'A senha deve ter pelo menos 6 caracteres.';
+          } else if (senha !== senha2) {
+            msg = 'As senhas não coincidem.';
+          }
+          if (msg) {
+            e.preventDefault();
+            erroEl.textContent = msg;
+            erroEl.style.display = 'block';
+          } else {
+            erroEl.style.display = 'none';
+          }
+        });
+      </script>
     <?php endif; ?>
 
     <div class="link"><a href="/login.php">← Voltar ao login</a></div>

@@ -1,5 +1,5 @@
 (function () {
-  const api = '/src/backend/categorias/api.php';
+  const api = (window.APP_BASE || '') + '/src/backend/categorias/api.php';
   const form = document.getElementById('categoryForm');
   const idInput = document.getElementById('categoryId');
   const nameInput = document.getElementById('categoryName');

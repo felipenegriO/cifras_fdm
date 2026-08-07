@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<style>
+  @font-face { font-family:'Inter'; font-weight:400; font-display:block;
+    src:url('../../public/src/fonts/inter/Inter-Regular.woff2') format('woff2'); }
+  @font-face { font-family:'Inter'; font-weight:700; font-display:block;
+    src:url('../../public/src/fonts/inter/Inter-Bold.woff2') format('woff2'); }
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { width:1200px; height:630px; background:#0f0f0f; font-family:'Inter',sans-serif;
+         color:#f1f1f1; overflow:hidden; position:relative; }
+
+  .glow { position:absolute; width:900px; height:900px; border-radius:50%;
+          background:radial-gradient(circle, rgba(124,58,237,.28) 0%, rgba(124,58,237,0) 62%);
+          top:-360px; right:-260px; }
+
+  .frame { position:relative; height:100%; padding:72px 80px;
+           display:flex; flex-direction:column; justify-content:space-between; }
+
+  .mark { display:flex; align-items:center; gap:16px; }
+  .mark-dot { width:44px; height:44px; border-radius:12px; background:#7c3aed;
+              display:flex; align-items:center; justify-content:center;
+              font-size:24px; font-weight:700; color:#fff; }
+  .mark-name { font-size:30px; font-weight:700; letter-spacing:-.4px; }
+
+  h1 { font-size:78px; line-height:1.06; font-weight:700; letter-spacing:-2.4px; max-width:960px; }
+  h1 em { font-style:normal; color:#a78bfa; }
+
+  p { margin-top:26px; font-size:29px; line-height:1.4; color:#b4b4b4; max-width:900px; }
+
+  .foot { display:flex; align-items:center; gap:18px; font-size:24px; color:#8f8f8f; }
+  .pill { background:rgba(124,58,237,.16); border:1px solid rgba(124,58,237,.42);
+          color:#c4b5fd; padding:9px 22px; border-radius:999px; font-size:22px; font-weight:700; }
+</style>
+</head>
+<body>
+  <div class="glow"></div>
+  <div class="frame">
+    <div class="mark">
+      <div class="mark-dot">C</div>
+      <div class="mark-name">Cifrô</div>
+    </div>
+
+    <div>
+      <h1>Acabou o <em>"qual tom mesmo?"</em></h1>
+      <p>Cifras, repertório e modo ao vivo para a banda inteira — cada um no próprio celular.</p>
+    </div>
+
+    <div class="foot">
+      <span class="pill">Plano grátis</span>
+      <span>cifro.online</span>
+    </div>
+  </div>
+</body>
+</html>

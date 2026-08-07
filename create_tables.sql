@@ -14,6 +14,10 @@ CREATE TABLE IF NOT EXISTS bandas (
   trial_expira_em DATE    DEFAULT NULL,
   stripe_subscription_id VARCHAR(100) DEFAULT NULL,
   plano_expira_em        DATETIME    DEFAULT NULL,
+  -- Cancelamento self-service: marcado quando o administrador pede o
+  -- cancelamento. A assinatura segue ativa até plano_expira_em; quem faz o
+  -- downgrade de fato é o webhook customer.subscription.deleted do Stripe.
+  cancelamento_agendado_em DATETIME  DEFAULT NULL,
   criado_em TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   UNIQUE KEY uq_bandas_stripe_subscription (stripe_subscription_id)
@@ -31,7 +35,10 @@ CREATE TABLE IF NOT EXISTS band_sync_state (
 CREATE TABLE IF NOT EXISTS usuarios (
   id         CHAR(36)     NOT NULL,
   nome       VARCHAR(120) NOT NULL,
-  email      VARCHAR(180) NOT NULL,
+  -- Nulo é permitido de propósito: membros adicionados à banda pelo gestor
+  -- podem não ter e-mail (UserRepository::saveToBanda grava NULL quando vazio).
+  -- MySQL aceita vários NULL numa UNIQUE KEY, então uq_email continua válido.
+  email      VARCHAR(180) DEFAULT NULL,
   senha_hash VARCHAR(255) DEFAULT NULL,
   perfil     ENUM('master','usuario') NOT NULL DEFAULT 'usuario',
   ativo      TINYINT(1)   NOT NULL DEFAULT 1,
@@ -187,6 +194,25 @@ CREATE TABLE IF NOT EXISTS stripe_webhook_resources (
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- Log de erros da aplicação (ErrorLogger / api/log-js-error.php).
+CREATE TABLE IF NOT EXISTS app_error_logs (
+  id         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  nivel      ENUM('error','warning','info') NOT NULL DEFAULT 'error',
+  referencia VARCHAR(255) NOT NULL DEFAULT '',
+  descricao  VARCHAR(500) NOT NULL,
+  detalhes   JSON         DEFAULT NULL,
+  criado_em  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  INDEX idx_app_error_logs_criado (criado_em),
+  INDEX idx_app_error_logs_nivel (nivel)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- ── Migração de planos: executar em bases já existentes ──────────────────────
 UPDATE bandas SET plano = 'gratuito', trial_expira_em = NULL WHERE plano = 'trial';
 ALTER TABLE bandas MODIFY COLUMN plano ENUM('trial','gratuito','mensal','semestral','anual','bloqueado','ativo','basico','banda') NOT NULL DEFAULT 'gratuito';
+
+-- ── Cancelamento self-service: executar em bases já existentes ───────────────
+ALTER TABLE bandas ADD COLUMN cancelamento_agendado_em DATETIME DEFAULT NULL;
+
+-- ── Membro de banda sem e-mail: executar em bases já existentes ──────────────
+ALTER TABLE usuarios MODIFY COLUMN email VARCHAR(180) DEFAULT NULL;
