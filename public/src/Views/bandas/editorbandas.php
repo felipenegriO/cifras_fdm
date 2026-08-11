@@ -46,6 +46,10 @@
     .form-group input, .form-group select { width: 100%; height: 38px; padding: 0 10px; box-sizing: border-box; background: var(--bg-1); color: var(--text-1); border: 1px solid var(--border-1); border-radius: var(--radius-sm); font-family: inherit; font-size: var(--text-sm); }
     .form-group input:focus, .form-group select:focus { outline: none; border-color: var(--border-2); }
     .form-hint { font-size: 11px; color: var(--text-3); margin-top: 4px; }
+    .logo-editor { display: flex; align-items: center; gap: 12px; }
+    .logo-preview { width: 64px; height: 64px; border-radius: var(--radius-sm); border: 1px solid var(--border-1); background: var(--bg-1); object-fit: contain; }
+    .logo-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    #bandaLogoInput { display: none; }
     .modal-footer { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 20px; justify-content: flex-end; }
 
     .btn-icon-sm { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: var(--radius-sm); border: 1px solid var(--border-1); background: var(--bg-3); color: var(--text-2); cursor: pointer; transition: background var(--t-fast), color var(--t-fast); padding: 0; flex-shrink: 0; }
@@ -82,6 +86,21 @@
       </div>
 
       <div class="form-group">
+        <label>Logo da banda</label>
+        <div class="logo-editor">
+          <img id="bandaLogoPreview" class="logo-preview" src="<?= e(asset_url('/src/images/cifro-mark.svg')) ?>" alt="Prévia do logo">
+          <div>
+            <div class="logo-actions">
+              <button type="button" class="btn btn--secondary btn--sm" onclick="document.getElementById('bandaLogoInput').click()">Escolher imagem</button>
+              <button type="button" class="btn btn--ghost btn--sm" onclick="removerLogo()">Remover</button>
+            </div>
+            <div class="form-hint">PNG, JPEG ou WebP. A imagem será reduzida para 64 × 64.</div>
+          </div>
+          <input id="bandaLogoInput" type="file" accept="image/png,image/jpeg,image/webp">
+        </div>
+      </div>
+
+      <div class="form-group">
         <label for="bandaAtivo">Status</label>
         <select id="bandaAtivo">
           <option value="1">Ativo</option>
@@ -107,9 +126,11 @@
   </div>
 
 <script>
-const API = '/src/backend/bandas/salvar_banda.php';
+const API = (window.APP_BASE || '') + '/src/backend/bandas/salvar_banda.php';
+const DEFAULT_BAND_LOGO = <?= json_encode(asset_url('/src/images/cifro-mark.svg'), JSON_UNESCAPED_SLASHES) ?>;
 let bandas = [];
 let bandaAtualId = null;
+let bandaLogo = null;
 
 const PLANO_LABELS = { trial: 'Gratuito', gratuito: 'Gratuito', mensal: 'Mensal', semestral: 'Semestral', anual: 'Anual', bloqueado: 'Bloqueado', ativo: 'Mensal' };
 const PLANO_TAG    = { trial: 'tag-gratuito', gratuito: 'tag-gratuito', mensal: 'tag-banda', semestral: 'tag-banda', anual: 'tag-banda', bloqueado: 'tag-bloqueado', ativo: 'tag-banda' };
@@ -144,7 +165,7 @@ function renderListaBandas() {
     const plano = b.plano === 'trial' ? 'gratuito' : (b.plano || 'gratuito');
     const li = document.createElement('li');
     li.className = 'banda-row';
-    const logo = b.logo || '/src/images/cifro-mark.svg';
+    const logo = resolverLogo(b.logo);
     li.innerHTML = `
       <img class="banda-logo" src="${escapeHtml(logo)}" alt="">
       <div class="banda-info">
@@ -184,6 +205,7 @@ function abrirModalNova() {
   document.getElementById('modalTitle').textContent = 'Nova Banda';
   document.getElementById('bandaNome').value = '';
   document.getElementById('bandaAtivo').value = '1';
+  definirLogo(null);
   document.getElementById('btnDeletar').style.display = 'none';
   mostrarPlano('gratuito', true);
   document.getElementById('modalOverlay').classList.add('open');
@@ -197,6 +219,7 @@ function abrirModalEditar(id) {
   document.getElementById('modalTitle').textContent = 'Editar Banda';
   document.getElementById('bandaNome').value = b.nome || '';
   document.getElementById('bandaAtivo').value = (!!b.ativo && String(b.ativo) !== '0') ? '1' : '0';
+  definirLogo(b.logo || null);
   document.getElementById('btnDeletar').style.display = '';
   mostrarPlano(b.plano);
   document.getElementById('modalOverlay').classList.add('open');
@@ -220,6 +243,7 @@ async function salvarBanda() {
     id: bandaAtualId || undefined,
     nome,
     ativo: parseInt(document.getElementById('bandaAtivo').value, 10),
+    logo: bandaLogo,
     trial_expira_em: null,
   };
 
@@ -227,6 +251,10 @@ async function salvarBanda() {
     const res = await cifroFetch(API, payload);
     if (res.sucesso) {
       cifroToast('Banda salva!', 'success');
+      if (bandaAtualId && bandaAtualId === window.CIFRO_BAND_ID) {
+        const chipLogo = document.querySelector('.topnav__band-logo');
+        if (chipLogo) chipLogo.src = bandaLogo || DEFAULT_BAND_LOGO;
+      }
       fecharModal();
       if (!bandaAtualId && res.id) {
         await selecionarBandaParaPagamento(res.id);
@@ -240,6 +268,57 @@ async function salvarBanda() {
     cifroToast('Erro ao salvar.', 'error');
   }
 }
+
+function resolverLogo(logo) {
+  if (!logo) return DEFAULT_BAND_LOGO;
+  if (String(logo).startsWith('/') && !String(logo).startsWith((window.APP_BASE || '') + '/')) {
+    return (window.APP_BASE || '') + logo;
+  }
+  return logo;
+}
+
+function definirLogo(valor) {
+  bandaLogo = valor || null;
+  document.getElementById('bandaLogoPreview').src = resolverLogo(bandaLogo);
+  document.getElementById('bandaLogoInput').value = '';
+}
+
+function removerLogo() {
+  definirLogo(null);
+}
+
+document.getElementById('bandaLogoInput').addEventListener('change', async function () {
+  const file = this.files?.[0];
+  if (!file) return;
+  if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
+    cifroToast('Formato de imagem inválido.', 'error');
+    this.value = '';
+    return;
+  }
+  try {
+    const image = await new Promise((resolve, reject) => {
+      const element = new Image();
+      element.onload = () => resolve(element);
+      element.onerror = () => reject(new Error('Imagem inválida'));
+      const reader = new FileReader();
+      reader.onload = () => { element.src = String(reader.result || ''); };
+      reader.onerror = () => reject(new Error('Falha ao ler imagem'));
+      reader.readAsDataURL(file);
+    });
+    const canvas = document.createElement('canvas');
+    canvas.width = 64;
+    canvas.height = 64;
+    const ctx = canvas.getContext('2d');
+    const scale = Math.min(64 / image.naturalWidth, 64 / image.naturalHeight);
+    const width = Math.max(1, Math.round(image.naturalWidth * scale));
+    const height = Math.max(1, Math.round(image.naturalHeight * scale));
+    ctx.drawImage(image, Math.round((64 - width) / 2), Math.round((64 - height) / 2), width, height);
+    definirLogo(canvas.toDataURL('image/webp', 0.8));
+  } catch (e) {
+    cifroToast('Não foi possível processar a imagem.', 'error');
+    this.value = '';
+  }
+});
 
 async function selecionarBandaParaPagamento(id) {
   const res = await cifroFetch('/src/backend/bandas/selecionar.php', { bandaId: id });

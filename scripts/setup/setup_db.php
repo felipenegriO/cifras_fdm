@@ -40,11 +40,12 @@ SET NAMES utf8mb4;
 CREATE TABLE IF NOT EXISTS bandas (
   id        CHAR(36)      NOT NULL,
   nome      VARCHAR(120)  NOT NULL,
-  logo      VARCHAR(255)  DEFAULT NULL,
+  logo      MEDIUMTEXT    DEFAULT NULL,
   ativo     TINYINT(1)    NOT NULL DEFAULT 1,
   plano     ENUM('trial','gratuito','mensal','semestral','anual','bloqueado','ativo','basico','banda') NOT NULL DEFAULT 'gratuito',
   trial_expira_em DATE    DEFAULT NULL,
   stripe_subscription_id VARCHAR(100) DEFAULT NULL,
+  criador_id CHAR(36) DEFAULT NULL,
   criado_em TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -68,7 +69,7 @@ CREATE TABLE IF NOT EXISTS usuarios (
 CREATE TABLE IF NOT EXISTS usuario_banda (
   usuario_id CHAR(36) NOT NULL,
   banda_id   CHAR(36) NOT NULL,
-  perfil     ENUM('administrador','gestor','basico') NOT NULL DEFAULT 'basico',
+  perfil     ENUM('administrador','gestor','basico','externo') NOT NULL DEFAULT 'basico',
   PRIMARY KEY (usuario_id, banda_id),
   FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE,
   FOREIGN KEY (banda_id)   REFERENCES bandas(id)   ON DELETE CASCADE
@@ -176,6 +177,10 @@ foreach ($statements as $stmt) {
         $erros++;
     }
 }
+
+require __DIR__ . '/migrate_banda_criador.php';
+require __DIR__ . '/migrate_banda_logo.php';
+require __DIR__ . '/migrate_usuario_banda_externo.php';
 
 echo "\n--- Resultado: $ok criadas, $erros erros ---\n\n";
 

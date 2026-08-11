@@ -137,3 +137,43 @@ test.describe('Controles de Cifra', () => {
     await expect(page.locator('body')).not.toHaveClass(/cifro-presenting/);
   });
 });
+
+test.describe('Barra de controles no celular', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.addInitScript(() => {
+      if (sessionStorage.getItem('__quickBarTestStarted') === '1') return;
+      localStorage.removeItem('musicShowQuickBar');
+      sessionStorage.setItem('__quickBarTestStarted', '1');
+    });
+  });
+
+  test('vem ativada por padrão no primeiro acesso', async ({ page }) => {
+    const id = await validSongId(page);
+    await page.goto(`/music.php?id=${encodeURIComponent(id)}`, { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('#showQuickBar')).toBeChecked();
+    await expect(page.locator('#musicQuickBar')).toBeVisible();
+    await expect(page.locator('body')).toHaveClass(/has-quick-bar/);
+  });
+
+  test('lembra quando o usuário desativa e não reserva espaço no rodapé', async ({ page }) => {
+    const id = await validSongId(page);
+    await page.goto(`/music.php?id=${encodeURIComponent(id)}`, { waitUntil: 'domcontentloaded' });
+    await page.locator('#menuButton').click();
+    await expect(page.locator('#menusideMenu')).toHaveAttribute('aria-hidden', 'false');
+    await page.locator('#showQuickBar').uncheck();
+    await expect(page.locator('#musicQuickBar')).toBeHidden();
+    expect(await page.evaluate(() => localStorage.getItem('musicShowQuickBar'))).toBe('0');
+
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.locator('#showQuickBar')).not.toBeChecked();
+    await expect(page.locator('#musicQuickBar')).toBeHidden();
+    await expect(page.locator('body')).not.toHaveClass(/has-quick-bar/);
+    const spacing = await page.evaluate(() => ({
+      content: parseFloat(getComputedStyle(document.querySelector('.music-content')).paddingBottom),
+      cifra: parseFloat(getComputedStyle(document.getElementById('song-cifra')).paddingBottom),
+    }));
+    expect(spacing.content).toBeLessThanOrEqual(20);
+    expect(spacing.cifra).toBe(0);
+  });
+});

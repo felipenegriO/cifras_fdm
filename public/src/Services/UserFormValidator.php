@@ -6,7 +6,7 @@
  */
 class UserFormValidator
 {
-    private const PERFIS_VALIDOS = ['administrador', 'gestor', 'basico'];
+    private const PERFIS_VALIDOS = ['administrador', 'gestor', 'basico', 'externo'];
 
     public static function isPerfilValido(string $perfil): bool
     {

@@ -14,7 +14,7 @@ POST em `/api/bandas/criar.php` aceita nome de até 120 caracteres. O usuário c
 
 ## F-009 Membros
 
-Administrador da banda pode listar membros, criar ou editar, importar usuário existente, procurar usuários externos, remover vínculo e reenviar convite. Um membro não pode remover a si próprio. Perfis aceitos: `administrador`, `gestor`, `basico`.
+Administrador da banda pode listar membros, criar ou editar, importar usuário existente, procurar usuários externos, remover vínculo e reenviar convite. Um membro não pode remover a si próprio. Perfis aceitos: `administrador`, `gestor`, `basico`, `externo`; o último é convidado de acompanhamento e não recebe capacidades administrativas ou de edição.
 
 Campos: nome, username, e-mail opcional, senha opcional, atividade, validade e papel na banda. Username aceita letras, números, ponto, hífen e underscore.
 

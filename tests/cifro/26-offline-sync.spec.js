@@ -540,6 +540,119 @@ test('primeira sincronização de uma banda nova não causa erro', async ({ page
   expect(result).toBe(true);
 });
 
+test('deduplica preparação offline concorrente e reaproveita músicas já armazenadas', async ({ page, context }) => {
+  await page.goto('/index.php');
+  await page.evaluate(() => cifroSync.sync(window.CIFRO_BAND_ID, { force: true }));
+  const input = await page.evaluate(async () => {
+    const registration = await navigator.serviceWorker.ready;
+    const version = await cifroSync.getRevision(window.CIFRO_BAND_ID);
+    const songs = window.songs.slice(0, 3).map(song => ({ id: song.id, token: JSON.stringify(song) }));
+    const meta = await caches.open('cifro-meta');
+    for (const request of await meta.keys()) {
+      if (request.url.includes('/__cifro_prepare__/') || request.url.includes('/__cifro_songs__/')) await meta.delete(request);
+    }
+    for (const name of await caches.keys()) {
+      if (name.startsWith('cifro-pages-')) await caches.delete(name);
+    }
+    return { userId: window.CIFRO_USER_ID, bandId: window.CIFRO_BAND_ID, contentRevision: version, songs, worker: Boolean(registration.active) };
+  });
+  test.skip(!input.songs.length || !input.worker, 'Sem músicas ou Service Worker para validar.');
+
+  const requests = new Map();
+  context.on('request', request => {
+    const url = new URL(request.url());
+    if (!url.pathname.endsWith('/music.php')) return;
+    const id = url.searchParams.get('id');
+    if (input.songs.some(song => String(song.id) === id)) requests.set(id, (requests.get(id) || 0) + 1);
+  });
+
+  const result = await page.evaluate(async payload => {
+    const worker = (await navigator.serviceWorker.ready).active;
+    const start = () => new Promise(resolve => {
+      const channel = new MessageChannel();
+      channel.port1.onmessage = event => {
+        if (event.data?.state === 'completed' || event.data?.state === 'failed') resolve(event.data);
+      };
+      worker.postMessage({ type: 'PREPARE_OFFLINE', ...payload }, [channel.port2]);
+    });
+    return Promise.all([start(), start()]);
+  }, input);
+
+  expect(result.every(item => item.ok && item.state === 'completed')).toBeTruthy();
+  for (const song of input.songs) expect(requests.get(String(song.id)) || 0).toBe(1);
+
+  await page.evaluate(payload => new Promise(resolve => {
+    const channel = new MessageChannel();
+    channel.port1.onmessage = event => resolve(event.data);
+    navigator.serviceWorker.controller.postMessage({ type: 'PREPARE_OFFLINE', ...payload }, [channel.port2]);
+  }), input);
+  for (const song of input.songs) expect(requests.get(String(song.id)) || 0).toBe(1);
+});
+
+test('sincroniza somente a música criada e depois sua exclusão', async ({ page }) => {
+  dbQuery(`CREATE TABLE IF NOT EXISTS sync_changes (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    banda_id CHAR(36) NOT NULL,
+    revision BIGINT UNSIGNED NOT NULL,
+    entity_type ENUM('musica','playlist','roteiro','categoria') NOT NULL,
+    entity_id INT NOT NULL DEFAULT 0,
+    operation ENUM('upsert','delete','replace') NOT NULL,
+    criado_em TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id), INDEX idx_sync_changes_banda_revision (banda_id, revision),
+    FOREIGN KEY (banda_id) REFERENCES bandas(id) ON DELETE CASCADE
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+  await page.goto('/index.php');
+  await page.evaluate(() => cifroSync.sync(window.CIFRO_BAND_ID, { force: true }));
+  const token = (await (await page.request.get('/api/csrf.php')).json()).csrf_token;
+  const headers = { 'Content-Type': 'application/json', 'X-CSRF-Token': token };
+  const before = await (await page.request.get('/api/sync/version.php')).json();
+  let songId = null;
+  let deleted = false;
+  try {
+    const createdResponse = await page.request.post('/src/backend/editor/api.php', {
+      headers,
+      data: JSON.stringify({ nome: `__DELTA_${Date.now()}__`, cifra: '[C]Linha', artista: 'E2E', bit: '', classificacao: '', baseRevision: before.content_revision })
+    });
+    expect(createdResponse.ok()).toBeTruthy();
+    const created = await createdResponse.json();
+    songId = created.id;
+    const deltaCreated = await (await page.request.get(`/api/sync/changes.php?since=${before.content_revision}`)).json();
+    expect(deltaCreated.full_sync_required).toBe(false);
+    expect(deltaCreated.changes.musicas.upsert.map(item => Number(item.id))).toEqual([Number(songId)]);
+    expect(deltaCreated.changes.musicas.deleted).toEqual([]);
+    let incrementalRequests = 0;
+    let fullRequests = 0;
+    page.on('request', request => {
+      if (request.url().includes('/api/sync/changes.php')) incrementalRequests++;
+      if (request.url().includes('/api/sync/data.php')) fullRequests++;
+    });
+    expect(await page.evaluate(() => cifroSync.sync(window.CIFRO_BAND_ID))).toBeTruthy();
+    expect(await page.evaluate(id => window.songs.some(song => Number(song.id) === Number(id)), songId)).toBe(true);
+    expect(incrementalRequests).toBe(1);
+    expect(fullRequests).toBe(0);
+
+    const deleteResponse = await page.request.post('/src/backend/editor/api.php', {
+      headers,
+      data: JSON.stringify({ action: 'delete', id: songId, baseRevision: created.content_revision })
+    });
+    expect(deleteResponse.ok()).toBeTruthy();
+    deleted = true;
+    const deltaDeleted = await (await page.request.get(`/api/sync/changes.php?since=${created.content_revision}`)).json();
+    expect(deltaDeleted.full_sync_required).toBe(false);
+    expect(deltaDeleted.changes.musicas.upsert).toEqual([]);
+    expect(deltaDeleted.changes.musicas.deleted).toEqual([Number(songId)]);
+    expect(await page.evaluate(() => cifroSync.sync(window.CIFRO_BAND_ID))).toBeTruthy();
+    expect(await page.evaluate(id => window.songs.some(song => Number(song.id) === Number(id)), songId)).toBe(false);
+    expect(incrementalRequests).toBe(2);
+    expect(fullRequests).toBe(0);
+  } finally {
+    if (songId && !deleted) {
+      const current = await (await page.request.get('/api/sync/version.php')).json();
+      await page.request.post('/src/backend/editor/api.php', { headers, data: JSON.stringify({ action: 'delete', id: songId, baseRevision: current.content_revision }) });
+    }
+  }
+});
+
 test('módulo de sincronização normaliza dados corrompidos ao inicializar', async ({ page }) => {
   // cifro-sync.js roda `Array.isArray(window.songs) ? window.songs : []` (e
   // equivalentes para playlistsSalvas/roteirosSalvos/categorias) no topo do

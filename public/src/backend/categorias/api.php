@@ -25,7 +25,7 @@ try {
     $baseRevision = $data['baseRevision'] ?? null;
     if (($data['action'] ?? '') === 'delete') {
         if (!CategoriaFormValidator::isDeleteIdValido($data['id'] ?? null)) throw new RuntimeException('Categoria inválida.');
-        $mutation = $revisionRepo->mutate($bandaId, $baseRevision, fn() => $repo->delete((int)$data['id'], $bandaId));
+        $mutation = $revisionRepo->mutate($bandaId, $baseRevision, fn() => $repo->delete((int)$data['id'], $bandaId), [['type' => 'categoria', 'id' => 0, 'operation' => 'replace']]);
         echo json_encode(['ok' => true, 'content_revision' => $mutation['revision']]);
         exit;
     }
@@ -34,7 +34,9 @@ try {
     $nomeErro = CategoriaFormValidator::validateNome($nome);
     if ($nomeErro !== null) throw new RuntimeException($nomeErro);
 
-    $mutation = $revisionRepo->mutate($bandaId, $baseRevision, fn() => $repo->save(['id' => $data['id'] ?? null, 'nome' => $nome], $bandaId));
+    $changes = [['type' => 'categoria', 'id' => 0, 'operation' => 'replace']];
+    if (!empty($data['id'])) $changes[] = ['type' => 'musica', 'id' => 0, 'operation' => 'replace'];
+    $mutation = $revisionRepo->mutate($bandaId, $baseRevision, fn() => $repo->save(['id' => $data['id'] ?? null, 'nome' => $nome], $bandaId), $changes);
     echo json_encode(['ok' => true, 'id' => $mutation['result'], 'categoria' => ['id' => $mutation['result'], 'nome' => $nome], 'content_revision' => $mutation['revision']]);
 } catch (SyncConflictException $e) {
     http_response_code(409);

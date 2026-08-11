@@ -81,34 +81,36 @@ function identificarTom(html) {
     return window.CifroChords.identifyKey(html)?.key || 'Tom não identificado';
 }
 
-function mostrarToast(mensagem, corFundo) {
-    corFundo = corFundo || 'white';
-    var toast = document.getElementById('toast');
-    if (!toast) return;
-    toast.textContent = mensagem;
-    toast.style.background = corFundo;
-    toast.style.display = 'block';
-    clearTimeout(toast._timeout);
-    toast._timeout = setTimeout(function () { toast.style.display = 'none'; }, 3000);
-}
-
-function checarStatusConexao() {
-    if (window.CifroConnectivity?.isServerAvailable()) {
-        var toast = document.getElementById('toast');
-        if (toast && toast.textContent.indexOf('Servidor indisponível') !== -1) toast.style.display = 'none';
-    } else {
-        mostrarToast('Servidor indisponível — usando a versão local ⚠️', '#e74c3c');
-    }
-}
-
-window.addEventListener('online', function () {
-    checarStatusConexao();
-});
-window.addEventListener('offline', checarStatusConexao);
-document.addEventListener('cifro:connectivity', checarStatusConexao);
 
 
 if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/service-worker.js').catch(() => {});
+    const configuredBase = String(window.APP_BASE || '').replace(/\/$/, '');
+    const scriptUrl = document.currentScript?.src || Array.from(document.scripts).map(script => script.src).find(src => /\/src\/js\/script\.js(?:[?#]|$)/.test(src)) || '';
+    const inferredBase = scriptUrl ? new URL(scriptUrl, location.href).pathname.replace(/\/src\/js\/script\.js$/, '') : '';
+    const appBase = configuredBase || inferredBase;
+    const workerUrl = appBase + '/service-worker.php?base=' + encodeURIComponent(appBase);
+    let reloadingForUpdate = false;
+    const hadServiceWorkerController = Boolean(navigator.serviceWorker.controller);
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!hadServiceWorkerController || reloadingForUpdate) return;
+        reloadingForUpdate = true;
+        localStorage.setItem('cifroAppUpdatePending', '1');
+        location.reload();
+    });
+    navigator.serviceWorker.register(workerUrl, { scope: (appBase || '') + '/' }).then(async registration => {
+        const activateUpdate = worker => {
+            if (!worker) return;
+            if (worker.state === 'installed' && navigator.serviceWorker.controller) worker.postMessage({ type: 'SKIP_WAITING' });
+            else worker.addEventListener('statechange', () => {
+                if (worker.state === 'installed' && navigator.serviceWorker.controller) worker.postMessage({ type: 'SKIP_WAITING' });
+            });
+        };
+        registration.addEventListener('updatefound', () => {
+            document.dispatchEvent(new CustomEvent('cifro:app-update', { detail: { state: 'baixando' } }));
+            activateUpdate(registration.installing);
+        });
+        activateUpdate(registration.waiting || registration.installing);
+        if (navigator.onLine) await registration.update();
+    }).catch(() => {});
 }
 

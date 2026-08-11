@@ -161,7 +161,7 @@ test.describe.serial('Onboarding — jornada completa', () => {
     expect(page.url()).not.toContain('login.php');
   });
 
-  test('home de banda nova carrega sem erros e exibe empty-state', async ({ page }) => {
+  test('home de banda nova carrega sem erros e exibe o checklist de boas-vindas', async ({ page }) => {
     await page.goto('/login.php');
     await page.fill('#email', EMAIL);
     await page.fill('#senha', SENHA);
@@ -170,7 +170,10 @@ test.describe.serial('Onboarding — jornada completa', () => {
     await page.click('button[type="submit"]');
     await page.waitForURL(/index\.php/, { timeout: 10000 });
 
-    await expect(page.locator('#music-list .empty-state')).toBeVisible({ timeout: 10000 });
+    // Banda sem nenhuma música ainda: a home mostra o checklist de onboarding
+    // ("Comece seu repertório") em vez da lista/empty-state de músicas.
+    await expect(page.locator('#onboardingCard')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('#musicLibrary')).toBeHidden();
     await expect(page.locator('#music-list .skeleton, #music-list [class*="skeleton"]')).toHaveCount(0);
     expect(errosJs).toEqual([]);
   });
@@ -296,9 +299,7 @@ test.describe('Cadastro — validações do RegisterController', () => {
 });
 
 test.describe('Landing — consistência da oferta', () => {
-  // BUG conhecido: o hero anuncia "R$5/mês depois" mas a tabela de planos
-  // cobra R$9,90/mês. O preço do hero precisa bater com o pricing.
-  test.fixme('preço anunciado no hero coincide com a tabela de planos', async ({ page }) => {
+  test('preço anunciado no hero coincide com a tabela de planos', async ({ page }) => {
     await page.goto('/landing.php');
     const hero = await page.locator('.hero').textContent();
     const precoHero = hero.match(/R\$\s?([\d,]+)/);

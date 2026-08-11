@@ -177,3 +177,12 @@ A migração que adicionou `google_sub` tornou `email NOT NULL` no banco de test
 Desde a auditoria original: V2 corrigido, Stripe e SMTP com cobertura de sandbox, 401 testes PHP + 717 E2E passando. Os únicos bloqueadores remanescentes são operacionais: rotação de segredos e demonstração de backup/restore.
 
 Estratégia recomendada: rotacionar segredos (`prd.env` → cofre), demonstrar um restore a partir do backup de produção, e abrir beta fechado com 3–5 bandas convidadas sob monitoramento manual diário.
+
+## 12. Adendo de 2026-08-10
+
+- `prd.env` continua presente no workspace; P1-01 permanece aberto até rotação e revogação comprovadas.
+- Backup, restore, health, readiness, monitor e runbooks já existem no código. P1-02 agora significa operacionalizar agenda/destino externo e anexar evidência de restore dentro de RPO 24h/RTO 4h.
+- O rate limit deixou de ser apenas por sessão: usa bucket atômico em arquivo por ação, identidade e IP. A lacuna residual é compartilhamento entre hosts e confiança de proxy.
+- Evidência local atual: 445 testes PHP/967 asserções com 4 skips, 16 unitários JavaScript e smoke E2E 6/6, todos sem falha.
+- O worktree contém um lote amplo de perfil externo, identidade de banda, sync incremental, PWA/offline, repertório e UX. A regressão completa desse lote permanece pendente.
+- A ordem executável, dependências, rollback e primeiras dez tarefas estão em [Plano mestre de implementação](plano-mestre-implementacao.md).

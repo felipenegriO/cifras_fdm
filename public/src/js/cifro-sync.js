@@ -161,6 +161,56 @@ const cifroSync = (() => {
         document.dispatchEvent(new CustomEvent('cifro:sync', { detail: { bandaId, contentRevision: Number(json.content_revision || 0), changed } }));
     }
 
+    async function rebuildSnapshotFromRows(bandaId, revision) {
+        const [rows, current] = await Promise.all([
+            readSnapshotRows(bandaId),
+            idbGet('cifro_snapshot_current', bandaId),
+        ]);
+        const json = {
+            banda_id: bandaId,
+            content_revision: revision,
+            musicas: rows.cifro_musicas?.data ?? [],
+            playlists: rows.cifro_playlists?.data ?? [],
+            roteiros: rows.cifro_roteiros?.data ?? [],
+            categorias: rows.cifro_categorias?.data ?? [],
+            plano: current?.data?.plano ?? null,
+            trial_expira_em: current?.data?.trial_expira_em ?? null,
+        };
+        await writeSnapshot(bandaId, json);
+        applySnapshot(bandaId, json, true);
+        await markPrepared(bandaId);
+        notifySyncChecked(bandaId, revision);
+    }
+
+    function mergeEntityChanges(items, changes) {
+        if (Array.isArray(changes?.replace)) return changes.replace;
+        const deleted = new Set((changes?.deleted || []).map(Number));
+        const upserts = Array.isArray(changes?.upsert) ? changes.upsert : [];
+        const upsertIds = new Set(upserts.map(item => Number(item.id)));
+        return [...items.filter(item => !deleted.has(Number(item.id)) && !upsertIds.has(Number(item.id))), ...upserts];
+    }
+
+    async function applyIncrementalChanges(bandaId, meta, delta) {
+        if (!delta || delta.full_sync_required || delta.banda_id !== bandaId) return false;
+        const current = await idbGet('cifro_snapshot_current', bandaId);
+        if (!current?.data) return false;
+        const changes = delta.changes || {};
+        const json = {
+            ...current.data,
+            banda_id: bandaId,
+            content_revision: Number(delta.content_revision),
+            musicas: mergeEntityChanges(current.data.musicas || [], changes.musicas),
+            roteiros: mergeEntityChanges(current.data.roteiros || [], changes.roteiros),
+            playlists: Array.isArray(changes.playlists?.replace) ? changes.playlists.replace : (current.data.playlists || []),
+            categorias: Array.isArray(changes.categorias?.replace) ? changes.categorias.replace : (current.data.categorias || []),
+        };
+        await writeSnapshot(bandaId, json);
+        applySnapshot(bandaId, json, true);
+        await markPrepared(bandaId);
+        notifySyncChecked(bandaId, Number(json.content_revision));
+        return true;
+    }
+
     function isOnline() {
         return Boolean(window.CifroConnectivity?.isServerAvailable());
     }
@@ -296,6 +346,10 @@ const cifroSync = (() => {
                     notifySyncChecked(bandaId, Number(version.content_revision));
                     return loadCached(bandaId);
                 }
+                try {
+                    const delta = await requestJson('/api/sync/changes.php?since=' + encodeURIComponent(Number(meta.content_revision || 0)));
+                    if (await applyIncrementalChanges(bandaId, meta, delta)) return true;
+                } catch (_) {}
             }
             const json = await requestJson('/api/sync/data.php');
             if (json.banda_id !== bandaId) return false;
@@ -371,7 +425,12 @@ const cifroSync = (() => {
                 });
             }
 
-            tx.oncomplete = async () => { db.close(); locallyUpdated.add(bandaId); await loadCached(bandaId); resolve(true); };
+            tx.oncomplete = async () => {
+                db.close();
+                locallyUpdated.add(bandaId);
+                await rebuildSnapshotFromRows(bandaId, revision);
+                resolve(true);
+            };
             tx.onerror = () => { db.close(); reject(tx.error); };
             tx.onabort = () => { db.close(); reject(tx.error); };
         });
@@ -415,7 +474,7 @@ const cifroSync = (() => {
     // de conteúdo informada. Distinto de markPrepared(), que só reflete que
     // os DADOS foram sincronizados — o shell pode nunca ter sido cacheado
     // mesmo com os dados válidos.
-    async function markShellPrepared(bandaId, revision) {
+    async function markShellPrepared(bandaId, revision, appVersion) {
         const meta = await idbGet('cifro_sync_meta', bandaId);
         const db = await openDb();
         return new Promise((resolve, reject) => {
@@ -431,6 +490,7 @@ const cifroSync = (() => {
             tx.objectStore('cifro_sync_meta').put({
                 ...(meta || {}), banda_id: key, actual_band_id: bandaId,
                 shell_prepared_revision: Number(revision), shell_prepared_at: shellPreparedAt,
+                app_version: appVersion || meta?.app_version || '0.0.1',
             });
             tx.oncomplete = () => { db.close(); resolve(true); };
             tx.onerror = () => { db.close(); reject(tx.error); };

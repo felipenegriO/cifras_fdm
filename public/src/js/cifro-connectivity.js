@@ -5,7 +5,7 @@
     var lastCheck = 0;
     var inFlight = null;
     var CHECK_TTL = 10000;
-    var TIMEOUT = 5000;
+    var TIMEOUT = 3000;
 
     function publish(next, detail) {
         state = next;
@@ -57,5 +57,12 @@
     document.addEventListener('visibilitychange', function () {
         if (document.visibilityState === 'visible') probe({ force: true });
     });
-    probe({ force: true });
+    var startProbe = function () { setTimeout(function () { probe({ force: true }); }, 0); };
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function () {
+            if (window.requestAnimationFrame) requestAnimationFrame(startProbe);
+            else startProbe();
+        }, { once: true });
+    } else if (window.requestAnimationFrame) requestAnimationFrame(startProbe);
+    else startProbe();
 })();

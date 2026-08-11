@@ -1,5 +1,12 @@
 import { test, expect } from '../fixtures/coverage.js';
 import { fazerLogin } from '../helpers/auth.js';
+import { dbQuery } from '../helpers/db.js';
+
+const BAND_ID = '00000000-0000-4000-8000-000000000002';
+
+function resetLiveState() {
+  dbQuery("UPDATE live_state SET host_id=NULL, host_user_id=NULL, host_nome=NULL, cifra_atual='', pagina_atual='index.php', scroll_top=0, scroll_percent=0, version=version+1 WHERE banda_id=?", [BAND_ID]);
+}
 
 test.use({ storageState: 'tests/.auth/user.json' });
 
@@ -145,7 +152,14 @@ test('inicia, segue e encerra uma sessão ao vivo pelos botões', async ({ page,
 });
 
 test('seguidor acompanha navegação e rolagem publicadas pelo líder', async ({ page, browser }) => {
+  dbQuery("UPDATE bandas SET plano='anual' WHERE id=?", [BAND_ID]);
+  resetLiveState();
   const token = await csrf(page);
+  const selected = await page.request.post('/src/backend/bandas/selecionar.php', {
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': token },
+    data: JSON.stringify({ bandaId: BAND_ID }),
+  });
+  expect(selected.status()).toBe(200);
   const existing = await (await page.request.get('/api/sync/data.php')).json();
   for (const song of existing.musicas.filter(item => String(item.nome).startsWith('__LIVE_FOLLOW_'))) {
     await page.request.post('/src/backend/editor/api.php', {
@@ -166,8 +180,10 @@ test('seguidor acompanha navegação e rolagem publicadas pelo líder', async ({
   const createdBody = await created.json();
   expect(created.status(), JSON.stringify(createdBody)).toBe(200);
   const songId = Number(createdBody.id);
-  const hostContext = await browser.newContext({ storageState: 'tests/.auth/user.json' });
-  const hostPage = await hostContext.newPage();
+  const hostPage = page;
+  const followerContext = await browser.newContext({ storageState: 'tests/.auth/externo.json', viewport: { width: 390, height: 844 } });
+  await followerContext.addInitScript(() => localStorage.setItem('cifroBetaWelcomeSeen', '1'));
+  const followerPage = await followerContext.newPage();
 
   try {
     await hostPage.goto('/index.php');
@@ -186,30 +202,38 @@ test('seguidor acompanha navegação e rolagem publicadas pelo líder', async ({
     expect(published.hasHost, JSON.stringify(published)).toBe(true);
     expect(published.paginaAtual).toBe(`music.php?id=${songId}`);
 
-    await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto('/index.php');
-    await page.locator('#menuButtonTop').click();
-    await page.locator('#entrarlivePlay').click();
-    await expect(page.locator('#liveStatus')).toHaveText('Seguindo live');
-    await expect(page).toHaveURL(new RegExp(`music\\.php\\?id=${songId}`), { timeout: 10000 });
-    await expect(page.locator('#liveModeIndicator')).toBeVisible();
+    const followerToken = await csrf(followerPage);
+    const followerSelected = await followerPage.request.post('/src/backend/bandas/selecionar.php', {
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': followerToken },
+      data: JSON.stringify({ bandaId: BAND_ID }),
+    });
+    expect(followerSelected.status()).toBe(200);
+    await followerPage.goto('/index.php');
+    const followerSong = followerPage.locator(`#music-list a[href*="id=${songId}"]`);
+    await expect(followerSong).toBeVisible({ timeout: 10000 });
+    await followerSong.click();
+    await followerPage.locator('#menuButton').click();
+    await openLiveSettings(followerPage);
+    await followerPage.locator('#entrarlivePlay').click();
+    await expect(followerPage.locator('#liveStatus')).toHaveText('Seguindo live');
+    await expect(followerPage).toHaveURL(new RegExp(`music\\.php\\?id=${songId}`), { timeout: 10000 });
+    await expect(followerPage.locator('#liveModeIndicator')).toBeVisible();
 
     await hostPage.locator('#song-cifra').evaluate(element => {
       element.scrollTop = Math.max(40, (element.scrollHeight - element.clientHeight) * .65);
       element.dispatchEvent(new Event('scroll', { bubbles: true }));
     });
-    await expect.poll(() => page.locator('#song-cifra').evaluate(element => element.scrollTop), { timeout: 10000 }).toBeGreaterThan(4);
+    await expect.poll(() => followerPage.locator('#song-cifra').evaluate(element => element.scrollTop), { timeout: 10000 }).toBeGreaterThan(4);
 
-    await page.getByRole('button', { name: 'Abrir ajustes' }).click();
-    await openLiveSettings(page);
-    await page.locator('#entrarlivePlay').click();
-    await expect(page.locator('#liveStatus')).toHaveText('Live desconectada');
+    await followerPage.locator('#entrarlivePlay').click();
+    await expect(followerPage.locator('#liveStatus')).toHaveText('Live desconectada');
   } finally {
-    await hostContext.close().catch(() => {});
+    await followerContext.close().catch(() => {});
     await page.request.post('/src/backend/editor/api.php', {
       headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': token },
       data: JSON.stringify({ action: 'delete', id: songId }),
     }).catch(() => {});
+    resetLiveState();
   }
 });
 

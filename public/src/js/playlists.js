@@ -63,6 +63,25 @@ function addListItem(content, idLista, musicasArray) {
   ul.className = 'sub-list';
   ul.style = 'overflow: auto; height: 100%; border: none; height: 50vh;';
 
+  var shareItem = document.createElement('li');
+  shareItem.className = 'playlist-share-item';
+  var shareButton = document.createElement('button');
+  shareButton.type = 'button';
+  shareButton.className = 'playlist-share-button';
+  shareButton.textContent = 'Compartilhar repertório';
+  shareButton.addEventListener('click', async function (event) {
+    event.preventDefault();
+    event.stopPropagation();
+    try {
+      var result = await window.CifroPlaylistShare.share({ nome: content, itens: musicasArray }, typeof songs !== 'undefined' ? songs : []);
+      if (result === 'copied' && window.cifroToast) cifroToast('Repertório copiado para a área de transferência.', 'success');
+    } catch (error) {
+      if (window.cifroToast) cifroToast('Não foi possível compartilhar o repertório.', 'error');
+    }
+  });
+  shareItem.appendChild(shareButton);
+  ul.appendChild(shareItem);
+
   // Serializa a setlist completa para uso no modo apresentação
   var setlistItems = musicasArray.map(function (item) {
     var id = getPlaylistItemId(item);
@@ -139,7 +158,7 @@ function renderPlaylistsMenu() {
   if (typeof playlistsSalvas !== 'undefined') {
     const playlistsVisiveis = playlistsSalvas.filter(isPlaylistVisibleMenu);
     if (playlistsVisiveis.length > 0) {
-      addSectionTitle('Playlists', 'lista-playlists');
+      addSectionTitle('Repertórios', 'lista-playlists');
       playlistsVisiveis.forEach(function(playlist) {
         addListItem(playlist.nome, 'lista-playlists', playlist.itens);
       });

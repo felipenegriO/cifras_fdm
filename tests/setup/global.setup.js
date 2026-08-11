@@ -13,6 +13,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const AUTH_FILE        = path.join(__dirname, '../.auth/user.json');
 const AUTH_GESTOR_FILE = path.join(__dirname, '../.auth/gestor.json');
 const AUTH_BASICO_FILE = path.join(__dirname, '../.auth/basico.json');
+const AUTH_EXTERNO_FILE = path.join(__dirname, '../.auth/externo.json');
+const AUTH_PAID_ADMIN_FILE = path.join(__dirname, '../.auth/paid-admin.json');
 const RUN_FILE = path.join(__dirname, '../.auth/run.json');
 
 const EMAIL = requiredEnv('TEST_EMAIL');
@@ -21,6 +23,8 @@ const RUN_ID = (process.env.E2E_RUN_ID || `${Date.now()}-${process.pid}`).replac
 const PROFILE_PASSWORD = randomBytes(18).toString('base64url');
 const GESTOR_EMAIL = `gestor-${RUN_ID}@e2e.local`;
 const BASICO_EMAIL = `basico-${RUN_ID}@e2e.local`;
+const EXTERNO_EMAIL = `externo-${RUN_ID}@e2e.local`;
+const PAID_ADMIN_EMAIL = `paid-admin-${RUN_ID}@e2e.local`;
 
 // ─── Login principal (administrador/master) ───────────────────────────────────
 setup('autenticar e salvar estado', async ({ page, browser }) => {
@@ -44,7 +48,7 @@ setup('autenticar e salvar estado', async ({ page, browser }) => {
   }
 
   await writeStorageState(page.context(), AUTH_FILE);
-  await fs.writeFile(RUN_FILE, JSON.stringify({ emails: [GESTOR_EMAIL, BASICO_EMAIL] }), 'utf8');
+  await fs.writeFile(RUN_FILE, JSON.stringify({ emails: [GESTOR_EMAIL, BASICO_EMAIL, EXTERNO_EMAIL, PAID_ADMIN_EMAIL] }), 'utf8');
 
   // ─── Provisionar usuários de teste para outros perfis ───────────────────────
   await provisionarUsuarioPerfil(page, {
@@ -60,6 +64,22 @@ setup('autenticar e salvar estado', async ({ page, browser }) => {
     nome: 'Test Basico',
     bandaPerfil: 'basico',
     authFile: AUTH_BASICO_FILE,
+    browser,
+  });
+
+  await provisionarUsuarioPerfil(page, {
+    email: EXTERNO_EMAIL,
+    nome: 'Test Externo',
+    bandaPerfil: 'externo',
+    authFile: AUTH_EXTERNO_FILE,
+    browser,
+  });
+
+  await provisionarUsuarioPerfil(page, {
+    email: PAID_ADMIN_EMAIL,
+    nome: 'Test Paid Admin',
+    bandaPerfil: 'administrador',
+    authFile: AUTH_PAID_ADMIN_FILE,
     browser,
   });
 });

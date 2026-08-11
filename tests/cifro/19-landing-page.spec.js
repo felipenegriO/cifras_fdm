@@ -110,23 +110,22 @@ test.describe('Landing page — hero', () => {
     expect(page.url()).toContain('register.php');
   });
 
-  test('botão secundário "Já tenho conta" leva para login.php', async ({ page }) => {
+  test('botão secundário do hero leva para a seção "como funciona"', async ({ page }) => {
     await page.goto('/landing.php');
     const secBtn = page.locator('.btn-secondary').first();
     await expect(secBtn).toBeVisible();
-    await expect(secBtn).toContainText(/já tenho conta|entrar/i);
+    await expect(secBtn).toContainText(/como funciona/i);
     await secBtn.click();
-    await page.waitForURL('**/login.php');
-    expect(page.url()).toContain('login.php');
+    await expect(page.locator('#como-funciona')).toBeInViewport();
   });
 
-  test('nota de rodapé do hero menciona os limites gratuitos', async ({ page }) => {
+  test('nota de rodapé do hero destaca o preço por banda, não por músico', async ({ page }) => {
     await page.goto('/landing.php');
     const note = page.locator('.hero-note').first();
     await expect(note).toBeVisible();
     const text = await note.textContent();
-    expect(text).toMatch(/1 banda/i);
-    expect(text).toMatch(/10 músicas/i);
+    expect(text).toMatch(/sem cartão/i);
+    expect(text).toMatch(/banda inteira/i);
   });
 });
 
@@ -368,11 +367,10 @@ test.describe('Landing page — fluxo completo do visitante', () => {
     await expect(form).toBeVisible();
   });
 
-  test('visitante usa botão "Já tenho conta" → vê login', async ({ page }) => {
+  test('visitante usa o botão secundário do hero → vê "como funciona"', async ({ page }) => {
     await page.goto('/landing.php');
     await page.locator('.btn-secondary').first().click();
-    await page.waitForURL('**/login.php');
-    expect(page.url()).toContain('login.php');
+    await expect(page.locator('#como-funciona')).toBeInViewport();
   });
 
   test('visitante rola até pricing → clica CTA → vê registro', async ({ page }) => {
@@ -474,11 +472,19 @@ test.describe('Landing page — SEO e compartilhamento', () => {
 
   test('publica dados estruturados de aplicativo com os preços reais', async ({ page }) => {
     await page.goto('/landing.php');
-    const bruto = await page.locator('script[type="application/ld+json"]').textContent();
+    const bruto = await page.locator('script[type="application/ld+json"]').first().textContent();
     const dados = JSON.parse(bruto);
     expect(dados['@type']).toBe('SoftwareApplication');
     const precos = dados.offers.map(o => o.price);
     expect(precos).toEqual(['0', '9.90', '49.90', '89.90']);
+  });
+
+  test('publica dados estruturados de FAQ (rich results)', async ({ page }) => {
+    await page.goto('/landing.php');
+    const bruto = await page.locator('script[type="application/ld+json"]').nth(1).textContent();
+    const dados = JSON.parse(bruto);
+    expect(dados['@type']).toBe('FAQPage');
+    expect(dados.mainEntity.length).toBeGreaterThan(5);
   });
 
   test('robots.txt e sitemap.xml respondem', async ({ page }) => {

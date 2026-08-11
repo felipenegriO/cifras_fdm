@@ -30,7 +30,7 @@
         var title = opts.title || 'Confirmar ação';
         var message = opts.message || 'Tem certeza?';
         var confirmText = opts.confirmText || 'Confirmar';
-        var cancelText = opts.cancelText || 'Cancelar';
+        var cancelText = Object.prototype.hasOwnProperty.call(opts, 'cancelText') ? opts.cancelText : 'Cancelar';
         var danger = opts.danger !== false;
         var icon = opts.icon || (danger ? '⚠️' : '❓');
 
@@ -82,7 +82,7 @@
             overlay.addEventListener('click', function (e) { if (e.target === overlay) close(false); });
             document.addEventListener('keydown', onKey);
 
-            actions.appendChild(btnCancel);
+            if (cancelText) actions.appendChild(btnCancel);
             actions.appendChild(btnOk);
             box.appendChild(h);
             box.appendChild(p);

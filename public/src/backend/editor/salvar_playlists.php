@@ -90,7 +90,8 @@ try {
     $mutation = (new SyncRevisionRepository())->mutate(
         $bandaId,
         $data['baseRevision'] ?? null,
-        fn() => $repo->saveAll($playlists, $bandaId)
+        fn() => $repo->saveAll($playlists, $bandaId),
+        [['type' => 'playlist', 'id' => 0, 'operation' => 'replace']]
     );
     echo json_encode(['sucesso' => true, 'mensagem' => 'Playlists salvas com sucesso!', 'content_revision' => $mutation['revision']]);
 } catch (SyncConflictException $e) {

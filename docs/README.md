@@ -16,6 +16,7 @@ Esta pasta é a fonte de contexto funcional e técnico para pessoas e agentes de
 10. [Guia de evolução](guia-de-evolucao.md)
 11. [Plano para atingir 80% de cobertura de branches](plano-cobertura-branches-80.md)
 12. [Plano de confiabilidade para palco, offline e sincronização](plano-confiabilidade-palco-offline.md)
+13. [Plano mestre de implementação](plano-mestre-implementacao.md)
 
 ## Documentação por domínio
 

@@ -315,6 +315,9 @@ test.describe('Topnav — link de plano', () => {
   });
 
   test('atalho de upgrade ou gestão leva para /plano.php', async ({ page }) => {
+    // Evita que o modal "Bem-vindo ao Cifrô — versão beta" (mostrado uma vez
+    // por localStorage) intercepte o clique no link do topnav.
+    await page.addInitScript(() => localStorage.setItem('cifroBetaWelcomeSeen', '1'));
     await page.goto('/index.php');
     const upgrade = page.locator('a.topnav__upgrade[href^="/plano.php"]');
     if (await upgrade.count()) {
@@ -511,6 +514,10 @@ test.describe('Stripe webhook', () => {
   });
 
   test('processa ciclo real de assinatura com payload assinado', async ({ page }) => {
+    // sendSignedWebhook assina com 'whsec_playwright' e os payloads usam
+    // price_test_*; esses valores vêm do fallback fixo em webServer.env no
+    // playwright.config.js (garantido independente do STRIPE_WEBHOOK_SECRET/
+    // price IDs reais que estejam no .env.local de quem roda os testes).
     const bandId = `stripe-${Date.now()}`;
     const subscription = `sub_${Date.now()}`;
     dbQuery('INSERT INTO bandas (id, nome, plano) VALUES (?, ?, ?)', [bandId, 'Webhook Playwright', 'gratuito']);

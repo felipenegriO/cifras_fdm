@@ -109,8 +109,8 @@
             <?php foreach ($bandas as $banda): ?>
                 <?php
                     $perfil = $banda['usuario_perfil'] ?? 'basico';
-                    $perfilLabel = ['master' => 'Master', 'administrador' => 'Administrador', 'gestor' => 'Gestor', 'basico' => 'Básico'][$perfil] ?? ucfirst($perfil);
-                    $logo = $banda['logo'] ?: '/src/images/cifro-mark.svg';
+                    $perfilLabel = ['master' => 'Master', 'administrador' => 'Administrador', 'gestor' => 'Gestor', 'basico' => 'Básico', 'externo' => 'Externo'][$perfil] ?? ucfirst($perfil);
+                    $logo = band_logo_url($banda['logo'] ?? null);
                     $plano = (string)($banda['plano'] ?? 'gratuito');
                     $planoLabel = cifro_plan_label($plano);
                     $planoModifier = $plano === 'bloqueado' ? ' sb-card__plan--bloqueado'

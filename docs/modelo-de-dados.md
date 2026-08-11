@@ -1,17 +1,18 @@
 # Modelo de dados
 
-Fonte: `public/create_tables.sql`.
+Fonte: `create_tables.sql`, scripts de setup e migrations versionadas.
 
 ## Entidades
 
 | Tabela | Chave | Escopo | Conteúdo |
 |---|---|---|---|
-| `bandas` | UUID textual | Global | nome, logo, status, plano e assinatura Stripe |
+| `bandas` | UUID textual | Global | nome, logo, criador, status, plano e assinatura Stripe |
 | `usuarios` | ID textual de 32/36 caracteres | Global | identidade, credenciais, validade e configuração JSON |
-| `usuario_banda` | usuário + banda | Banda | vínculo e papel `administrador`, `gestor` ou `basico` |
+| `usuario_banda` | usuário + banda | Banda | vínculo e papel `administrador`, `gestor`, `basico` ou `externo` |
 | `musicas` | inteiro | Banda | nome, artista, classificação, cifra, BPM e atualização |
 | `categorias` | inteiro | Banda | categorias disponíveis para classificar músicas |
 | `band_sync_state` | banda | Banda | revisão monotônica do conteúdo sincronizável |
+| `sync_changes` | inteiro | Banda | log incremental de revisão, entidade, operação e ID alterado |
 | `playlists` | inteiro | Banda | nome, validade e itens JSON |
 | `roteiros` | inteiro | Banda | título, conteúdo, validade e atualização |
 | `live_state` | banda | Banda | host, cifra, página, rolagem, atualização e versão |
@@ -21,11 +22,13 @@ Fonte: `public/create_tables.sql`.
 
 ```text
 usuarios N:M bandas via usuario_banda
+usuarios 1:N bandas via bandas.criador_id
 bandas 1:N musicas
 bandas 1:N categorias
 bandas 1:N playlists
 bandas 1:N roteiros
 bandas 1:1 band_sync_state
+bandas 1:N sync_changes
 bandas 1:1 live_state
 usuarios 1:N password_reset_tokens
 ```
@@ -46,6 +49,7 @@ As relações dependentes usam `ON DELETE CASCADE`. Toda consulta de música, pl
 - Tokens são de uso único e deixam de ser válidos após `expira_em`.
 - `live_state.version` sinaliza alterações para seguidores.
 - `band_sync_state.content_revision` muda uma vez na mesma transação de cada alteração de conteúdo.
+- `sync_changes.revision` referencia a revisão monotônica da banda; quando a janela não cobre a revisão do cliente, a API exige snapshot completo.
 
 ## Atenções de evolução
 

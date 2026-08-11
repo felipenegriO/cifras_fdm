@@ -84,6 +84,7 @@ class RegisterController {
                 'ativo'          => 1,
                 'plano'          => 'gratuito',
                 'trial_expira_em'=> null,
+                'criador_id'     => $userId,
             ]);
 
             // Link user → band as administrator

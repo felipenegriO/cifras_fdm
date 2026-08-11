@@ -16,9 +16,6 @@
     <link href="/src/css/theme.css" rel="stylesheet">
     <link href="/src/css/style2.css" rel="stylesheet" defer>
     <style>
-        #menusideMenu button.btn,#menusideMenu a.btn {
-             width: 100%;
-        }
         .btn-group {
             display: flex;
             flex-wrap: wrap;
@@ -148,8 +145,7 @@
         width: 18px;
         height: 18px;
   }
-  #sideMenu,
-  #menusideMenu {
+  #sideMenu {
     right: -100%;
     width: min(360px, 100vw);
     padding: 0;
@@ -160,8 +156,7 @@
     border-left: 1px solid var(--border-1);
     box-shadow: var(--shadow-2);
   }
-  #sideMenu h2,
-  #menusideMenu h2 {
+  #sideMenu h2 {
     min-height: 64px;
     margin: 0;
     padding: 20px 56px;
@@ -169,8 +164,7 @@
     font-size: var(--text-lg);
     font-weight: var(--fw-semibold);
   }
-  #sideMenu #closeButton,
-  #menusideMenu #menucloseButton {
+  #sideMenu #closeButton {
     top: 12px;
     left: 12px;
     width: 40px;
@@ -179,8 +173,7 @@
     border-radius: var(--radius-sm);
     line-height: 1;
   }
-  #sideMenu #closeButton:hover,
-  #menusideMenu #menucloseButton:hover { background: var(--bg-2); }
+  #sideMenu #closeButton:hover { background: var(--bg-2); }
   #lista-playlists {
     flex: 1;
     overflow-y: auto !important;
@@ -254,40 +247,19 @@
                 </svg>
             </button>
             <button type="button" class="btn btn--icon btn--secondary" id="playlistButton" aria-label="Abrir repertórios">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
-                    <circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/>
-                </svg>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
             </button>
         </div>
 
-    <div id="menusideMenu">
-        <button id="menucloseButton">×</button>
-        <h2>Menu</h2>
-        <div style="margin-bottom: 12px;">
-            <label style="display:flex;align-items:center;gap:10px;color:#fff;font-size:14px;cursor:pointer;">
-                <input type="checkbox" id="themeToggle" aria-label="Alternar tema escuro">
-                Tema escuro
-            </label>
-        </div>
-        <a href="/config.php" class="btn btn-primary mb-3" style="display:block;text-align:center;">Configurações</a>
-        <button type="button" class="btn btn-primary" id="clearCacheBtn">Limpar Cache</button>
-        <button type="button" class="btn btn-primary mt-3" id="livePlay">
-            <i class="fa-solid fa-broadcast-tower"></i> VIRAR HOST
-        </button>
-        <button type="button" class="btn btn-primary mt-3" id="entrarlivePlay">
-            <i class="fa-solid fa-play"></i> ENTRAR NO MODO LIVE
-        </button>
-        <div id="liveStatus" class="live-status mt-2">Live desconectada</div>
-        <?php if (function_exists('current_user_is_admin') && current_user_is_admin()): ?>
-            <a href="src/backend/editor/editor.php" type="button" class="btn btn-primary mt-3" >Editor</a>
-        <?php endif; ?>
-        <?php if (function_exists('can_edit_content') && can_edit_content()): ?>
-            <a href="/categorias.php" class="btn btn-primary mt-3">Categorias</a>
-        <?php endif; ?>
-        
+    <!-- Hidden functional elements for index.php features (live, theme, cache) -->
+    <div style="display:none">
+        <input type="checkbox" id="themeToggle" aria-label="Alternar tema escuro">
+        <button type="button" id="livePlay"></button>
+        <button type="button" id="entrarlivePlay"></button>
+        <div id="liveStatus"></div>
+        <button type="button" id="clearCacheBtn"></button>
     </div>
-    <div id="sideMenu">
+        <div id="sideMenu">
         <button id="closeButton" onclick="document.getElementById('sideMenu').style.right = '-100%';">×</button>
         <h2>Repertórios
             <!-- <button class="btn" data-toggle="modal" data-target="#addPlayList"><i
@@ -359,12 +331,13 @@
 
     <script src="/src/js/jquery-3.5.1.min.js" ></script>
     <script src="/src/js/bootstrap.min.js" defer></script>
-    <script>window.CIFRO_USER_ID = '<?= e($_SESSION['usuario']['id'] ?? '') ?>'; window.CIFRO_BAND_ID = '<?= e(current_band_id()) ?>';</script>
+    <script>window.CIFRO_USER_ID = '<?= e($_SESSION['usuario']['id'] ?? '') ?>'; window.CIFRO_BAND_ID = '<?= e(current_band_id()) ?>'; window.CIFRO_CAN_HOST = <?= can_host_live() ? 'true' : 'false' ?>;</script>
     <script src="<?= asset_url('/src/js/cifro-connectivity.js') ?>"></script>
     <script src="<?= asset_url('/src/js/cifro-sync.js') ?>"></script>
     <script src="<?= asset_url('/src/js/chords.js') ?>"></script>
     <script src="<?= asset_url('/src/js/script.js') ?>" defer></script>
     <script src="<?= asset_url('/src/js/cifro-install.js') ?>" defer></script>
+    <script src="<?= asset_url('/src/js/playlist-share.js') ?>" defer></script>
     <script src="<?= asset_url('/src/js/playlists.js') ?>" defer></script>
     <script src="<?= asset_url('/src/js/offline-tools.js') ?>"></script>
     <script src="<?= asset_url('/src/js/live.js') ?>"></script>

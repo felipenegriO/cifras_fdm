@@ -11,6 +11,7 @@ final class UserFormValidatorTest extends TestCase
         self::assertTrue(UserFormValidator::isPerfilValido('administrador'));
         self::assertTrue(UserFormValidator::isPerfilValido('gestor'));
         self::assertTrue(UserFormValidator::isPerfilValido('basico'));
+        self::assertTrue(UserFormValidator::isPerfilValido('externo'));
     }
 
     public function testPerfilInvalidoParaValorDesconhecido(): void

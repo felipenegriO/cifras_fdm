@@ -31,7 +31,7 @@ if (($data['action'] ?? '') === 'copy') {
     }
     cifro_require_plan_limit('musicas', $repo->countByBanda($bandaId));
     try {
-        $mutation = $revisionRepo->mutate($bandaId, $baseRevision, fn() => $repo->copy((int)$data['id'], $bandaId));
+        $mutation = $revisionRepo->mutate($bandaId, $baseRevision, fn() => $repo->copy((int)$data['id'], $bandaId), fn($id) => [['type' => 'musica', 'id' => $id, 'operation' => 'upsert']]);
         echo json_encode(['ok' => true, 'id' => $mutation['result'], 'musica' => $repo->findById($mutation['result'], $bandaId), 'content_revision' => $mutation['revision']]);
     } catch (SyncConflictException $e) {
         http_response_code(409);
@@ -50,7 +50,7 @@ if (($data['action'] ?? '') === 'delete') {
         exit;
     }
     try {
-        $mutation = $revisionRepo->mutate($bandaId, $baseRevision, fn() => $repo->delete((int)$data['id'], $bandaId));
+        $mutation = $revisionRepo->mutate($bandaId, $baseRevision, fn() => $repo->delete((int)$data['id'], $bandaId), [['type' => 'musica', 'id' => (int)$data['id'], 'operation' => 'delete']]);
         echo json_encode(['ok' => true, 'content_revision' => $mutation['revision']]);
     } catch (SyncConflictException $e) {
         http_response_code(409);
@@ -110,7 +110,7 @@ $payload = [
     'source_url' => $sourceUrl,
 ];
 try {
-    $mutation = $revisionRepo->mutate($bandaId, $baseRevision, fn() => $repo->save($payload, $bandaId));
+    $mutation = $revisionRepo->mutate($bandaId, $baseRevision, fn() => $repo->save($payload, $bandaId), fn($id) => [['type' => 'musica', 'id' => $id, 'operation' => 'upsert']]);
     $newId = $mutation['result'];
 } catch (SyncConflictException $e) {
     http_response_code(409);

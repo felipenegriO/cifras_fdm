@@ -344,6 +344,7 @@
   <script src="<?= asset_url('/src/js/cifro-connectivity.js') ?>"></script>
   <script src="<?= asset_url('/src/js/cifro-sync.js') ?>"></script>
   <script src="<?= asset_url('/src/js/chords.js') ?>"></script>
+  <script src="<?= asset_url('/src/js/playlist-share.js') ?>"></script>
 </head>
 <body>
 <?php render_partial('topnav'); ?>
@@ -354,6 +355,7 @@
     <div class="playlist-actions">
       <button type="button" class="btn btn--secondary" onclick="criarNovaPlaylist()"><?= cifro_icon('plus', 16) ?> Novo repertório</button>
       <button type="button" class="btn btn--primary" id="btnSalvarPlaylist" onclick="salvarPlaylist()"><?= cifro_icon('save', 16) ?> Salvar repertório</button>
+      <button type="button" class="btn btn--secondary" id="btnCompartilharPlaylist" onclick="compartilharPlaylist()"><?= cifro_icon('share-2', 16) ?> Compartilhar</button>
       <button type="button" class="btn btn--danger" id="btnDeletarPlaylist" onclick="deletarPlaylist()"><?= cifro_icon('trash', 16) ?> Excluir repertório</button>
     </div>
 
@@ -422,6 +424,11 @@
 </div>
 
 <script>
+// Mesmo limite do backend (cifro_require_plan_limit / PlaylistFormValidator) —
+// só para avisar antes de abrir o modal. Quem decide de verdade é o servidor.
+const LIMITE_PLAYLISTS = <?= json_encode(is_master() ? -1 : (cifro_plan_limits($_SESSION['banda_atual']['plano'] ?? 'bloqueado')['playlists'] ?? 0)) ?>;
+const PLANO_LABEL_ATUAL = <?= json_encode(cifro_plan_label($_SESSION['banda_atual']['plano'] ?? 'bloqueado')) ?>;
+
 let playlistAtual = null;
 let playlistAtualIndex = '';
 let playlistAlterada = false;
@@ -472,13 +479,29 @@ function atualizarEstadoAcoes() {
   const temPlaylist = !!playlistAtual;
   const btnSalvar = document.getElementById('btnSalvarPlaylist');
   const btnDeletar = document.getElementById('btnDeletarPlaylist');
+  const btnCompartilhar = document.getElementById('btnCompartilharPlaylist');
   const resumo = document.getElementById('playlistResumo');
 
   btnSalvar.disabled = !temPlaylist || !playlistAlterada;
   btnDeletar.disabled = !temPlaylist;
+  btnCompartilhar.disabled = !temPlaylist;
   resumo.textContent = temPlaylist
     ? `${playlistAtual.itens.length} música${playlistAtual.itens.length === 1 ? '' : 's'} no repertório`
     : 'Nenhum repertório selecionado';
+}
+
+async function compartilharPlaylist() {
+  if (!playlistAtual) return;
+  if (playlistAlterada) {
+    toast('Salve as alterações antes de compartilhar.', 'warning');
+    return;
+  }
+  try {
+    const result = await window.CifroPlaylistShare.share(playlistAtual, songs);
+    if (result === 'copied') toast('Repertório copiado para a área de transferência.', 'success');
+  } catch (error) {
+    toast('Não foi possível compartilhar o repertório.', 'error');
+  }
 }
 
 function criarEmptyState(texto) {
@@ -869,6 +892,10 @@ async function salvarPlaylist() {
 }
 
 async function criarNovaPlaylist() {
+  if (LIMITE_PLAYLISTS !== -1 && playlistsSalvas.length >= LIMITE_PLAYLISTS) {
+    toast('Limite do plano ' + PLANO_LABEL_ATUAL + ' atingido: máximo de ' + LIMITE_PLAYLISTS + ' repertório(s). Faça upgrade do plano para adicionar mais.', 'error');
+    return;
+  }
   if (!(await confirmarDescarteAlteracoes())) return;
 
   const dados = await abrirModalNovaPlaylist();
@@ -927,8 +954,9 @@ async function deletarPlaylist() {
   });
   if (!ok) return;
 
-  const index = playlistsSalvas.indexOf(playlistAtual);
-  if (index > -1) {
+  const index = Number(playlistAtualIndex);
+  if (index >= 0 && index < playlistsSalvas.length) {
+    playlistAtual = playlistsSalvas[index];
     const removida = playlistsSalvas.splice(index, 1)[0];
 
     try {

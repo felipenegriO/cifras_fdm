@@ -96,6 +96,8 @@ class GoogleAuthService
             'bandas' => [['id' => $bandaId, 'perfil' => 'administrador']],
         ]);
 
+        $this->bandas->definirCriador($bandaId, $userId);
+
         return [
             'id' => $userId,
             'nome' => $name !== '' ? $name : $email,

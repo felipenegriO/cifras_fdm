@@ -7,6 +7,7 @@
   <?php csrf_meta(); ?>
   <title>Criar conta — Cifrô</title>
   <script src="/src/js/cifro-theme.js"></script>
+  <script src="/src/js/cifro-analytics.js" defer></script>
   <link href="/src/css/fonts.css" rel="stylesheet">
   <link href="/src/css/theme.css" rel="stylesheet">
   <style>
@@ -119,7 +120,7 @@
         <div style="text-align:center;margin-bottom:16px;color:#666;font-size:12px">ou crie com e-mail</div>
       <?php endif; ?>
 
-      <form method="post" novalidate>
+      <form method="post" novalidate id="register-form">
         <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(csrf_token()) ?>">
 
         <div class="form-group">
@@ -164,6 +165,12 @@
       }
       event.currentTarget.href = '<?= base_url('/api/auth/google/start.php') ?>?source=register&legal_acceptance=1';
     });
+    document.getElementById('register-form')?.addEventListener('submit', () => {
+      window.cifroTrack?.('signup_started', { page: 'register' });
+    });
+    <?php if ($success): ?>
+      window.cifroTrack?.('signup_activation_email_sent', { page: 'register' });
+    <?php endif; ?>
   </script>
 </body>
 </html>

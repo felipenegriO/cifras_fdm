@@ -21,7 +21,7 @@ O IndexedDB `cifro`, versão 6, armazena os dados de domínio e separa cada regi
 - `cifro_snapshot_current`;
 - `cifro_snapshot_previous`.
 
-A leitura é cache-first. O snapshot local é renderizado antes da rede. A revisão da banda é consultada após a janela de 30 segundos, na reconexão, no retorno do segundo plano, na troca de banda ou por ação manual. O snapshot completo só é baixado quando `content_revision` mudou.
+A leitura é cache-first. O snapshot local é renderizado antes da rede. A revisão da banda é consultada após a janela de 30 segundos, na reconexão, no retorno do segundo plano, na troca de banda ou por ação manual. Quando `content_revision` mudou, o cliente tenta `/api/sync/changes.php`; se a revisão não puder ser atendida, baixa o snapshot completo por `/api/sync/data.php`.
 
 Músicas, playlists, roteiros, categorias e metadata são persistidos em uma única transação IndexedDB. Banda, revisão, arrays e estrutura mínima dos registros são validados antes da gravação. Erros, timeout ou respostas inválidas mantêm o snapshot anterior.
 

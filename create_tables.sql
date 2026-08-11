@@ -8,7 +8,7 @@ SET time_zone = '+00:00';
 CREATE TABLE IF NOT EXISTS bandas (
   id        CHAR(36)      NOT NULL,
   nome      VARCHAR(120)  NOT NULL,
-  logo      VARCHAR(255)  DEFAULT NULL,
+  logo      MEDIUMTEXT    DEFAULT NULL,
   ativo     TINYINT(1)    NOT NULL DEFAULT 1,
   plano     ENUM('trial','gratuito','mensal','semestral','anual','bloqueado','ativo','basico','banda') NOT NULL DEFAULT 'gratuito',
   trial_expira_em DATE    DEFAULT NULL,
@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS bandas (
   -- cancelamento. A assinatura segue ativa até plano_expira_em; quem faz o
   -- downgrade de fato é o webhook customer.subscription.deleted do Stripe.
   cancelamento_agendado_em DATETIME  DEFAULT NULL,
+  criador_id CHAR(36)      DEFAULT NULL,
   criado_em TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   UNIQUE KEY uq_bandas_stripe_subscription (stripe_subscription_id)
@@ -28,6 +29,19 @@ CREATE TABLE IF NOT EXISTS band_sync_state (
   content_revision BIGINT UNSIGNED NOT NULL DEFAULT 0,
   atualizado_em    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (banda_id),
+  FOREIGN KEY (banda_id) REFERENCES bandas(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS sync_changes (
+  id          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  banda_id    CHAR(36) NOT NULL,
+  revision    BIGINT UNSIGNED NOT NULL,
+  entity_type ENUM('musica','playlist','roteiro','categoria') NOT NULL,
+  entity_id   INT NOT NULL DEFAULT 0,
+  operation   ENUM('upsert','delete','replace') NOT NULL,
+  criado_em   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  INDEX idx_sync_changes_banda_revision (banda_id, revision),
   FOREIGN KEY (banda_id) REFERENCES bandas(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -60,12 +74,15 @@ ALTER TABLE usuarios ADD UNIQUE KEY IF NOT EXISTS uq_google_sub (google_sub);
 CREATE TABLE IF NOT EXISTS usuario_banda (
   usuario_id CHAR(36) NOT NULL,
   banda_id   CHAR(36) NOT NULL,
-  perfil     ENUM('administrador','gestor','basico') NOT NULL DEFAULT 'basico',
+  perfil     ENUM('administrador','gestor','basico','externo') NOT NULL DEFAULT 'basico',
   PRIMARY KEY (usuario_id, banda_id),
   FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE,
   FOREIGN KEY (banda_id)   REFERENCES bandas(id)   ON DELETE CASCADE,
   INDEX idx_usuario_banda_banda_perfil (banda_id, perfil)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+ALTER TABLE bandas
+  ADD CONSTRAINT fk_bandas_criador FOREIGN KEY (criador_id) REFERENCES usuarios(id) ON DELETE SET NULL;
 
 CREATE TABLE IF NOT EXISTS user_legal_acceptances (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,

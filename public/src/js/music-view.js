@@ -29,11 +29,99 @@
         const speedValue = document.getElementById('autoScrollSpeedValue');
         const quickBar = document.getElementById('musicQuickBar');
         const showQuickBar = document.getElementById('showQuickBar');
+        const fullscreenBtn = document.getElementById('headerFullscreenBtn');
         const settingsTabs = Array.from(document.querySelectorAll('[data-settings-tab]'));
         const settingsPanels = Array.from(document.querySelectorAll('[data-settings-panel]'));
         let scrolling = false;
         let frame = null;
         let lastTime = 0;
+        let scrollAccumulator = 0;
+        let savedCifraOverflowY = null;
+
+        // ── Fullscreen ──────────────────────────────────────────────
+        function updateFullscreenBtn() {
+            if (!fullscreenBtn) return;
+            fullscreenBtn.style.display = document.fullscreenElement ? '' : 'none';
+        }
+
+        function requestFullscreen() {
+            if (document.fullscreenElement) return;
+            const target = document.documentElement;
+            if (target.requestFullscreen) {
+                target.requestFullscreen().catch(function () {});
+            }
+        }
+
+        document.addEventListener('fullscreenchange', updateFullscreenBtn);
+        if (fullscreenBtn) {
+            fullscreenBtn.addEventListener('click', function () {
+                if (document.exitFullscreen) document.exitFullscreen().catch(function () {});
+            });
+        }
+        requestFullscreen();
+
+        // ── Wake Lock ───────────────────────────────────────────────
+        let wakeLock = null;
+
+        async function requestWakeLock() {
+            if (!('wakeLock' in navigator)) return;
+            try {
+                wakeLock = await navigator.wakeLock.request('screen');
+                wakeLock.addEventListener('release', function () { wakeLock = null; });
+            } catch (e) {}
+        }
+
+        document.addEventListener('visibilitychange', function () {
+            if (document.visibilityState === 'visible' && !wakeLock) requestWakeLock();
+        });
+        requestWakeLock();
+
+        // ── Setlist ─────────────────────────────────────────────────
+        function loadSetlist() {
+            try {
+                const raw = sessionStorage.getItem('cifroSetlist');
+                if (!raw) return null;
+                const data = JSON.parse(raw);
+                if (!data || !Array.isArray(data.items) || data.items.length === 0) return null;
+                const currentId = parseInt(new URLSearchParams(location.search).get('id'), 10);
+                let idx = data.items.findIndex(function (it) { return parseInt(it.id, 10) === currentId; });
+                if (idx < 0) idx = (typeof data.currentIndex === 'number') ? data.currentIndex : 0;
+                data.currentIndex = idx;
+                return data;
+            } catch (e) { return null; }
+        }
+
+        const setlist = loadSetlist();
+
+        function navigateSetlist(direction) {
+            if (!setlist) return;
+            const newIndex = setlist.currentIndex + direction;
+            if (newIndex < 0 || newIndex >= setlist.items.length) return;
+            const next = setlist.items[newIndex];
+            setlist.currentIndex = newIndex;
+            try { sessionStorage.setItem('cifroSetlist', JSON.stringify(setlist)); } catch (e) {}
+            const params = new URLSearchParams();
+            params.set('id', next.id);
+            if (next.tom) params.set('playlistTom', next.tom);
+            location.href = 'music.php?' + params.toString();
+        }
+
+        if (setlist) {
+            let swipeStartX = 0, swipeStartY = 0, swipeT0 = 0;
+            const swipeTarget = cifra || document.body;
+            swipeTarget.addEventListener('touchstart', function (e) {
+                const t = e.touches[0];
+                swipeStartX = t.clientX; swipeStartY = t.clientY; swipeT0 = Date.now();
+            }, { passive: true });
+            swipeTarget.addEventListener('touchend', function (e) {
+                const t = e.changedTouches[0];
+                const dx = t.clientX - swipeStartX;
+                const dy = t.clientY - swipeStartY;
+                if (Date.now() - swipeT0 > 600 || Math.abs(dx) < 80) return;
+                if (Math.abs(dy) > Math.abs(dx) * 0.58) return;
+                navigateSetlist(dx < 0 ? 1 : -1);
+            }, { passive: true });
+        }
 
         function setDrawerState(drawer, open) {
             if (!drawer) return;
@@ -68,8 +156,8 @@
         }
 
         function speedInPixels() {
-            const levels = [14, 22, 34, 50, 72];
-            const value = Math.max(1, Math.min(5, Number(speedInput ? speedInput.value : 2)));
+            const levels = [3, 4, 6, 9, 13, 18, 26, 38, 54, 75];
+            const value = Math.max(1, Math.min(10, Number(speedInput ? speedInput.value : 5)));
             return levels[value - 1];
         }
 
@@ -85,8 +173,13 @@
         function stopAutoScroll() {
             scrolling = false;
             lastTime = 0;
+            scrollAccumulator = 0;
             if (frame) cancelAnimationFrame(frame);
             frame = null;
+            if (savedCifraOverflowY !== null && cifra) {
+                cifra.style.overflowY = savedCifraOverflowY;
+                savedCifraOverflowY = null;
+            }
             updateAutoScrollUi();
         }
 
@@ -95,26 +188,39 @@
             const target = getScrollTarget();
             if (!target) return stopAutoScroll();
             if (!lastTime) lastTime = time;
-            const next = target.scrollTop + speedInPixels() * ((time - lastTime) / 1000);
-            target.scrollTop = next;
+            const dt = time - lastTime;
             lastTime = time;
-            if (target.scrollTop + target.clientHeight >= target.scrollHeight - 2) return stopAutoScroll();
+            scrollAccumulator += speedInPixels() * (dt / 1000);
+            if (scrollAccumulator >= 1) {
+                const px = Math.floor(scrollAccumulator);
+                scrollAccumulator -= px;
+                const before = target.scrollTop;
+                target.scrollTop = before + px;
+                if (target.scrollTop === before && before + target.clientHeight >= target.scrollHeight - 2) return stopAutoScroll();
+                if (target.scrollTop + target.clientHeight >= target.scrollHeight - 2) return stopAutoScroll();
+            }
             frame = requestAnimationFrame(autoScrollStep);
-        }
-
-        function disableAutoColumnsIfActive() {
-            // O modo de colunas automáticas encaixa tudo numa altura fixa
-            // (overflow-y: hidden) para caber na tela sem precisar rolar —
-            // isso deixa a rolagem automática sem nada pra mover. Sair desse
-            // modo antes de rolar usa o mesmo botão/lógica de "Ajustes".
-            if (!cifra || !cifra.classList.contains('auto-columns')) return;
-            const toggleColumnsBtn = document.getElementById('toggle-columns');
-            if (toggleColumnsBtn) toggleColumnsBtn.click();
         }
 
         function toggleAutoScroll() {
             if (scrolling) return stopAutoScroll();
-            disableAutoColumnsIfActive();
+            // Quando auto-columns está ativo com overflow-y:hidden, libera o overflow do cifra
+            // para que o scroll funcione internamente (mesmo comportamento da apresentação).
+            // Só desabilita auto-columns se o cifra genuinamente não tiver conteúdo a rolar.
+            if (cifra && cifra.classList.contains('auto-columns')) {
+                const computedOY = window.getComputedStyle(cifra).overflowY;
+                if (computedOY === 'hidden' || cifra.style.overflowY === 'hidden') {
+                    savedCifraOverflowY = cifra.style.overflowY;
+                    cifra.style.overflowY = 'auto';
+                }
+                // Se mesmo com scroll liberado não há conteúdo a rolar, desabilita auto-columns.
+                if (cifra.scrollHeight <= cifra.clientHeight + 2) {
+                    cifra.style.overflowY = savedCifraOverflowY !== null ? savedCifraOverflowY : '';
+                    savedCifraOverflowY = null;
+                    const toggleColumnsBtn = document.getElementById('toggle-columns');
+                    if (toggleColumnsBtn) toggleColumnsBtn.click();
+                }
+            }
             scrolling = true;
             updateAutoScrollUi();
             frame = requestAnimationFrame(autoScrollStep);
@@ -125,10 +231,10 @@
         });
 
         if (speedInput) {
-            speedInput.value = safeStorageGet('musicAutoScrollSpeed', '2');
+            speedInput.value = safeStorageGet('musicAutoScrollSpeed', '5');
             const updateSpeed = function () {
                 safeStorageSet('musicAutoScrollSpeed', speedInput.value);
-                if (speedValue) speedValue.textContent = speedInput.value + '/5';
+                if (speedValue) speedValue.textContent = speedInput.value + '/10';
             };
             speedInput.addEventListener('input', updateSpeed);
             updateSpeed();
@@ -144,7 +250,8 @@
         }
 
         if (showQuickBar) {
-            showQuickBar.checked = safeStorageGet('musicShowQuickBar', '0') === '1';
+            const mobileDefault = window.matchMedia('(max-width: 768px)').matches ? '1' : '0';
+            showQuickBar.checked = safeStorageGet('musicShowQuickBar', mobileDefault) === '1';
             showQuickBar.addEventListener('change', updateQuickBar);
             updateQuickBar();
         }
@@ -228,22 +335,28 @@
             columnModeButtons.forEach(function (button) {
                 button.addEventListener('click', function () {
                     const mode = button.dataset.columnMode;
-                    const autoActive = cifra.classList.contains('auto-columns');
+                    // Garante que o layout automático está sempre ativo.
+                    // Os modos 1/2/3 apenas forçam o número de colunas dentro do algoritmo.
+                    if (!cifra.classList.contains('auto-columns')) {
+                        cifra.classList.add('auto-columns');
+                        columnsSource.classList.add('active');
+                        columnsSource.textContent = 'Desativar ajuste automático';
+                    }
                     if (mode === 'auto') {
-                        cifra.dataset.manualColumns = '';
-                        cifra.style.columnCount = '';
-                        if (!autoActive) columnsSource.click();
+                        cifra.dataset.forceMaxColumns = '';
+                        cifra.dataset.forceMinColumns = '';
                     } else {
-                        if (autoActive) columnsSource.click();
-                        cifra.dataset.manualColumns = mode;
-                        cifra.style.columnCount = mode;
-                        cifra.style.columnGap = '2rem';
+                        cifra.dataset.forceMaxColumns = mode;
+                        cifra.dataset.forceMinColumns = mode;
                     }
                     syncColumnMode(mode);
+                    if (window.__reflowCifra) window.__reflowCifra();
                 });
             });
             new MutationObserver(function () {
-                const mode = cifra.classList.contains('auto-columns') ? 'auto' : (cifra.dataset.manualColumns || '1');
+                if (!cifra.classList.contains('auto-columns')) return;
+                const forced = cifra.dataset.forceMaxColumns;
+                const mode = (forced && ['1', '2', '3'].includes(forced)) ? forced : 'auto';
                 syncColumnMode(mode);
             }).observe(cifra, { attributes: true, attributeFilter: ['class'] });
             syncColumnMode('auto');
@@ -253,7 +366,7 @@
         const fontButtons = [document.getElementById('decrease-text'), document.getElementById('increase-text')].filter(Boolean);
         function updateFontSizeDisplay() {
             if (!fontSizeDisplay || !cifra) return;
-            fontSizeDisplay.textContent = Math.round(parseFloat(window.getComputedStyle(cifra).fontSize)) + 'px';
+            fontSizeDisplay.textContent = Math.round(parseFloat(window.getComputedStyle(cifra).fontSize));
         }
         fontButtons.forEach(function (button) {
             button.addEventListener('click', function () {
@@ -281,16 +394,17 @@
                 if (lyricSource && lyricSource.classList.contains('active')) lyricSource.click();
                 if (columnsSource && cifra && !cifra.classList.contains('auto-columns')) columnsSource.click();
                 if (cifra) {
-                    cifra.dataset.manualColumns = '';
+                    cifra.dataset.forceMaxColumns = '';
+                    cifra.dataset.forceMinColumns = '';
                     cifra.style.fontSize = '';
                     cifra.style.columnCount = '';
                 }
                 if (speedInput) {
-                    speedInput.value = '2';
+                    speedInput.value = '5';
                     speedInput.dispatchEvent(new Event('input'));
                 }
                 if (showQuickBar) {
-                    showQuickBar.checked = false;
+                    showQuickBar.checked = window.matchMedia('(max-width: 768px)').matches;
                     updateQuickBar();
                 }
                 if (window.__reflowCifra) window.__reflowCifra();
@@ -316,6 +430,18 @@
             if (event.code === 'Space' && !event.target.closest('input, textarea, select, button, a')) {
                 event.preventDefault();
                 toggleAutoScroll();
+            }
+            if (setlist && (event.key === 'ArrowRight' || event.key === 'PageDown')) {
+                if (!event.target.closest('input, textarea, select')) {
+                    event.preventDefault();
+                    navigateSetlist(1);
+                }
+            }
+            if (setlist && (event.key === 'ArrowLeft' || event.key === 'PageUp')) {
+                if (!event.target.closest('input, textarea, select')) {
+                    event.preventDefault();
+                    navigateSetlist(-1);
+                }
             }
         });
 

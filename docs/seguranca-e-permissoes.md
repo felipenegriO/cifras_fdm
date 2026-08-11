@@ -17,7 +17,7 @@
 - `require_auth_json()`: APIs; responde 401 em sessão ausente ou expirada.
 - `require_band_role()`: compara papel da banda atual e responde 403.
 - `require_csrf()`: valida `X-CSRF-Token` ou campo `csrf_token` com `hash_equals`.
-- `cifro_rate_limit()`: contador por sessão; usado em login, cadastro e recuperação.
+- `cifro_rate_limit()`: bucket atômico em arquivo temporário por ação, identidade e IP; usado em login, cadastro, recuperação, reenvio de ativação e cancelamento.
 - Saída HTML usa `e()` ou `htmlspecialchars` nos pontos protegidos.
 - Headers globais incluem CSP, `nosniff`, `DENY`, referrer policy e permissions policy.
 - Cookie de sessão usa `HttpOnly`, `SameSite=Strict` e `Secure` em HTTPS.
@@ -35,5 +35,4 @@
 
 - `cifro-sync.js` envia `banda_id` na query; os endpoints devem garantir que ele coincide com a banda autorizada.
 - A CSP permite scripts e estilos inline.
-- O rate limit vive na sessão e não limita tentativas distribuídas por IP ou múltiplas sessões.
-
+- O rate limit cobre múltiplas sessões na mesma instância, mas não compartilha estado entre hosts e depende de configuração confiável de IP/proxy.

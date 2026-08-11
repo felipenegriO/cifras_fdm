@@ -60,21 +60,6 @@
 </head>
 
 <body class="music-page<?= (($_GET['editorPreview'] ?? '') === '1') ? ' is-editor-preview' : '' ?>">
-    <div id="toast" style="
-      position: fixed;
-      bottom: 15%;
-      right: 15%;
-      transform: translateX(-50%);
-      background: white;
-      color: white;
-      padding: 12px 24px;
-      border-radius: 4px;
-      font-size: 14px;
-      display: none;
-      z-index: 9999;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-    "></div>
-
     <script>
         // Espelha o tom do menu lateral para a bottom bar mobile e header
         document.addEventListener('DOMContentLoaded', function () {
@@ -153,10 +138,11 @@
 
                 <div class="music-control-row music-control-row--stacked">
                     <div class="music-control-label"><strong>Colunas</strong></div>
-                    <div class="music-segmented music-segmented--three" role="group" aria-label="Quantidade de colunas">
+                    <div class="music-segmented music-segmented--four" role="group" aria-label="Quantidade de colunas">
                         <button type="button" id="columnModeAuto" data-column-mode="auto" aria-pressed="true">Auto</button>
                         <button type="button" id="columnMode1" data-column-mode="1" aria-pressed="false">1</button>
                         <button type="button" id="columnMode2" data-column-mode="2" aria-pressed="false">2</button>
+                        <button type="button" id="columnMode3" data-column-mode="3" aria-pressed="false">3</button>
                     </div>
                 </div>
 
@@ -179,8 +165,8 @@
                         </div>
                         <button type="button" id="autoScrollToggle" class="music-primary-action" aria-pressed="false">Iniciar</button>
                     </div>
-                    <label class="music-range-label" for="autoScrollSpeed"><span>Velocidade</span><span id="autoScrollSpeedValue">2/5</span></label>
-                    <input class="music-range" type="range" id="autoScrollSpeed" min="1" max="5" value="2" step="1">
+                    <label class="music-range-label" for="autoScrollSpeed"><span>Velocidade</span><span id="autoScrollSpeedValue">5/10</span></label>
+                    <input class="music-range" type="range" id="autoScrollSpeed" min="1" max="10" value="5" step="1">
                 </div>
 
                 <div class="music-panel-footer">
@@ -234,10 +220,6 @@
                         </div>
                     </div>
                 </details>
-                <details class="music-tool">
-                    <summary>Uso offline</summary>
-                    <div class="music-tool__content" id="offlineToolsMount"></div>
-                </details>
             </section>
         </div>
     </aside>
@@ -271,9 +253,9 @@
     </div>
 
     <header class="music-header">
-        <a href="index.php" class="music-header__back" id="backLink" aria-label="Voltar">
+        <button type="button" class="music-header__back" id="backLink" aria-label="Voltar" onclick="location.href='index.php'">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
-        </a>
+        </button>
         <div class="music-header__identity">
             <h1 class="music-header__title" id="song-title">Carregando música…</h1>
             <div class="music-header__meta">
@@ -282,6 +264,9 @@
             </div>
         </div>
         <div class="music-header__actions">
+            <button type="button" class="music-header__action" id="headerFullscreenBtn" aria-label="Sair da tela cheia" style="display:none">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/><path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/></svg>
+            </button>
             <span class="music-connection" id="connectionStatus" role="status">Online</span>
             <button type="button" class="music-header__action" id="playlistButton" aria-label="Abrir repertórios">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
@@ -371,30 +356,22 @@
         </a>
     </div>
 
-    <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 1100">
-        <div id="toastNovaPlay" class="toast align-items-center text-bg-success border-0" role="alert"
-            aria-live="assertive" aria-atomic="true" data-bs-delay="12000"
-            style="position: fixed; top: 1vh; right: 23vw;">
-            <div class="d-flex">
-                <div class="toast-body" style="background:white !important; color:black !important">
-                    🎵 A música foi definida como nova play.
-                </div>
-                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"
-                    aria-label="Fechar"></button>
+    <div class="position-fixed bottom-0 end-0 p-3" style="z-index: var(--z-toast, 99998)">
+        <div id="toastNovaPlay" class="toast align-items-center border-0" role="alert"
+            aria-live="assertive" aria-atomic="true" data-bs-delay="4000">
+            <div class="d-flex" style="background:var(--bg-elevated);border:1px solid var(--border-1);border-radius:var(--radius-md);padding:12px 16px;gap:12px;align-items:center;">
+                <span style="color:var(--text-1);font-size:var(--text-sm)">🎵 Música definida como nova play.</span>
+                <button type="button" class="btn-close ms-auto" data-bs-dismiss="toast" aria-label="Fechar"></button>
             </div>
         </div>
     </div>
 
-    <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 1100">
-        <div id="toastNovaPlayerro" class="toast align-items-center text-bg-success border-0" role="alert"
-            aria-live="assertive" aria-atomic="true" data-bs-delay="12000"
-            style="position: fixed; top: 1vh; right: 23vw;">
-            <div class="d-flex">
-                <div class="toast-body" style="background:RED !important; color:black !important">
-                    ERRO AO DEFINIR NOVA PLAY.
-                </div>
-                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"
-                    aria-label="Fechar"></button>
+    <div class="position-fixed bottom-0 end-0 p-3" style="z-index: var(--z-toast, 99998)">
+        <div id="toastNovaPlayerro" class="toast align-items-center border-0" role="alert"
+            aria-live="assertive" aria-atomic="true" data-bs-delay="4000">
+            <div class="d-flex" style="background:var(--bg-elevated);border:1px solid var(--danger);border-radius:var(--radius-md);padding:12px 16px;gap:12px;align-items:center;">
+                <span style="color:var(--danger);font-size:var(--text-sm)">Erro ao definir nova play.</span>
+                <button type="button" class="btn-close ms-auto" data-bs-dismiss="toast" aria-label="Fechar"></button>
             </div>
         </div>
     </div>
@@ -493,8 +470,19 @@
     <script src="<?= asset_url('/src/js/music-youtube-panel-state.js') ?>"></script>
     <script src="<?= asset_url('/src/js/music-youtube-panel.js') ?>" defer></script>
     <script src="<?= asset_url('/src/js/music-view.js') ?>" defer></script>
-    <script src="<?= asset_url('/src/js/cifro-presentation.js') ?>"></script>
-    <script>window.CIFRO_USER_ID = '<?= e($_SESSION['usuario']['id'] ?? '') ?>'; window.CIFRO_BAND_ID = '<?= e(current_band_id()) ?>';</script>
+    <script src="<?= asset_url('/src/js/cifro-presentation.js') ?>" defer></script>
+    <script>window.CIFRO_USER_ID = '<?= e($_SESSION['usuario']['id'] ?? '') ?>'; window.CIFRO_BAND_ID = '<?= e(current_band_id()) ?>'; window.CIFRO_CAN_HOST = <?= can_host_live() ? 'true' : 'false' ?>; window.CIFRO_BAND_PLANO = '<?= e($_SESSION['banda_atual']['plano'] ?? '') ?>';</script>
+    <script>
+        (function () {
+            var paidPlans = ['trial', 'mensal', 'semestral', 'anual', 'ativo'];
+            if (paidPlans.indexOf(window.CIFRO_BAND_PLANO) === -1) {
+                var liveTab = document.getElementById('settingsTabLive');
+                var livePanel = document.getElementById('settingsPanelLive');
+                if (liveTab) liveTab.style.display = 'none';
+                if (livePanel) livePanel.hidden = true;
+            }
+        })();
+    </script>
     <script src="<?= asset_url('/src/js/cifro-sanitize.js') ?>"></script>
     <script src="<?= asset_url('/src/js/cifro-connectivity.js') ?>"></script>
     <script src="<?= asset_url('/src/js/cifro-sync.js') ?>"></script>
@@ -512,6 +500,7 @@
             return loaded;
         });
     </script>
+    <script src="<?= asset_url('/src/js/playlist-share.js') ?>" defer></script>
     <script src="<?= asset_url('/src/js/playlists.js') ?>" defer></script>
     <script src="<?= asset_url('/src/js/offline-tools.js') ?>"></script>
     <script src="<?= asset_url('/src/js/live.js') ?>"></script>
@@ -524,7 +513,8 @@
             if (from === 'roteiro' && roteiroId) {
                 const backLink = document.getElementById('backLink');
                 if (backLink) {
-                    backLink.href = 'roteiro.php?id=' + encodeURIComponent(roteiroId);
+                    const dest = 'roteiro.php?id=' + encodeURIComponent(roteiroId);
+                    backLink.setAttribute('onclick', "location.href='" + dest + "'");
                 }
             }
         })();
@@ -2027,7 +2017,7 @@
 
             decreaseBtn.addEventListener('click', () => {
                 const currentSize = parseFloat(window.getComputedStyle(cifraDiv, null).getPropertyValue('font-size'));
-                cifraDiv.style.fontSize = (currentSize - 1) + 'px';
+                cifraDiv.style.fontSize = Math.max(10, currentSize - 1) + 'px';
                 adjustColumns();
                 setTimeout(adjustColumns, 50);
             });

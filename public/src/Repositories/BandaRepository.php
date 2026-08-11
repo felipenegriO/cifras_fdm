@@ -22,6 +22,22 @@ class BandaRepository {
         return $stmt->fetchAll();
     }
 
+    public function getManagedByUsuario(string $usuarioId): array {
+        $stmt = $this->pdo->prepare(
+            'SELECT b.* FROM bandas b
+             JOIN usuario_banda ub ON b.id = ub.banda_id
+             WHERE ub.usuario_id = ? AND ub.perfil = "administrador" ORDER BY b.nome'
+        );
+        $stmt->execute([$usuarioId]);
+        return $stmt->fetchAll();
+    }
+
+    public function isManagedByUsuario(string $bandaId, string $usuarioId): bool {
+        $stmt = $this->pdo->prepare('SELECT 1 FROM usuario_banda WHERE banda_id = ? AND usuario_id = ? AND perfil = "administrador" LIMIT 1');
+        $stmt->execute([$bandaId, $usuarioId]);
+        return (bool)$stmt->fetchColumn();
+    }
+
     /** Conta quantas bandas o usuário administra (para checar limite do plano). */
     public function countByUsuario(string $usuarioId): int {
         $stmt = $this->pdo->prepare(
@@ -73,7 +89,7 @@ class BandaRepository {
             ]);
         } else {
             $stmt = $this->pdo->prepare(
-                'INSERT INTO bandas (id, nome, logo, ativo, plano, trial_expira_em, stripe_subscription_id) VALUES (?,?,?,?,?,?,?)'
+                'INSERT INTO bandas (id, nome, logo, ativo, plano, trial_expira_em, stripe_subscription_id, criador_id) VALUES (?,?,?,?,?,?,?,?)'
             );
             $stmt->execute([
                 $banda['id'],
@@ -83,8 +99,14 @@ class BandaRepository {
                 $banda['plano'] ?? 'gratuito',
                 $banda['trial_expira_em'] ?? null,
                 $banda['stripe_subscription_id'] ?? null,
+                $banda['criador_id'] ?? null,
             ]);
         }
+    }
+
+    public function definirCriador(string $bandaId, string $usuarioId): void {
+        $stmt = $this->pdo->prepare('UPDATE bandas SET criador_id = ? WHERE id = ? AND criador_id IS NULL');
+        $stmt->execute([$usuarioId, $bandaId]);
     }
 
     public function marcarBloqueada(string $id): void {

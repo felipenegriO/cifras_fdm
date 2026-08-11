@@ -10,7 +10,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 require_auth_json();
 require_csrf();
-require_band_role('gestor'); // basico pode seguir, mas não pode ser host do live
+require_live_host();
 OperationalLogger::log('info', 'live.update_requested', ['operation' => 'update']);
 
 $input = json_decode(file_get_contents('php://input'), true);

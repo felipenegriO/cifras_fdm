@@ -150,7 +150,7 @@ if (!headers_sent()) {
     header('X-Frame-Options: SAMEORIGIN');
     header('Referrer-Policy: strict-origin-when-cross-origin');
     header('Permissions-Policy: camera=(), microphone=(), geolocation=()');
-    header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://www.youtube.com; img-src 'self' data: https://img.youtube.com https://i.ytimg.com;");
+    header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://www.googletagmanager.com; style-src 'self' 'unsafe-inline'; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://www.youtube.com https://www.google-analytics.com https://region1.google-analytics.com; img-src 'self' data: https://img.youtube.com https://i.ytimg.com;");
 }
 
 // ===== Secure session cookie params =====
@@ -394,10 +394,33 @@ function can_manage_band_users(): bool {
     return current_band_role() === 'administrador';
 }
 
+function has_active_band_plan(): bool {
+    $band = $_SESSION['banda_atual'] ?? [];
+    return (int)($band['ativo'] ?? 1) === 1
+        && in_array((string)($band['plano'] ?? ''), ['mensal', 'semestral', 'anual', 'ativo'], true);
+}
+
+function can_manage_bands(): bool {
+    return is_master() || (current_band_role() === 'administrador' && has_active_band_plan());
+}
+
+function can_host_live(): bool {
+    return current_band_id() !== '' && (is_master() || in_array(current_band_role(), ['basico', 'gestor', 'administrador'], true));
+}
+
+function require_live_host(): void {
+    require_current_band_json();
+    if (!can_host_live()) {
+        http_response_code(403);
+        echo json_encode(['ok' => false, 'sucesso' => false, 'error' => 'Permissão insuficiente.', 'mensagem' => 'Permissão insuficiente.']);
+        cifro_terminate();
+    }
+}
+
 /** Aborts with 403 JSON if caller doesn't have $minRole within current band. */
 function require_band_role(string $minRole): void {
     require_current_band_json();
-    $order = ['basico' => 0, 'gestor' => 1, 'administrador' => 2];
+    $order = ['externo' => 0, 'basico' => 0, 'gestor' => 1, 'administrador' => 2];
     $required = $order[$minRole] ?? 0;
     $actual   = is_master() ? 99 : ($order[current_band_role()] ?? 0);
     if ($actual < $required) {
@@ -414,7 +437,7 @@ function current_user_profile(): string {
     // Returns the banda-scoped role for views that still check it
     if (is_master()) return 'administrador';
     $role = current_band_role();
-    $map = ['administrador' => 'administrador', 'gestor' => 'administrador', 'basico' => 'musico'];
+    $map = ['administrador' => 'administrador', 'gestor' => 'administrador', 'basico' => 'musico', 'externo' => 'externo'];
     return $map[$role] ?? 'musico';
 }
 
@@ -483,6 +506,14 @@ function asset_url($path) {
     }
 
     return $absPath;
+}
+
+function band_logo_url(?string $logo): string {
+    $logo = trim((string)$logo);
+    if ($logo === '') return asset_url('/src/images/cifro-mark.svg');
+    if (str_starts_with($logo, 'data:') || preg_match('#^https?://#i', $logo)) return $logo;
+    if (str_starts_with($logo, '/')) return base_url($logo);
+    return $logo;
 }
 
 function render_view($view, $data = []) {

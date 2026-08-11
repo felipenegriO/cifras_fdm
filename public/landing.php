@@ -4,10 +4,17 @@ require_once __DIR__ . '/src/backend/bootstrap.php';
 if (isset($_SESSION['autenticado']) && $_SESSION['autenticado'] === true) {
     header('Location: ' . base_url('/index.php')); exit;
 }
+// Página pública de marketing: pode ser cacheada por navegador/CDN
+// (sobrescreve o no-store padrão que o bootstrap aplica ao resto do site).
+if (!headers_sent()) {
+    header('Cache-Control: public, max-age=300, s-maxage=3600');
+}
 
 $siteUrl   = rtrim((string) env('APP_URL', 'https://cifro.online'), '/');
-$canonical = $siteUrl . '/landing.php';
+$canonical = $siteUrl . '/';
 $ogImage   = $siteUrl . '/og-image.png';
+$gaId      = trim((string) env('GA4_MEASUREMENT_ID', ''));
+$siteHost  = preg_replace('#^https?://#', '', $siteUrl);
 
 $supportEmail = (string) env('SUPPORT_EMAIL', 'contato@cifro.online');
 $whatsapp     = preg_replace('/\D+/', '', (string) env('PAYMENT_WHATSAPP_PHONE', ''));
@@ -18,12 +25,81 @@ $ownerCity    = trim((string) env('OWNER_LOCATION', ''));
 $quote       = trim((string) env('SOCIAL_PROOF_QUOTE', ''));
 $quoteAuthor = trim((string) env('SOCIAL_PROOF_AUTHOR', ''));
 
-// Screenshots do produto: renderizam apenas quando os arquivos existirem de fato.
-$shotDir   = __DIR__ . '/src/images/produto/';
-$hasShot   = static fn (string $f): bool => is_file($shotDir . $f);
-$heroShot  = $hasShot('cifra-palco.webp');
+// Screenshots do produto: carrossel no hero. Cada capa real (.webp) que existir
+// entra no lugar do mockup ilustrativo correspondente — sem precisar tocar no HTML.
+$shotDir = __DIR__ . '/src/images/produto/';
+$hasShot = static fn (string $f): bool => is_file($shotDir . $f);
+
+$shotSlots = [
+    ['file' => 'leitura.png',   'alt' => 'Tela de leitura do Cifrô com a cifra em tela cheia, acordes e letra em cores diferentes, fonte grande, fundo escuro e controle de tom ao lado — pronto pra tocar no palco.'],
+    ['file' => 'editor.png',    'alt' => 'Editor do Cifrô com a cifra colada: acordes reconhecidos e destacados automaticamente acima da letra.'],
+    ['file' => 'importar.png',  'alt' => 'Tela de importar cifra do Cifrô: cole o link do CifraClub e o conteúdo é buscado automaticamente.'],
+];
+
+$heroSlides = [];
+foreach ($shotSlots as $slot) {
+    if ($hasShot($slot['file'])) {
+        $heroSlides[] = ['src' => '/src/images/produto/' . $slot['file'], 'alt' => $slot['alt'], 'mock' => false];
+    }
+}
+$heroShotMock = $hasShot('cifra-palco-mock.svg');
+if (!$heroSlides && $heroShotMock) {
+    $heroSlides[] = ['src' => '/src/images/produto/cifra-palco-mock.svg', 'alt' => $shotSlots[0]['alt'], 'mock' => true];
+}
+$heroShot = count($heroSlides) > 0;
+$heroIsMock = $heroShot && $heroSlides[0]['mock'];
 
 $contaExcluida = isset($_GET['conta_excluida']);
+
+// FAQ: array único, reaproveitado no HTML e no JSON-LD (FAQPage) abaixo.
+$faqItems = [
+    [
+        'q' => 'Preciso digitar todas as minhas cifras à mão?',
+        'a' => 'Você precisa trazer a cifra para dentro do Cifrô — colando o texto de onde ela estiver ou escrevendo no editor. O que você não precisa fazer é marcar acorde por acorde: o editor reconhece sozinho e já mostra o resultado formatado do lado. Depois de cadastrada, a música fica na biblioteca da banda para sempre e serve para todos os repertórios.',
+    ],
+    [
+        'q' => 'Todo mundo da banda precisa pagar?',
+        'a' => 'Não. O plano é da banda, não por pessoa. Um plano pago libera membros ilimitados — cada músico entra com o próprio login, sem custo adicional. No plano gratuito só você tem acesso.',
+    ],
+    [
+        'q' => 'Posso cancelar quando quiser?',
+        'a' => 'Sim, sem multa e sem fidelidade. Se você assinou no cartão, cancela sozinho: na tela de Plano tem o botão <strong>“Cancelar assinatura”</strong> e pronto — nenhuma nova cobrança é feita. Se você pagou por Pix não existe cobrança recorrente, então basta não renovar (e há um botão para avisar o suporte, se preferir). Nos dois casos você continua com o plano pago até o fim do período que já pagou, e depois a conta volta para o plano gratuito. Pelo Código de Defesa do Consumidor, você ainda tem 7 dias após a contratação para desistir e receber tudo de volta.',
+    ],
+    [
+        'q' => 'Se eu cancelar ou parar de pagar, perco minhas cifras?',
+        'a' => 'Não. A conta volta para os limites do plano gratuito, mas o conteúdo continua lá. Em Configurações você pode exportar seus dados a qualquer momento, com plano ativo ou não, e também pedir a exclusão definitiva da conta se quiser.',
+    ],
+    [
+        'q' => 'Funciona mesmo sem internet?',
+        'a' => 'As cifras e os repertórios, sim — o app se prepara sozinho para uso offline assim que você abre com conexão, sem precisar tocar em nada. Se quiser forçar uma atualização na hora, o botão “Sincronizar” faz isso manualmente. O modo ao vivo e o ensaio com YouTube precisam de rede, porque dependem de conversar com o servidor. Está tudo detalhado na seção acima.',
+    ],
+    [
+        'q' => 'Tem aplicativo para instalar?',
+        'a' => 'O Cifrô abre no navegador e pode ser adicionado à tela de início do celular. Ele passa a abrir em tela cheia, com ícone próprio, e funciona como um app — sem depender de loja de aplicativos e sem ocupar o espaço de um app comum.',
+    ],
+    [
+        'q' => 'O que acontece com os meus dados?',
+        'a' => 'Ficam guardados para operar o serviço e nada mais: não vendemos nem repassamos dados para publicidade. Cada banda só enxerga o próprio conteúdo. Você pode exportar tudo ou apagar a conta quando quiser, direto em Configurações. Os detalhes estão na <a href="' . e((string) env('PRIVACY_URL', '/privacidade.php')) . '" class="link-brand">Política de Privacidade</a>.',
+    ],
+    [
+        'q' => 'Por que não usar o Cifra Club, que é de graça?',
+        'a' => 'Use — ele é ótimo para achar e aprender uma música. O Cifrô resolve outro problema: guardar a versão que a sua banda toca, no tom de vocês, montar a ordem do domingo e abrir tudo ao mesmo tempo no celular de cada músico. E aqui o plano é por banda: menos de R$ 10 por mês para todo mundo, contra uma assinatura por pessoa em outros lugares.',
+    ],
+    [
+        'q' => 'E se o Cifrô acabar?',
+        'a' => 'Pergunta justa para um projeto pequeno em beta. Em Configurações você exporta todas as suas cifras e repertórios quando quiser, com plano ativo ou não — os arquivos são seus. Se um dia isto parar de pé, avisamos com antecedência para você exportar tudo com calma.',
+    ],
+    [
+        'q' => 'Dá para importar minhas cifras todas de uma vez?',
+        'a' => 'Hoje não — você traz uma de cada vez, colando o texto no editor (que reconhece os acordes sozinho). Se você já tem uma lista grande, escreva para <a href="mailto:' . e($supportEmail) . '" class="link-brand">' . e($supportEmail) . '</a> que ajudamos a organizar a migração.',
+    ],
+    [
+        'q' => 'Como falo com vocês se der problema?',
+        'a' => 'Por e-mail, em <a href="mailto:' . e($supportEmail) . '" class="link-brand">' . e($supportEmail) . '</a>'
+            . ($whatsapp !== '' ? ', ou pelo WhatsApp <a href="https://wa.me/' . e($whatsapp) . '" class="link-brand">clicando aqui</a>' : '')
+            . '. O Cifrô é um projeto pequeno e em beta: quem responde é quem desenvolve, normalmente em até um dia útil.',
+    ],
+];
 ?>
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -53,11 +129,23 @@ $contaExcluida = isset($_GET['conta_excluida']);
   <meta name="twitter:image" content="<?= e($ogImage) ?>">
 
   <link rel="icon" href="/favicon.ico" sizes="any">
-  <link rel="icon" href="/src/images/cifro-mark.svg" type="image/svg+xml">
+  <link rel="icon" href="<?= e(asset_url('/src/images/cifro-mark.svg')) ?>" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/src/images/apple-icon-180x180.png">
   <link rel="manifest" href="/manifest.json">
 
+  <?php if ($gaId !== ''): ?>
+  <!-- Google Analytics 4 — gratuito; ver GA4_MEASUREMENT_ID no .env -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=<?= e($gaId) ?>"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', <?= json_encode($gaId) ?>);
+  </script>
+  <?php endif; ?>
+
   <link rel="preload" href="/src/fonts/inter/Inter-Regular.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/src/fonts/inter/Inter-SemiBold.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/src/fonts/inter/Inter-Bold.woff2" as="font" type="font/woff2" crossorigin>
   <link href="/src/css/fonts.css" rel="stylesheet">
   <style>
@@ -85,6 +173,8 @@ $contaExcluida = isset($_GET['conta_excluida']);
     }
     .skip-link { position:absolute;left:-9999px;top:0;background:var(--brand);color:#fff;padding:12px 20px;z-index:10;border-radius:0 0 8px 0; }
     .skip-link:focus { left:0; }
+    .visually-hidden { position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0; }
+    .link-brand { color:var(--brand-soft); }
 
     .wrap { max-width:1000px;margin:0 auto;padding-left:24px;padding-right:24px; }
 
@@ -115,8 +205,18 @@ $contaExcluida = isset($_GET['conta_excluida']);
     .btn-secondary { padding:15px 30px;min-height:52px;background:transparent;color:var(--text-2);border-radius:10px;font-size:16px;font-weight:600;border:1px solid var(--border);cursor:pointer;display:inline-flex;align-items:center;justify-content:center; }
     .btn-secondary:hover { border-color:#555;color:#fff; }
     .hero p.hero-note { margin:18px auto 0;font-size:13px;color:var(--text-3);max-width:520px; }
-    .hero-shot { margin-top:44px;border:1px solid var(--border);border-radius:16px;overflow:hidden;background:var(--bg-card); }
-    .hero-shot img { display:block;width:100%;height:auto; }
+
+    /* ── CARROSSEL DO HERO ── */
+    .hero-shot { margin:44px auto 0;max-width:640px;border:1px solid var(--border);border-radius:16px;overflow:hidden;background:var(--bg-card); }
+    .hero-shot-mock-tag { margin:0;padding:5px 12px;background:rgba(124,58,237,.12);border-bottom:1px solid var(--border);font-size:10.5px;color:var(--brand-soft);text-align:center; }
+    .hero-carousel { position:relative; }
+    .hero-carousel-track { display:flex;transition:transform .45s ease; }
+    .hero-carousel-slide { flex:0 0 100%;min-width:0; }
+    .hero-carousel-slide img { display:block;width:100%;height:auto; }
+    .hero-carousel-dots { display:flex;gap:7px;justify-content:center;padding:12px 0;background:var(--bg-card); }
+    .hero-carousel-dot { width:7px;height:7px;border-radius:999px;border:none;background:var(--border);padding:0;cursor:pointer; }
+    .hero-carousel-dot[aria-current="true"] { background:var(--brand-soft);width:18px; }
+    .hero-carousel-dot:focus-visible { outline:2px solid var(--brand-soft);outline-offset:2px; }
 
     /* ── SEÇÕES ── */
     section { padding-bottom:76px; }
@@ -139,6 +239,8 @@ $contaExcluida = isset($_GET['conta_excluida']);
 
     /* ── OFFLINE (honesto) ── */
     .truth { background:var(--bg-card);border:1px solid var(--border);border-radius:16px;padding:32px; }
+    .truth-title { text-align:left;margin-bottom:6px; }
+    .truth-intro { color:var(--text-2);margin:0;font-size:15px; }
     .truth-grid { display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:24px; }
     .truth-col h3 { margin:0 0 14px;font-size:15px;text-transform:uppercase;letter-spacing:.6px;color:var(--text-3); }
     .truth-col ul { list-style:none;padding:0;margin:0; }
@@ -217,7 +319,7 @@ $contaExcluida = isset($_GET['conta_excluida']);
     .footer-legal { max-width:640px;margin:0 auto;line-height:1.7; }
 
     @media (max-width:860px) {
-      .truth-grid { grid-template-columns:1fr;gap:8px; }
+      .truth-grid { grid-template-columns:1fr;gap:20px; }
       .install { flex-direction:column;text-align:center;gap:18px; }
     }
     @media (max-width:760px) { .pricing-grid { grid-template-columns:1fr 1fr; } }
@@ -225,7 +327,12 @@ $contaExcluida = isset($_GET['conta_excluida']);
       .proof-grid, .features-grid, .steps { grid-template-columns:1fr; }
       .hero { padding-top:52px; }
       nav { padding:12px 16px; }
+      .nav-brand { flex:0 0 auto; }
+      .nav-brand img { width:88px; }
+      .nav-links { gap:6px; }
+      .nav-link-secondary { display:none; }
       .nav-link { padding:11px 10px; }
+      .btn-nav { white-space:nowrap;padding:11px 14px; }
       .truth { padding:24px 20px; }
     }
     @media (max-width:480px) { .pricing-grid { grid-template-columns:1fr; } }
@@ -238,10 +345,10 @@ $contaExcluida = isset($_GET['conta_excluida']);
   <nav>
     <a href="/landing.php" class="nav-brand" aria-label="Cifrô — página inicial"><img src="/src/images/cifro-logo.svg" alt="Cifrô" width="112" height="30"></a>
     <div class="nav-links">
-      <a href="#como-funciona" class="nav-link">Como funciona</a>
-      <a href="#precos" class="nav-link">Preços</a>
+      <a href="#como-funciona" class="nav-link nav-link-secondary">Como funciona</a>
+      <a href="#precos" class="nav-link nav-link-secondary">Preços</a>
       <a href="/login.php" class="nav-link">Entrar</a>
-      <a href="/register.php" class="btn-nav" data-cifro-event="cta_nav">Testar grátis</a>
+      <a href="/register.php" class="btn-nav" data-cifro-event="cta_nav">Criar conta grátis</a>
     </div>
   </nav>
 
@@ -258,20 +365,40 @@ $contaExcluida = isset($_GET['conta_excluida']);
     <p>Cifras e repertório para bandas e ministérios de louvor. Você monta a lista de domingo uma vez — a banda inteira abre a mesma música, no mesmo tom, no próprio celular.</p>
     <div class="cta-group">
       <a href="/register.php" class="btn-primary" data-cifro-event="cta_hero">Criar conta grátis</a>
-      <a href="/login.php" class="btn-secondary">Já tenho conta</a>
+      <a href="#como-funciona" class="btn-secondary" data-cifro-event="cta_hero_secondary">Ver como funciona</a>
     </div>
-    <p class="hero-note">Plano grátis para sempre: 1 banda, até 10 músicas e 1 repertório. Sem cartão de crédito.</p>
+    <p class="hero-note">Comece de graça, sem cartão. Quando quiser liberar tudo: R$ 9,90 por mês pela banda inteira — não por músico.</p>
 
     <?php if ($heroShot): ?>
       <div class="hero-shot">
-        <img src="/src/images/produto/cifra-palco.webp" width="1200" height="720" fetchpriority="high"
-             alt="Tela do Cifrô com uma cifra aberta: acordes destacados acima da letra, fonte grande, fundo escuro.">
+        <?php if ($heroIsMock): ?>
+          <p class="hero-shot-mock-tag">Ilustração — capturas reais em breve</p>
+        <?php endif; ?>
+        <div class="hero-carousel" id="hero-carousel">
+          <div class="hero-carousel-track">
+            <?php foreach ($heroSlides as $i => $slide): ?>
+              <div class="hero-carousel-slide">
+                <img src="<?= e($slide['src']) ?>" width="1200" height="720"
+                     <?= $i === 0 ? 'fetchpriority="high"' : '' ?>
+                     alt="<?= e($slide['alt']) ?>">
+              </div>
+            <?php endforeach; ?>
+          </div>
+          <?php if (count($heroSlides) > 1): ?>
+            <div class="hero-carousel-dots" role="tablist" aria-label="Telas do Cifrô">
+              <?php foreach ($heroSlides as $i => $slide): ?>
+                <button type="button" class="hero-carousel-dot" role="tab" aria-current="<?= $i === 0 ? 'true' : 'false' ?>" aria-label="Ver tela <?= $i + 1 ?> de <?= count($heroSlides) ?>"></button>
+              <?php endforeach; ?>
+            </div>
+          <?php endif; ?>
+        </div>
       </div>
     <?php endif; ?>
   </section>
 
   <!-- PROOF OF VALUE -->
   <section class="proof wrap">
+    <h2 class="visually-hidden">O que o Cifrô resolve</h2>
     <div class="proof-grid">
       <div class="proof-card">
         <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
@@ -286,7 +413,7 @@ $contaExcluida = isset($_GET['conta_excluida']);
       <div class="proof-card">
         <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5a9 9 0 0 1 14 0"/><path d="M8.5 16a4.5 4.5 0 0 1 7 0"/><circle cx="12" cy="19.5" r="1.2"/><path d="M2 9a13 13 0 0 1 20 0"/></svg>
         <h3 class="proof-title">Modo ao vivo</h3>
-        <p class="proof-desc">O líder passa para a próxima música e a tela de todo mundo acompanha em tempo real. Precisa de internet — veja abaixo o que roda sem ela.</p>
+        <p class="proof-desc">O líder passa para a próxima música e a tela de todo mundo vira junto. Ninguém pergunta "qual é a próxima?" no meio do culto.</p>
       </div>
     </div>
   </section>
@@ -314,11 +441,39 @@ $contaExcluida = isset($_GET['conta_excluida']);
     </div>
   </section>
 
+  <!-- FEATURES -->
+  <section class="features wrap">
+    <h2 class="section-title">Feito para o que acontece no ensaio</h2>
+    <p class="section-sub">Não é um site de cifras. É a ferramenta que a sua banda usa junto.</p>
+    <div class="features-grid">
+      <div class="feature-card">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+        <h3>Modo escuro e fonte grande</h3>
+        <p>Tela pensada para o palco: fundo preto para não ofuscar, tamanho de letra que você regula e enxerga de longe, sem nada piscando na frente.</p>
+      </div>
+      <div class="feature-card">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+        <h3>Editor de cifras</h3>
+        <p>Cole a cifra de onde ela estiver e edite com o resultado aparecendo ao lado. Os acordes são reconhecidos sozinhos — você não marca nada à mão.</p>
+      </div>
+      <div class="feature-card">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3l18 18"/><path d="M10.7 5.1a13 13 0 0 1 10.9 3.6"/><path d="M2.4 8.7a13 13 0 0 1 4.2-2.8"/><path d="M5.4 12.4a9 9 0 0 1 3-1.9"/><path d="M13.5 10.8a9 9 0 0 1 4.8 2"/><path d="M8.8 16a4.5 4.5 0 0 1 6.1-.3"/><circle cx="12" cy="19.5" r="1.2"/></svg>
+        <h3>Suas cifras abrem sem internet</h3>
+        <p>Abra o Cifrô em casa, no wi-fi, uma vez. As cifras ficam salvas no próprio celular e abrem no domingo mesmo sem sinal nenhum. O wi-fi da igreja deixa de ser problema seu — só o modo ao vivo precisa de rede.</p>
+      </div>
+      <div class="feature-card">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="3"/><path d="M10 9l5 3-5 3z"/></svg>
+        <h3>Ensaio direto do YouTube</h3>
+        <p>Repete só a ponte até acertar, diminui a velocidade sem desafinar e sobe o tom do vídeo para o da sua banda. Ensaie em casa antes de subir no palco.</p>
+      </div>
+    </div>
+  </section>
+
   <!-- OFFLINE — o que funciona sem internet, honestamente -->
   <section class="wrap">
     <div class="truth">
-      <h2 class="section-title" style="text-align:left;margin-bottom:6px">E quando a internet cai?</h2>
-      <p style="color:var(--text-2);margin:0;font-size:15px">Antes de sair de casa você loga no site e o Cifrô guarda suas músicas e repertórios no próprio aparelho. Sendo direto sobre o que isso cobre:</p>
+      <h2 class="section-title truth-title">E quando a internet cai?</h2>
+      <p class="truth-intro">Antes de sair de casa, abra o Cifrô com internet uma vez — ele guarda suas músicas e repertórios no próprio aparelho. Sendo direto sobre o que isso cobre:</p>
       <div class="truth-grid">
         <div class="truth-col truth-yes">
           <h3>Funciona sem internet</h3>
@@ -343,41 +498,13 @@ $contaExcluida = isset($_GET['conta_excluida']);
     </div>
   </section>
 
-  <!-- FEATURES -->
-  <section class="features wrap">
-    <h2 class="section-title">Feito para o que acontece no ensaio</h2>
-    <p class="section-sub">Não é um site de cifras. É a ferramenta que a sua banda usa junto.</p>
-    <div class="features-grid">
-      <div class="feature-card">
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
-        <h3>Modo escuro e fonte grande</h3>
-        <p>Tela pensada para o palco: fundo preto para não ofuscar, tamanho de letra que você regula e enxerga de longe, sem nada piscando na frente.</p>
-      </div>
-      <div class="feature-card">
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
-        <h3>Editor de cifras</h3>
-        <p>Cole a cifra de onde ela estiver e edita com o resultado aparecendo do lado. Os acordes são reconhecidos sozinhos — você não marca nada à mão.</p>
-      </div>
-      <div class="feature-card">
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3l18 18"/><path d="M10.7 5.1a13 13 0 0 1 10.9 3.6"/><path d="M2.4 8.7a13 13 0 0 1 4.2-2.8"/><path d="M5.4 12.4a9 9 0 0 1 3-1.9"/><path d="M13.5 10.8a9 9 0 0 1 4.8 2"/><path d="M8.8 16a4.5 4.5 0 0 1 6.1-.3"/><circle cx="12" cy="19.5" r="1.2"/></svg>
-        <h3>Suas cifras abrem sem internet</h3>
-        <p>Abrindo o app com internet em casa já deixa o repertório pronto para o modo avião, sem precisar fazer nada. O wi-fi da igreja deixa de ser problema seu — só o modo ao vivo precisa de rede.</p>
-      </div>
-      <div class="feature-card">
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="3"/><path d="M10 9l5 3-5 3z"/></svg>
-        <h3>Ensaio direto do YouTube</h3>
-        <p>Repete só a ponte até acertar, diminui a velocidade sem desafinar e sobe o tom do vídeo para o da sua banda. Ensaie em casa antes de subir no palco.</p>
-      </div>
-    </div>
-  </section>
-
   <!-- INSTALAR -->
   <section class="wrap">
     <div class="install">
       <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="3"/><path d="M11 18.5h2"/></svg>
       <div>
         <h2>Instale no celular, sem loja de aplicativos</h2>
-        <p>Abra o cifro.online no navegador do celular e escolha “adicionar à tela de início”. O ícone fica junto dos outros apps, abre em tela cheia e quase não ocupa espaço. Nada de Play Store, nada de atualizar na mão.</p>
+        <p>Abra o <?= e($siteHost) ?> no navegador do celular e escolha "adicionar à tela de início". O ícone fica junto dos outros apps, abre em tela cheia e quase não ocupa espaço. Nada de Play Store, nada de atualizar na mão.</p>
       </div>
     </div>
   </section>
@@ -396,15 +523,15 @@ $contaExcluida = isset($_GET['conta_excluida']);
       <h2>Onde o Cifrô está hoje</h2>
       <p>O Cifrô está em beta aberto. Ele nasceu dentro de um ministério de louvor que cansou de mandar PDF no grupo e descobrir no domingo que cada um tinha imprimido num tom.</p>
       <p>Ainda não temos depoimento de cliente nem número de usuários para mostrar aqui — e preferimos deixar o espaço vazio a preencher com coisa inventada. O que dá pra fazer hoje é o que está escrito nesta página, e o plano grátis existe justamente para você conferir antes de pagar qualquer coisa.</p>
-      <p>Achou um problema ou faltou alguma coisa? Escreva para <a href="mailto:<?= e($supportEmail) ?>" style="color:var(--brand-soft)"><?= e($supportEmail) ?></a>. Quem responde é quem desenvolve.</p>
+      <p>Achou um problema ou faltou alguma coisa? Escreva para <a href="mailto:<?= e($supportEmail) ?>" class="link-brand"><?= e($supportEmail) ?></a>. Quem responde é quem desenvolve.</p>
     </div>
   </section>
   <?php endif; ?>
 
   <!-- PRICING -->
   <section id="precos" class="pricing wrap">
-    <h2 class="section-title">R$ 9,90 por mês para a banda inteira</h2>
-    <p class="section-sub">Não é por músico. Um plano pago libera músicas, repertórios e membros ilimitados para todo mundo.</p>
+    <h2 class="section-title">Menos de R$ 10 por mês. Para a banda inteira.</h2>
+    <p class="section-sub">Não é por músico. Um plano pago libera músicas, repertórios, modo ao vivo e membros ilimitados para todo mundo.</p>
 
     <div class="pricing-grid">
 
@@ -419,8 +546,8 @@ $contaExcluida = isset($_GET['conta_excluida']);
           <li class="limit">Até 10 músicas</li>
           <li class="limit">1 repertório</li>
           <li class="limit">Só você (sem outros membros)</li>
-          <li>Modo ao vivo</li>
           <li>Cifras abrem offline</li>
+          <li class="limit">Modo ao vivo (a partir do plano pago)</li>
         </ul>
         <a href="/register.php" class="btn-plan btn-plan-outline" data-cifro-event="cta_plano_gratuito">Começar grátis</a>
       </div>
@@ -485,38 +612,12 @@ $contaExcluida = isset($_GET['conta_excluida']);
   <section class="wrap">
     <h2 class="section-title">Perguntas que todo mundo faz</h2>
     <div class="faq">
+      <?php foreach ($faqItems as $item): ?>
       <details>
-        <summary>Preciso digitar todas as minhas cifras à mão?</summary>
-        <p>Você precisa trazer a cifra para dentro do Cifrô — colando o texto de onde ela estiver ou escrevendo no editor. O que você não precisa fazer é marcar acorde por acorde: o editor reconhece sozinho e já mostra o resultado formatado do lado. Depois de cadastrada, a música fica na biblioteca da banda para sempre e serve para todos os repertórios.</p>
+        <summary><?= e($item['q']) ?></summary>
+        <p><?= $item['a'] ?></p>
       </details>
-      <details>
-        <summary>Todo mundo da banda precisa pagar?</summary>
-        <p>Não. O plano é da banda, não por pessoa. Um plano pago libera membros ilimitados — cada músico entra com o próprio login, sem custo adicional. No plano gratuito só você tem acesso.</p>
-      </details>
-      <details>
-        <summary>Posso cancelar quando quiser?</summary>
-        <p>Sim, sem multa e sem fidelidade. Se você assinou no cartão, cancela sozinho: na tela de Plano tem o botão <strong>“Cancelar assinatura”</strong> e pronto — nenhuma nova cobrança é feita. Se você pagou por Pix não existe cobrança recorrente, então basta não renovar (e há um botão para avisar o suporte, se preferir). Nos dois casos você continua com o plano pago até o fim do período que já pagou, e depois a conta volta para o plano gratuito. Pelo Código de Defesa do Consumidor, você ainda tem 7 dias após a contratação para desistir e receber tudo de volta.</p>
-      </details>
-      <details>
-        <summary>Se eu cancelar ou parar de pagar, perco minhas cifras?</summary>
-        <p>Não. A conta volta para os limites do plano gratuito, mas o conteúdo continua lá. Em Configurações você pode exportar seus dados a qualquer momento, com plano ativo ou não, e também pedir a exclusão definitiva da conta se quiser.</p>
-      </details>
-      <details>
-        <summary>Funciona mesmo sem internet?</summary>
-        <p>As cifras e os repertórios, sim — o app se prepara sozinho para uso offline assim que você abre com conexão, sem precisar tocar em nada. Se quiser forçar uma atualização na hora, o botão “Sincronizar” faz isso manualmente. O modo ao vivo e o ensaio com YouTube precisam de rede, porque dependem de conversar com o servidor. Está tudo detalhado na seção acima.</p>
-      </details>
-      <details>
-        <summary>Tem aplicativo para instalar?</summary>
-        <p>O Cifrô abre no navegador e pode ser adicionado à tela de início do celular. Ele passa a abrir em tela cheia, com ícone próprio, e funciona como um app — sem depender de loja de aplicativos e sem ocupar o espaço de um app comum.</p>
-      </details>
-      <details>
-        <summary>O que acontece com os meus dados?</summary>
-        <p>Ficam guardados para operar o serviço e nada mais: não vendemos nem repassamos dados para publicidade. Cada banda só enxerga o próprio conteúdo. Você pode exportar tudo ou apagar a conta quando quiser, direto em Configurações. Os detalhes estão na <a href="<?= e((string) env('PRIVACY_URL', '/privacidade.php')) ?>" style="color:var(--brand-soft)">Política de Privacidade</a>.</p>
-      </details>
-      <details>
-        <summary>Como falo com vocês se der problema?</summary>
-        <p>Por e-mail, em <a href="mailto:<?= e($supportEmail) ?>" style="color:var(--brand-soft)"><?= e($supportEmail) ?></a><?php if ($whatsapp !== ''): ?>, ou pelo WhatsApp <a href="https://wa.me/<?= e($whatsapp) ?>" style="color:var(--brand-soft)">clicando aqui</a><?php endif; ?>. O Cifrô é um projeto pequeno e em beta: quem responde é quem desenvolve, normalmente em até um dia útil.</p>
-      </details>
+      <?php endforeach; ?>
     </div>
   </section>
 
@@ -564,6 +665,52 @@ $contaExcluida = isset($_GET['conta_excluida']);
       ],
   ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>
   </script>
+
+  <script type="application/ld+json">
+  <?= json_encode([
+      '@context'   => 'https://schema.org',
+      '@type'      => 'FAQPage',
+      'mainEntity' => array_map(static function (array $item): array {
+          return [
+              '@type'          => 'Question',
+              'name'           => $item['q'],
+              'acceptedAnswer' => [
+                  '@type' => 'Answer',
+                  'text'  => trim(preg_replace('/\s+/', ' ', strip_tags($item['a']))),
+              ],
+          ];
+      }, $faqItems),
+  ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>
+  </script>
+
+  <?php if (count($heroSlides) > 1): ?>
+  <script>
+    (function () {
+      var root = document.getElementById('hero-carousel');
+      if (!root) return;
+      var track = root.querySelector('.hero-carousel-track');
+      var slides = root.querySelectorAll('.hero-carousel-slide');
+      var dots = root.querySelectorAll('.hero-carousel-dot');
+      var i = 0, timer = null;
+
+      function go(n) {
+        i = (n + slides.length) % slides.length;
+        track.style.transform = 'translateX(-' + (i * 100) + '%)';
+        dots.forEach(function (d, idx) { d.setAttribute('aria-current', idx === i ? 'true' : 'false'); });
+      }
+      function next() { go(i + 1); }
+      function start() { stop(); timer = setInterval(next, 4000); }
+      function stop() { if (timer) clearInterval(timer); }
+
+      dots.forEach(function (d, idx) {
+        d.addEventListener('click', function () { go(idx); stop(); start(); });
+      });
+      root.addEventListener('mouseenter', stop);
+      root.addEventListener('mouseleave', start);
+      start();
+    })();
+  </script>
+  <?php endif; ?>
 
   <script src="/src/js/cifro-analytics.js" defer></script>
 </body>

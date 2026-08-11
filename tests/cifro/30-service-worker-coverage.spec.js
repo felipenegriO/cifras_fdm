@@ -227,7 +227,7 @@ test('service worker executa instalação, cache, mensagens e recuperação offl
     expect(helperChecks[6]).toBe(false);
     expect(helperChecks[7]).toBe(false);
     expect(helperChecks[8]).toBe(false);
-    expect(helperChecks[9]).toContain('a%20b%26c');
+    expect(helperChecks[9]).toBe('/index.php');
     // Índices [13] e [14]: throws de populateStatic/preparePages para asset e
     // página inválidos (linhas 55 e 65) - após os 3 checks de getContext
     // ([10]-[12]), antes do check final de preparePages('') que segue sendo
@@ -271,13 +271,17 @@ test('service worker executa instalação, cache, mensagens e recuperação offl
       await new Promise(resolve => setTimeout(resolve, 100));
       const prepared = await new Promise(resolve => {
         const channel = new MessageChannel();
-        channel.port1.onmessage = event => resolve(event.data);
+        channel.port1.onmessage = event => {
+          if (event.data?.state === 'completed' || event.data?.state === 'failed') resolve(event.data);
+        };
         worker.postMessage({ type: 'PREPARE_OFFLINE', userId: 'playwright-sw', bandId: 'band-sw', songIds: [] }, [channel.port2]);
       });
       if (!prepared.ok) throw new Error(prepared.error);
       const rejected = await new Promise(resolve => {
         const channel = new MessageChannel();
-        channel.port1.onmessage = event => resolve(event.data);
+        channel.port1.onmessage = event => {
+          if (event.data?.state === 'completed' || event.data?.state === 'failed') resolve(event.data);
+        };
         worker.postMessage({ type: 'PREPARE_OFFLINE', userId: '', bandId: '', songIds: [] }, [channel.port2]);
       });
       if (rejected.ok) throw new Error('Preparação sem usuário deveria falhar.');

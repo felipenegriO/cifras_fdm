@@ -13,7 +13,7 @@
  * | Gerenciar usuários da banda   |  ✅    |      ✅       |   ❌   |   ❌   |
  * | Ver músicas/playlists (leitura)|  ✅   |      ✅       |   ✅   |   ✅   |
  * | Live mode (seguir)            |  ✅    |      ✅       |   ✅   |   ✅   |
- * | Live mode (host/update)       |  ✅    |      ✅       |   ✅   |   ❌   |
+ * | Live mode (host/update)       |  ✅    |      ✅       |   ✅   |   ✅   |
  */
 import { test, expect } from '../fixtures/coverage.js';
 import fs from 'fs';
@@ -269,14 +269,25 @@ test.describe('Perfil BÁSICO', () => {
     }
   });
 
-  test('basico NÃO PODE ser host do live (update)', async ({ page }) => {
+  test('basico PODE atualizar o live como host', async ({ page }) => {
     const csrf = await getCsrf(page);
     const res = await page.request.post('/api/live/update.php', {
       data: JSON.stringify({ cifra_atual: '1', pagina_atual: 'index.php' }),
       headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
     });
-    // Live update requer gestor+; basico deve receber 403
-    expect([403]).toContain(res.status());
+    expect([200, 400, 409, 422]).toContain(res.status());
+  });
+
+  test('basico PODE iniciar host e acompanhar a live', async ({ page }) => {
+    const csrf = await getCsrf(page);
+    const host = await page.request.post('/api/live/host.php', {
+      data: JSON.stringify({ action: 'start' }),
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+    });
+    expect(host.status()).toBe(200);
+
+    const status = await page.request.get('/api/live/status.php');
+    expect(status.status()).toBe(200);
   });
 });
 

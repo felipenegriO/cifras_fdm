@@ -61,11 +61,13 @@ final class BootstrapHelpersTest extends TestCase
         self::assertFalse(is_master());
         self::assertFalse(can_edit_content());
         self::assertFalse(can_manage_band_users());
+        self::assertFalse(can_host_live());
         self::assertSame('musico', current_user_profile());
         self::assertFalse(current_user_is_admin());
 
         $_SESSION['banda_atual'] = ['id' => 'b1', 'perfil' => 'gestor'];
         self::assertSame('b1', current_band_id());
+        self::assertTrue(can_host_live());
         self::assertTrue(can_edit_content());
         self::assertFalse(can_manage_band_users());
         self::assertSame('administrador', current_user_profile());
@@ -81,6 +83,34 @@ final class BootstrapHelpersTest extends TestCase
         self::assertTrue(can_edit_content());
         self::assertTrue(can_manage_band_users());
         self::assertSame('administrador', current_user_profile());
+    }
+
+    public function testGerenciamentoDeBandasExigePlanoAtivoOuMaster(): void
+    {
+        $_SESSION['banda_atual'] = ['perfil' => 'administrador', 'plano' => 'anual', 'ativo' => 1];
+        self::assertTrue(has_active_band_plan());
+        self::assertTrue(can_manage_bands());
+
+        foreach (['mensal', 'semestral', 'ativo'] as $plano) {
+            $_SESSION['banda_atual']['plano'] = $plano;
+            self::assertTrue(can_manage_bands());
+        }
+
+        $_SESSION['banda_atual']['perfil'] = 'gestor';
+        self::assertFalse(can_manage_bands());
+
+        $_SESSION['banda_atual']['perfil'] = 'administrador';
+        foreach (['gratuito', 'trial', 'bloqueado'] as $plano) {
+            $_SESSION['banda_atual']['plano'] = $plano;
+            self::assertFalse(can_manage_bands());
+        }
+
+        $_SESSION['banda_atual'] = ['perfil' => 'administrador', 'plano' => 'anual', 'ativo' => 0];
+        self::assertFalse(has_active_band_plan());
+        self::assertFalse(can_manage_bands());
+
+        $_SESSION['usuario'] = ['perfil' => 'master'];
+        self::assertTrue(can_manage_bands());
     }
 
     public function testNaoAmpliaPermissaoPorPerfilLegado(): void

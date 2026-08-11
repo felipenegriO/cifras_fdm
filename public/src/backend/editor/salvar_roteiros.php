@@ -25,7 +25,7 @@ $baseRevision = $data['baseRevision'] ?? null;
 // ----- DELETE -----
 if (isset($data['deleteId'])) {
     try {
-        $mutation = $revisionRepo->mutate($bandaId, $baseRevision, fn() => $repo->delete((int)$data['deleteId'], $bandaId));
+        $mutation = $revisionRepo->mutate($bandaId, $baseRevision, fn() => $repo->delete((int)$data['deleteId'], $bandaId), [['type' => 'roteiro', 'id' => (int)$data['deleteId'], 'operation' => 'delete']]);
         echo json_encode(['ok' => true, 'content_revision' => $mutation['revision']]);
     } catch (SyncConflictException $e) {
         http_response_code(409);
@@ -70,7 +70,7 @@ try {
         $stmt = $pdo->prepare('INSERT INTO roteiros (banda_id, titulo, conteudo, visivel_ate) VALUES (?,?,?,?)');
         $stmt->execute([$bandaId, $titulo, $conteudo, $visivelAte]);
         return (int)$pdo->lastInsertId();
-    });
+    }, fn($id) => [['type' => 'roteiro', 'id' => $id, 'operation' => 'upsert']]);
     echo json_encode(['ok' => true, 'id' => $mutation['result'], 'roteiro' => $repo->findById($mutation['result'], $bandaId), 'content_revision' => $mutation['revision']]);
 } catch (SyncConflictException $e) {
     http_response_code(409);

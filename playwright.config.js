@@ -36,6 +36,12 @@ for (const key of [
   'PAYMENT_PIX_PHONE', 'PAYMENT_PIX_RECIPIENT', 'PAYMENT_WHATSAPP_PHONE',
   'STRIPE_SECRET_KEY', 'STRIPE_LINK_MENSAL', 'STRIPE_LINK_SEMESTRAL', 'STRIPE_LINK_ANUAL',
   'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'GOOGLE_REDIRECT_URI',
+  // Os testes de webhook do Stripe assinam payloads com o segredo/preços de
+  // teste fixos abaixo (fallback `|| 'whsec_playwright'` etc.). Sem este
+  // delete, um STRIPE_WEBHOOK_SECRET/STRIPE_PRICE_* real no .env.local do
+  // desenvolvedor (carregado em process.env logo acima) vence o fallback e
+  // quebra a verificação de assinatura nos testes.
+  'STRIPE_WEBHOOK_SECRET', 'STRIPE_PRICE_MENSAL', 'STRIPE_PRICE_SEMESTRAL', 'STRIPE_PRICE_ANUAL',
 ]) delete webServerEnv[key];
 const coverageOnlyTests = /(?:31-browser-branch-matrix|36-music-view-branches|37-rehearsal-audio-youtube-branches|38-offline-tools-branches|39-script-branches|40-php-under80-coverage|41-php-under80-endpoints|42-php-endpoint-residual-branches|43-js-residual-branches|44-js-ui-fallbacks|45-cifro-sync-validation|46-editor-residual-branches|47-live-residual-branches|48-rehearsal-audio-pitch-residual)\.spec\.js/;
 
@@ -151,7 +157,7 @@ export default defineConfig({
     {
       name: 'pwa',
       testDir: './tests/cifro',
-      testMatch: /(?:26-offline-sync|30-service-worker-coverage)\.spec\.js/,
+      testMatch: /(?:26-offline-sync|30-service-worker-coverage|60-real-offline-user-flow|61-incremental-song-sync|62-playlist-persistence|63-critical-real-user-journeys)\.spec\.js/,
       timeout: 120000,
       dependencies: ['setup'],
       use: {
@@ -183,10 +189,14 @@ export default defineConfig({
       ...webServerEnv,
       APP_ENV: 'test',
       E2E_DB_NAME: process.env.E2E_DB_NAME,
-      STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET || 'whsec_playwright',
-      STRIPE_PRICE_MENSAL: process.env.STRIPE_PRICE_MENSAL || 'price_test_mensal',
-      STRIPE_PRICE_SEMESTRAL: process.env.STRIPE_PRICE_SEMESTRAL || 'price_test_semestral',
-      STRIPE_PRICE_ANUAL: process.env.STRIPE_PRICE_ANUAL || 'price_test_anual',
+      // Lê de webServerEnv (já sem essas 4 chaves), não de process.env: um
+      // STRIPE_WEBHOOK_SECRET/STRIPE_PRICE_* real no .env.local do dev não
+      // pode vencer o fallback de teste — só uma variável exportada de fato
+      // no ambiente (CI, por exemplo) deveria sobrepor.
+      STRIPE_WEBHOOK_SECRET: webServerEnv.STRIPE_WEBHOOK_SECRET || 'whsec_playwright',
+      STRIPE_PRICE_MENSAL: webServerEnv.STRIPE_PRICE_MENSAL || 'price_test_mensal',
+      STRIPE_PRICE_SEMESTRAL: webServerEnv.STRIPE_PRICE_SEMESTRAL || 'price_test_semestral',
+      STRIPE_PRICE_ANUAL: webServerEnv.STRIPE_PRICE_ANUAL || 'price_test_anual',
       ...(collectPhpCoverage ? { XDEBUG_MODE: 'coverage', PHP_WEB_COVERAGE: '1' } : {}),
     },
     url: `${baseURL}/landing.php`,

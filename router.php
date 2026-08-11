@@ -10,6 +10,14 @@ $blocked = [
 
 $uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 
+if (getenv('APP_ENV') === 'test' && ($_COOKIE['cifro_e2e_server_down'] ?? '') === '1') {
+    http_response_code(503);
+    header('Cache-Control: no-store');
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode(['status' => 'unavailable', 'service' => 'cifro']);
+    return true;
+}
+
 if ($uri === '/health' || $uri === '/ready') {
     require __DIR__ . '/public' . $uri . '.php';
     return true;

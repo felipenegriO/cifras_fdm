@@ -1,9 +1,3 @@
-<?php
-$configBanda = $_SESSION['banda_atual'] ?? [];
-$configPlano = $configBanda['plano'] ?? 'gratuito';
-$configPlanoPago = in_array($configPlano, ['mensal', 'semestral', 'anual', 'ativo'], true);
-$configPlanoLabel = $configPlano === 'ativo' ? 'Mensal' : cifro_plan_label($configPlano);
-?>
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -177,18 +171,6 @@ $configPlanoLabel = $configPlano === 'ativo' ? 'Mensal' : cifro_plan_label($conf
         .config-advanced__content {
             border-top: 1px solid var(--border-1);
         }
-        .config-plan-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            padding: 5px 10px;
-            border-radius: var(--radius-pill);
-            background: rgba(52,211,153,.12);
-            border: 1px solid rgba(52,211,153,.25);
-            color: #34d399;
-            font-size: var(--text-xs);
-            font-weight: var(--fw-bold);
-        }
         @media (max-width: 480px) {
             .config-container { padding: 12px; }
             .config-row { flex-direction: column; align-items: flex-start; }
@@ -310,32 +292,6 @@ $configPlanoLabel = $configPlano === 'ativo' ? 'Mensal' : cifro_plan_label($conf
                 </div>
             </div>
         </section>
-
-        <?php if ($configPlanoPago): ?>
-        <section class="config-section" aria-labelledby="sec-pagamento">
-            <header class="config-section__header"><h2 class="config-section__title" id="sec-pagamento">Plano e pagamento</h2></header>
-
-            <div class="config-row config-row--compact">
-                <div class="config-row__label">
-                    <p class="config-row__title">Plano <?= e($configPlanoLabel) ?></p>
-                    <p class="config-row__desc">Músicas, membros, repertórios e modo ao vivo ilimitados.</p>
-                </div>
-                <div class="config-row__control">
-                    <span class="config-plan-badge">● Ativo</span>
-                </div>
-            </div>
-
-            <div class="config-row config-row--compact">
-                <div class="config-row__label">
-                    <p class="config-row__title">Gerenciar pagamento</p>
-                    <p class="config-row__desc">Renove, troque de plano ou solicite o cancelamento.</p>
-                </div>
-                <div class="config-row__control">
-                    <a href="/plano.php#planos" class="btn btn--primary btn--sm">Gerenciar</a>
-                </div>
-            </div>
-        </section>
-        <?php endif; ?>
 
         <!-- ===== Offline ===== -->
         <section class="config-section" aria-labelledby="sec-offline">

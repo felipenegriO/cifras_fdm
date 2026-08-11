@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/src/backend/bootstrap.php';
+if (!headers_sent()) header('Cache-Control: public, max-age=300, s-maxage=3600');
 $version   = (string) env('LEGAL_PRIVACY_VERSION', '2026-08-03');
 $support   = (string) env('SUPPORT_EMAIL', 'contato@cifro.online');
 $ownerName = trim((string) env('OWNER_NAME', ''));

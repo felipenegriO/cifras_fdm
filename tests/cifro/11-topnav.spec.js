@@ -54,3 +54,23 @@ test.describe('Topnav — Controle de Acesso por Role', () => {
     // Nunca deve ter crash
   });
 });
+
+test.describe('Topnav — Menus que exigem servidor', () => {
+  for (const menu of ['Categorias', 'Músicas', 'Usuários']) {
+    test(`${menu} mostra modal e não navega quando o servidor está indisponível`, async ({ page }) => {
+      await page.addInitScript(() => localStorage.setItem('cifroBetaWelcomeSeen', '1'));
+      await page.route('**/health.php?probe=*', route => route.abort('connectionrefused'));
+      await page.goto('/index.php');
+      await expect.poll(() => page.evaluate(() => window.CifroConnectivity?.current())).toBe('servidor_indisponivel');
+      const initialUrl = page.url();
+      await page.locator(`.topnav__link[data-requires-server]`, { hasText: menu }).click();
+      await expect(page.getByRole('dialog')).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Sem conexão com o servidor' })).toBeVisible();
+      await expect(page.getByRole('dialog')).toContainText('não está disponível no modo offline');
+      await expect(page.getByRole('button', { name: 'Entendi' })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Cancelar' })).toHaveCount(0);
+      expect(page.url()).toBe(initialUrl);
+      await page.getByRole('button', { name: 'Entendi' }).click();
+    });
+  }
+});

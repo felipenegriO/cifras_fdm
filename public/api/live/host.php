@@ -10,6 +10,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 require_auth_json();
 require_csrf();
+require_live_host();
 
 $input = json_decode(file_get_contents('php://input'), true);
 if (!is_array($input)) $input = $_POST;

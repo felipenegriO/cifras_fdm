@@ -21,6 +21,7 @@ Todas as respostas são JSON, salvo endpoints de página. `CSRF` significa heade
 | API-015 | `POST /api/live/update.php` | Gestor + CSRF | host, página, cifra e rolagem | estado atualizado |
 | API-016 | `GET /api/sync/version.php` | Autenticado | Banda atual da sessão | `banda_id`, `content_revision` |
 | API-017 | `GET /api/sync/data.php` | Autenticado | Banda atual da sessão | `banda_id`, `content_revision`, músicas, categorias, playlists, roteiros e plano |
+| API-018 | `GET /api/sync/changes.php?since=<revisão>` | Autenticado | Banda atual da sessão e revisão conhecida | delta por entidade ou `full_sync_required` |
 | API-018 | `POST /api/stripe/webhook.php` | Assinatura Stripe | evento Stripe bruto | `received` |
 | API-019 | `POST /src/backend/download-yt-audio.php` | Autenticado | URL/ID do vídeo | sucesso ou erro e áudio |
 | API-020 | `GET /src/backend/categorias/api.php` | Gestor | - | `ok`, `categorias` |

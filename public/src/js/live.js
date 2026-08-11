@@ -5,6 +5,7 @@
     const modeKey = 'cifroLiveMode_' + salaId;
     const pollMs = 2500;
     const keepAliveMs = 15000;
+    const canHost = window.CIFRO_CAN_HOST === true;
 
     let pollingTimer = null;
     let keepAliveTimer = null;
@@ -253,6 +254,7 @@
     }
 
     async function assumirHost() {
+        if (!canHost) return;
         if (!window.CifroConnectivity?.isServerAvailable()) {
             setDisconnectedStatus();
             return;
@@ -460,7 +462,14 @@
         const hostBtn = document.getElementById('livePlay') || document.getElementById('liveHostButton');
         const followBtn = document.getElementById('entrarlivePlay') || document.getElementById('liveFollowButton');
 
-        if (hostBtn && !hostBtn.dataset.liveBound) {
+        if (hostBtn && !canHost) {
+            hostBtn.hidden = true;
+            const leaderAction = hostBtn.closest('.music-leader-action');
+            if (leaderAction) leaderAction.hidden = true;
+            if (getMode() === 'host') setMode('');
+        }
+
+        if (hostBtn && canHost && !hostBtn.dataset.liveBound) {
             hostBtn.dataset.liveBound = '1';
             hostBtn.addEventListener('click', function (event) {
                 event.preventDefault();

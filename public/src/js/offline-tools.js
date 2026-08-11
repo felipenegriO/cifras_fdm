@@ -14,7 +14,7 @@
     function ensurePanel() {
         let panel = document.getElementById('offlineToolsPanel');
         if (panel) return panel;
-        const mount = document.getElementById('offlineToolsMount') || document.getElementById('menusideMenu');
+        const mount = document.getElementById('offlineToolsMount');
         if (!mount) return null;
         panel = document.createElement('div');
         panel.id = 'offlineToolsPanel';
@@ -29,6 +29,7 @@
         const status = document.getElementById('offlineToolsStatus');
         status.textContent = text;
         status.dataset.status = type || '';
+        status.setAttribute('aria-live', 'polite');
     }
 
     function setProgress(percent) {
@@ -37,7 +38,7 @@
     }
 
     async function renderStatus() {
-        if (!document.getElementById('offlineToolsPanel') && !document.getElementById('offlineToolsMount') && !document.getElementById('menusideMenu')) return;
+        if (!document.getElementById('offlineToolsPanel') && !document.getElementById('offlineToolsMount')) return;
         const ready = localStorage.getItem(preparedAtKey);
         const status = window.cifroSync ? await cifroSync.getSyncStatus(window.CIFRO_BAND_ID) : null;
         const state = status?.snapshotValid && status?.shellReady ? 'Pronto para palco' : 'Pacote não validado';
@@ -46,7 +47,24 @@
         setStatus(`${state} | ${serverAvailable ? 'Servidor disponível' : 'Servidor indisponível'} | preparado em ${formatDate(ready)}${details}`, status?.snapshotValid && status?.shellReady ? 'online' : 'offline');
     }
 
-    async function prepareShell() {
+    function setBusy(busy) {
+        const panel = document.getElementById('offlineToolsPanel');
+        const status = document.getElementById('offlineToolsStatus');
+        if (panel) panel.classList.toggle('is-syncing', busy);
+        if (status) status.setAttribute('aria-busy', busy ? 'true' : 'false');
+    }
+
+    function songToken(song) {
+        const source = JSON.stringify([song.id, song.nome, song.artista, song.classificacao, song.bit, song.cifra, song.source_url]);
+        let hash = 2166136261;
+        for (let index = 0; index < source.length; index++) {
+            hash ^= source.charCodeAt(index);
+            hash = Math.imul(hash, 16777619);
+        }
+        return (hash >>> 0).toString(36);
+    }
+
+    async function prepareShell(contentRevision, onProgress) {
         const registration = await Promise.race([
             navigator.serviceWorker.ready,
             new Promise((_, reject) => setTimeout(() => reject(new Error('Service worker indisponível')), 3000))
@@ -55,8 +73,12 @@
         if (!worker) throw new Error('Service worker indisponível');
         return new Promise((resolve, reject) => {
             const channel = new MessageChannel();
-            const timer = setTimeout(() => reject(new Error('Tempo excedido')), 20000);
+            const timer = setTimeout(() => reject(new Error('Tempo excedido')), 120000);
             channel.port1.onmessage = event => {
+                if (event.data?.state === 'running' || event.data?.type === 'progress') {
+                    onProgress?.(event.data);
+                    return;
+                }
                 clearTimeout(timer);
                 event.data?.ok ? resolve(event.data) : reject(new Error(event.data?.error || 'Falha no pacote'));
             };
@@ -64,7 +86,8 @@
                 type: 'PREPARE_OFFLINE',
                 userId: window.CIFRO_USER_ID,
                 bandId: window.CIFRO_BAND_ID,
-                songIds: (Array.isArray(window.songs) ? window.songs : []).map(song => song.id)
+                contentRevision,
+                songs: (Array.isArray(window.songs) ? window.songs : []).map(song => ({ id: song.id, token: songToken(song) }))
             }, [channel.port2]);
         });
     }
@@ -132,37 +155,46 @@
             if (showProgress) setStatus('Servidor indisponível — a versão salva continua disponível. Tente sincronizar novamente quando a conexão voltar.', 'offline');
             return false;
         }
+        setBusy(true);
+        setProgress(5);
+        setStatus('Sincronizando dados para uso offline…', 'syncing');
         if (showProgress && button) {
             button.disabled = true;
             button.textContent = 'Sincronizando...';
-            setProgress(10);
         }
         try {
             if (syncData) {
                 const synced = await cifroSync.sync(bandaId, { force });
                 if (!synced) throw new Error('Falha ao atualizar os dados');
             }
-            if (showProgress) setProgress(55);
-            await prepareShell();
-            if (showProgress) setProgress(90);
-            if (navigator.storage?.persist) await navigator.storage.persist();
+            setProgress(15);
+            setStatus('Preparando páginas e músicas para uso offline…', 'syncing');
             const revision = await cifroSync.getRevision(bandaId);
-            await cifroSync.markShellPrepared(bandaId, revision);
+            const preparedShell = await prepareShell(revision, progress => {
+                const percent = 15 + Math.round((Number(progress.completed) / Math.max(1, Number(progress.total))) * 75);
+                setProgress(percent);
+                const phase = progress.phase === 'musicas' ? 'músicas' : progress.phase === 'assets' ? 'arquivos do aplicativo' : 'páginas';
+                setStatus(`Sincronizando ${phase}… ${progress.completed} de ${progress.total}`, 'syncing');
+            });
+            setProgress(95);
+            setStatus('Finalizando sincronização offline…', 'syncing');
+            if (navigator.storage?.persist) await navigator.storage.persist();
+            await cifroSync.markShellPrepared(bandaId, revision, preparedShell?.version);
             localStorage.setItem(preparedAtKey, String(Date.now()));
-            if (showProgress) setProgress(100);
+            setProgress(100);
             await renderStatus();
             if (showProgress && window.cifroToast) cifroToast('Pacote offline validado.', 'success');
             return true;
         } catch (error) {
-            if (showProgress) {
-                setProgress(0);
-                setStatus(`Não foi possível atualizar o pacote — a versão salva foi mantida. ${error.message || 'Tente novamente mais tarde.'}`, 'offline');
-            } else if (!failureToastShownThisSession) {
+            setProgress(0);
+            setStatus(`Não foi possível atualizar o pacote — a versão salva foi mantida. ${error.message || 'Tente novamente mais tarde.'}`, 'offline');
+            if (!showProgress && !failureToastShownThisSession) {
                 failureToastShownThisSession = true;
                 if (window.cifroToast) cifroToast('Não foi possível atualizar o pacote offline automaticamente. Toque em Sincronizar para tentar de novo.', 'warning');
             }
             return false;
         } finally {
+            setBusy(false);
             if (showProgress && button) {
                 button.disabled = false;
                 button.textContent = 'Sincronizar';
@@ -188,18 +220,29 @@
     // dela chamando OfflineTools.forceSync), o listener automático de
     // 'cifro:sync-checked' continua ativo sem criar nenhum elemento na tela.
     function bind() {
-        if (!document.getElementById('offlineToolsMount') && !document.getElementById('menusideMenu')) return;
-        ensurePanel();
+        const panel = ensurePanel();
+        if (!panel) return;
         renderStatus();
         document.getElementById('prepareOfflineBtn').addEventListener('click', function () {
             runFullPreparation(window.CIFRO_BAND_ID, { force: true, showProgress: true });
         });
+        if (localStorage.getItem('cifroAppUpdatePending') === '1' && window.CIFRO_BAND_ID) {
+            setStatus('Nova versão encontrada. Atualizando dados e músicas…', 'syncing');
+            runFullPreparation(window.CIFRO_BAND_ID, { force: true, showProgress: false }).then(ok => {
+                if (ok) localStorage.removeItem('cifroAppUpdatePending');
+            });
+        }
     }
 
     window.addEventListener('online', renderStatus);
     window.addEventListener('offline', renderStatus);
     document.addEventListener('cifro:connectivity', renderStatus);
     document.addEventListener('cifro:sync-checked', handleSyncChecked);
+    document.addEventListener('cifro:app-update', () => {
+        setBusy(true);
+        setProgress(5);
+        setStatus('Nova versão encontrada. Baixando atualização…', 'syncing');
+    });
     window.OfflineTools = {
         prepareOffline: () => runFullPreparation(window.CIFRO_BAND_ID, { force: true, showProgress: true }),
         forceSync: bandaId => runFullPreparation(bandaId || window.CIFRO_BAND_ID, { force: true, showProgress: true }),

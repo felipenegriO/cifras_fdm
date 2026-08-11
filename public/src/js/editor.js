@@ -421,7 +421,7 @@
       Object.assign(saved, payload, { id: data.id || saved.id, tom: detectedKey(content)?.key || '' });
       if (!state.selected) window.songs.push(saved);
       state.selected = saved;
-      await cifroSync.sync(window.CIFRO_BAND_ID, { force: true });
+      await cifroSync.sync(window.CIFRO_BAND_ID);
       const refreshed = songs().find(song => String(song.id) === String(saved.id));
       if (!refreshed) songs().push(saved);
       state.selected = refreshed || saved;

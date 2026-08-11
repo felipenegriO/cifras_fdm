@@ -80,6 +80,7 @@ try {
         'ativo'          => 1,
         'plano'          => 'gratuito',
         'trial_expira_em'=> null,
+        'criador_id'     => $userId,
     ]);
 
     // Vincula usuário como administrador da nova banda

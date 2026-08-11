@@ -178,6 +178,7 @@
             <option value="administrador">Administrador</option>
             <option value="gestor">Gestor</option>
             <option value="basico" selected>Básico</option>
+            <option value="externo">Externo</option>
           </select>
         </div>
       </div>
@@ -224,6 +225,7 @@
           <option value="administrador">Administrador</option>
           <option value="gestor">Gestor</option>
           <option value="basico" selected>Básico</option>
+          <option value="externo">Externo</option>
         </select>
       </div>
 
@@ -235,7 +237,11 @@
   </div>
 
 <script>
-const API = '/src/backend/users/salvar_user.php';
+const API = (window.APP_BASE || '') + '/src/backend/users/salvar_user.php';
+// Mesmo limite do backend (cifro_require_plan_limit) — só para avisar antes de
+// abrir o modal. Quem decide de verdade é o servidor, isto é só UX.
+const LIMITE_USUARIOS = <?= json_encode(is_master() ? -1 : (cifro_plan_limits($_SESSION['banda_atual']['plano'] ?? 'bloqueado')['users'] ?? 0)) ?>;
+const PLANO_LABEL_ATUAL = <?= json_encode(cifro_plan_label($_SESSION['banda_atual']['plano'] ?? 'bloqueado')) ?>;
 let usuarios = [];
 let usuarioAtualId = null;
 let importBuscaTimer = null;
@@ -267,7 +273,7 @@ function usuarioExpirado(u) {
   return validade < hoje;
 }
 
-const PERFIL_LABELS = { administrador: 'Admin', gestor: 'Gestor', basico: 'Básico', master: 'Master' };
+const PERFIL_LABELS = { administrador: 'Admin', gestor: 'Gestor', basico: 'Básico', externo: 'Externo', master: 'Master' };
 
 function tagHtml(u) {
   const bandaPerfil = (u.banda_perfil || 'basico').toLowerCase();
@@ -338,6 +344,10 @@ function escapeHtml(str) {
 // ── Modal editar/criar ────────────────────────────────────────────────────────
 
 function abrirModalNovo() {
+  if (LIMITE_USUARIOS !== -1 && usuarios.length >= LIMITE_USUARIOS) {
+    cifroToast('Limite do plano ' + PLANO_LABEL_ATUAL + ' atingido: máximo de ' + LIMITE_USUARIOS + ' usuário(s). Faça upgrade do plano para adicionar mais.', 'error');
+    return;
+  }
   modalTrigger = document.activeElement;
   usuarioAtualId = null;
   document.getElementById('modalTitle').textContent = 'Novo Usuário';
