@@ -109,7 +109,14 @@
     .container h1 img { height: 28px; }
   }
   .cifro-floating-actions {
-    display: none !important;
+    position: fixed;
+    right: max(16px, env(safe-area-inset-right));
+    bottom: max(16px, env(safe-area-inset-bottom));
+    z-index: 1040;
+    display: flex !important;
+  }
+  .cifro-floating-actions #menuButton {
+    display: none;
     }
     .cifro-floating-actions .btn,
     .cifro-floating-actions .btn.btn-primary,
@@ -265,6 +272,7 @@
             <!-- <button class="btn" data-toggle="modal" data-target="#addPlayList"><i
                     class="fa-solid fa-plus"></i></button> -->
                 </h2>
+        <?php if (help_center_visible_for_user()): ?><button type="button" class="help-context-link" data-help-article="criar-repertorio" data-help-source="home-playlists">Como criar um repertório?</button><?php endif; ?>
         <ul id="lista-playlists"></ul>
     </div>
     <div class="container" id="musicLibrary">
@@ -329,14 +337,62 @@
         </div>
     </div>
 
+    <div class="modal fade" id="capoSetupModal" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="capoSetupModalLabel" aria-hidden="true">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="capoSetupModalLabel">Como você toca?</h5>
+                </div>
+                <div class="modal-body">
+                    <div data-capo-step="1">
+                        <p>O Cifrô pode simplificar os acordes para o seu instrumento sem mudar o tom que a banda toca.</p>
+                        <p><strong>O que você toca?</strong></p>
+                        <div class="btn-group-vertical btn-block" role="group" aria-label="Instrumento">
+                            <button type="button" class="btn btn-outline-primary" data-capo-instrumento="violao">Violão ou guitarra</button>
+                            <button type="button" class="btn btn-outline-primary" data-capo-instrumento="teclado">Teclado ou piano</button>
+                            <button type="button" class="btn btn-outline-primary" data-capo-instrumento="outro">Outro instrumento ou voz</button>
+                        </div>
+                    </div>
+                    <div data-capo-step="2" hidden>
+                        <p><strong>Quando o Cifrô deve usar <span data-capo-termo>capotraste</span>?</strong></p>
+                        <div class="btn-group-vertical btn-block" role="group" aria-label="Preferência">
+                            <button type="button" class="btn btn-outline-primary" data-capo-preferencia="simplificar">
+                                Sempre simplificar
+                                <small class="d-block text-muted">Evita acordes com sustenido e bemol. Música em Si♭ vira formas de Sol.</small>
+                            </button>
+                            <button type="button" class="btn btn-outline-primary" data-capo-preferencia="basico">
+                                Nível básico
+                                <small class="d-block text-muted" data-capo-basico-desc>Busca só formas abertas, sem pestana.</small>
+                            </button>
+                            <button type="button" class="btn btn-outline-primary" data-capo-preferencia="cadastrado">
+                                Só quando a música pedir
+                                <small class="d-block text-muted">Usa apenas o que estiver cadastrado na música.</small>
+                            </button>
+                            <button type="button" class="btn btn-outline-primary" data-capo-preferencia="nunca">
+                                Nunca usar
+                                <small class="d-block text-muted">Mostra sempre a cifra no tom original.</small>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <small class="text-muted mr-auto">Dá para mudar isso quando quiser em Configurações.</small>
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal" id="capoSetupLater">Decidir depois</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="/src/js/jquery-3.5.1.min.js" ></script>
     <script src="/src/js/bootstrap.min.js" defer></script>
-    <script>window.CIFRO_USER_ID = '<?= e($_SESSION['usuario']['id'] ?? '') ?>'; window.CIFRO_BAND_ID = '<?= e(current_band_id()) ?>'; window.CIFRO_CAN_HOST = <?= can_host_live() ? 'true' : 'false' ?>;</script>
+    <script>window.CIFRO_USER_ID = '<?= e($_SESSION['usuario']['id'] ?? '') ?>'; window.CIFRO_BAND_ID = '<?= e(current_band_id()) ?>'; window.CIFRO_CAN_HOST = <?= can_host_live() ? 'true' : 'false' ?>; window.CIFRO_CONFIG = <?= json_encode(cifro_transposicao_config(), JSON_UNESCAPED_UNICODE) ?>;</script>
     <script src="<?= asset_url('/src/js/cifro-connectivity.js') ?>"></script>
     <script src="<?= asset_url('/src/js/cifro-sync.js') ?>"></script>
     <script src="<?= asset_url('/src/js/chords.js') ?>"></script>
+    <script src="<?= asset_url('/src/js/cifro-capo-pessoal.js') ?>"></script>
     <script src="<?= asset_url('/src/js/script.js') ?>" defer></script>
     <script src="<?= asset_url('/src/js/cifro-install.js') ?>" defer></script>
+    <script src="<?= asset_url('/src/js/cifro-share.js') ?>" defer></script>
     <script src="<?= asset_url('/src/js/playlist-share.js') ?>" defer></script>
     <script src="<?= asset_url('/src/js/playlists.js') ?>" defer></script>
     <script src="<?= asset_url('/src/js/offline-tools.js') ?>"></script>
@@ -366,22 +422,151 @@
             }
         });
 
+        // Capotraste/transpose: pergunta o instrumento e a preferência de quem
+        // ainda não escolheu. "Decidir depois" não grava nada, então a pergunta
+        // volta no próximo acesso — mas só uma vez por sessão, para não repetir
+        // a cada volta para a home.
+        $(function () {
+            var SESSAO_KEY = 'cifroCapoSetupPerguntado';
+            var config = window.CIFRO_CONFIG || {};
+            if (config.instrumento && config.transposicaoPreferencia) return;
+            try {
+                if (sessionStorage.getItem(SESSAO_KEY)) return;
+                sessionStorage.setItem(SESSAO_KEY, '1');
+            } catch (error) {
+                // sessionStorage indisponível — segue e mostra o modal.
+            }
+
+            var escolhido = { instrumento: config.instrumento || null };
+
+            function termoDoInstrumento(instrumento) {
+                return instrumento === 'violao' ? 'capotraste'
+                    : instrumento === 'teclado' ? 'transpose' : 'transposição';
+            }
+
+            // Pestana só existe em instrumento de corda; no teclado o que pesa
+            // é tecla preta.
+            function descricaoBasico(instrumento) {
+                return instrumento === 'violao'
+                    ? 'Busca só formas abertas, sem pestana.'
+                    : 'Busca o tom com menos teclas pretas.';
+            }
+
+            async function salvarConfig(chave, valor) {
+                try {
+                    var resposta = await fetch('/src/backend/users/salvar_config.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ config: { [chave]: valor } })
+                    });
+                    var dados = await resposta.json();
+                    return resposta.ok && dados.sucesso;
+                } catch (error) {
+                    return false;
+                }
+            }
+
+            $('#capoSetupModal').on('click', '[data-capo-instrumento]', async function () {
+                escolhido.instrumento = this.dataset.capoInstrumento;
+                $('#capoSetupModal [data-capo-termo]').text(termoDoInstrumento(escolhido.instrumento));
+                $('#capoSetupModal [data-capo-basico-desc]').text(descricaoBasico(escolhido.instrumento));
+                $('#capoSetupModal [data-capo-step="1"]').attr('hidden', true);
+                $('#capoSetupModal [data-capo-step="2"]').removeAttr('hidden');
+                await salvarConfig('instrumento', escolhido.instrumento);
+            });
+
+            $('#capoSetupModal').on('click', '[data-capo-preferencia]', async function () {
+                var preferencia = this.dataset.capoPreferencia;
+                var salvo = await salvarConfig('transposicaoPreferencia', preferencia);
+                if (salvo) {
+                    window.CIFRO_CONFIG = {
+                        instrumento: escolhido.instrumento,
+                        transposicaoPreferencia: preferencia
+                    };
+                }
+                $('#capoSetupModal').modal('hide');
+                if (window.cifroToast) {
+                    cifroToast(salvo ? 'Preferência salva' : 'Não foi possível salvar agora', salvo ? 'success' : 'error');
+                }
+            });
+
+            $('#capoSetupModal').modal('show');
+        });
+
+        var categoriaAtiva = '';
+        var renderList = function () {};
+
+        // Mesmo mapa de CategoriaRepository::normalizarNome (PHP) e de
+        // categorias.js normalizarNome — as três cópias precisam mudar juntas.
+        var ACENTOS_CATEGORIA = {
+            'á':'a','à':'a','ã':'a','â':'a','ä':'a',
+            'é':'e','è':'e','ê':'e','ë':'e',
+            'í':'i','ì':'i','î':'i','ï':'i',
+            'ó':'o','ò':'o','õ':'o','ô':'o','ö':'o',
+            'ú':'u','ù':'u','û':'u','ü':'u',
+            'ç':'c','ñ':'n'
+        };
+
+        function normalizarCategoria(valor) {
+            // Mesma regra de equivalência usada em CategoriaRepository::normalizarNome
+            // (PHP) e em categorias.js normalizarNome: trim + colapso de espaços
+            // internos + minúsculas + o mesmo mapa explícito de 24 acentos acima —
+            // não o normalizeString() logo abaixo, que usa remoção NFD e cobre um
+            // conjunto mais amplo de diacríticos (esse continua só para a busca livre
+            // por texto). Mantenha as três cópias em sincronia se este critério mudar.
+            // Limitação conhecida, herdada da regra do PHP: um nome que já chegue aqui
+            // em forma decomposta (NFD) não casa com este mapa, cujas chaves são
+            // precompostas — caso raro e pré-existente, fora do escopo desta correção.
+            var semEspaco = String(valor || '').trim().replace(/\s+/g, ' ').toLowerCase();
+            return semEspaco.replace(/[áàãâäéèêëíìîïóòõôöúùûüçñ]/g, function (letra) {
+                return ACENTOS_CATEGORIA[letra] || letra;
+            });
+        }
+
+        function categoriaExisteEm(nome, lista) {
+            if (!nome) return false;
+            var alvo = normalizarCategoria(nome);
+            return (Array.isArray(lista) ? lista : []).some(function (categoria) {
+                return normalizarCategoria(categoria.nome) === alvo;
+            });
+        }
+
+        function categoriaSalvaValida() {
+            var salva = sessionStorage.getItem('cifroHomeCategory') || '';
+            if (salva === '') return '';
+            return categoriaExisteEm(salva, window.categorias) ? salva : '';
+        }
+
         function aplicarFiltro(classificacao) {
-            $("#search").val(classificacao).trigger("input");
-            sessionStorage.setItem('cifroHomeCategory', classificacao);
+            categoriaAtiva = String(classificacao || '');
+            sessionStorage.setItem('cifroHomeCategory', categoriaAtiva);
+            marcarChipAtivo(categoriaAtiva);
+            renderList($("#search").val() || '');
+        }
+
+        function marcarChipAtivo(classificacao) {
             document.querySelectorAll('.filter-group .chip').forEach(function (el) {
                 el.classList.remove('chip--active');
             });
+            var alvo = classificacao === '' ? 'Todas' : classificacao;
             var target = Array.from(document.querySelectorAll('.filter-group .chip')).find(function (el) {
-                return el.textContent.trim().localeCompare(
-                    classificacao === '' ? 'Todas' : classificacao,
-                    'pt-BR',
-                    { sensitivity: 'base' }
-                ) === 0;
+                return el.textContent.trim().localeCompare(alvo, 'pt-BR', { sensitivity: 'base' }) === 0;
             });
             if (target) target.classList.add('chip--active');
         }
         function renderCategoryFilters() {
+            // categoriaAtiva é a categoria clicada nesta sessão de página; ao contrário
+            // de categoriaSalvaValida() (que só lê o sessionStorage no load inicial),
+            // nada revalidava esse valor quando o sync trazia uma lista de categorias
+            // atualizada. Se alguém excluir a categoria ativa em outra aba/sessão, o
+            // chip correspondente sumiu mas categoriaAtiva continuava truthy: nenhum
+            // chip ficava marcado, a lista filtrava por um nome que não existe mais e
+            // aparecia vazia — sem indicação de como sair desse estado.
+            if (categoriaAtiva && !categoriaExisteEm(categoriaAtiva, window.categorias)) {
+                categoriaAtiva = '';
+                sessionStorage.removeItem('cifroHomeCategory');
+                if (typeof renderList === 'function') renderList($('#search').val() || '');
+            }
             var group = document.querySelector('.filter-group');
             group.replaceChildren();
             var all = document.createElement('button');
@@ -398,6 +583,7 @@
                 button.addEventListener('click', function () { aplicarFiltro(categoria.nome); });
                 group.appendChild(button);
             });
+            marcarChipAtivo(categoriaAtiva || categoriaSalvaValida());
         }
         function normalizeString(str) {
             return str.normalize('NFD').replace(/[\u0300-\u036f]/g, "").toLowerCase();
@@ -405,6 +591,7 @@
         document.addEventListener('cifro:sync', renderCategoryFilters);
         $(document).ready(async function () {
             await cifroSync.load(window.CIFRO_BAND_ID);
+            categoriaAtiva = categoriaSalvaValida();
             renderCategoryFilters();
               $(document).click(function(event) {
                 var $menu = $('#sideMenu');
@@ -446,25 +633,47 @@
             const SONG_PAGE_SIZE = 100;
             let visibleSongLimit = SONG_PAGE_SIZE;
             let activeFilter = '';
-            function renderList(filter = '', resetPage = true) {
+            renderList = function (filter = '', resetPage = true) {
                 $('#music-list').empty();
                 const normalizedFilter = normalizeString(filter);
                 if (resetPage || normalizedFilter !== activeFilter) visibleSongLimit = SONG_PAGE_SIZE;
                 activeFilter = normalizedFilter;
-                const filteredSongs = songs.filter(song =>
-                    normalizeString(song.nome || '').includes(normalizedFilter) ||
-                    normalizeString(song.artista || '').includes(normalizedFilter) ||
-                    normalizeString(song.classificacao || '').includes(normalizedFilter) ||
-                    normalizeString(song.cifra || '').includes(normalizedFilter)
-                );
+                var alvoCategoria = normalizarCategoria(categoriaAtiva);
+                const filteredSongs = songs.filter(song => {
+                    const casaTexto =
+                        normalizeString(song.nome || '').includes(normalizedFilter) ||
+                        normalizeString(song.artista || '').includes(normalizedFilter) ||
+                        normalizeString(song.classificacao || '').includes(normalizedFilter) ||
+                        normalizeString(song.cifra || '').includes(normalizedFilter);
+                    const casaCategoria =
+                        alvoCategoria === '' || normalizarCategoria(song.classificacao) === alvoCategoria;
+                    return casaTexto && casaCategoria;
+                });
                 if (filteredSongs.length === 0) {
                     const termo = String(filter).replace(/[<>&]/g, '');
+                    const categoriaFiltro = categoriaAtiva ? String(categoriaAtiva).replace(/[<>&]/g, '') : '';
+                    // Uma categoria sem músicas ainda tem músicas na banda: mostrar o
+                    // texto e o CTA de "primeira cifra" (pensados para banda nova, zero
+                    // músicas) confundiria um gestor de banda estabelecida filtrando um
+                    // chip vazio. Só o caso "sem busca e sem categoria" é first-run de
+                    // verdade.
+                    let titulo, desc = '', cta = '';
+                    if (termo) {
+                        titulo = 'Nenhuma música encontrada';
+                        desc = 'Tente outro termo em vez de <strong>' + termo + '</strong>.';
+                    } else if (categoriaFiltro) {
+                        titulo = 'Nenhuma música em <strong>' + categoriaFiltro + '</strong>';
+                    } else {
+                        titulo = 'Você ainda não tem músicas cadastradas';
+                        desc = 'Comece adicionando uma cifra ao repertório.';
+                        cta = '<a class="btn btn-primary" href="/src/backend/editor/editor.php">Adicionar primeira cifra</a>';
+                    }
                     $('#music-list').append(
                         `<li class="empty-state" role="status">
                             <span class="empty-state__icon" aria-hidden="true">🔎</span>
-                            <p class="empty-state__title">${termo ? 'Nenhuma música encontrada' : 'Você ainda não tem músicas cadastradas'}</p>
-                            <p class="empty-state__desc">${termo ? 'Tente outro termo em vez de <strong>' + termo + '</strong>.' : 'Comece adicionando uma cifra ao repertório.'}</p>
-                            ${termo ? '' : '<a class="btn btn-primary" href="/src/backend/editor/editor.php">Adicionar primeira cifra</a>'}
+                            <p class="empty-state__title">${titulo}</p>
+                            ${desc ? '<p class="empty-state__desc">' + desc + '</p>' : ''}
+                            ${cta}
                         </li>`
                     );
                 } else {
@@ -492,7 +701,7 @@
                         document.getElementById('music-list').appendChild(item);
                     }
                 }
-            }
+            };
 
             const musicList = document.getElementById('music-list');
             const activeLetter = document.getElementById('letraAtiva');
@@ -525,8 +734,6 @@
             document.getElementById('music-list').addEventListener('scroll', function () {
                 sessionStorage.setItem('cifroHomeScroll', String(this.scrollTop));
             }, { passive: true });
-            const savedCategory = sessionStorage.getItem('cifroHomeCategory');
-            if (savedCategory) aplicarFiltro(savedCategory);
 
             const onboarding = document.getElementById('onboardingCard');
             const onboardingAction = document.getElementById('onboardingAction');

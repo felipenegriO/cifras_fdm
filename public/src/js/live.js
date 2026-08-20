@@ -130,14 +130,17 @@
         }
 
         indicator.className = 'live-mode-indicator live-mode-indicator-' + mode;
+        // Quem esta no comando le "Você está exibindo"; quem acompanha le o nome
+        // de quem esta exibindo. Antes os dois lados do ternario eram iguais e
+        // o host via o proprio nome em terceira pessoa.
         const name = sanitizeText(currentHostName);
-        const label = name
-            ? `<span class="live-indicator-label">${name} ${mode === 'host' ? 'esta exibindo' : 'esta exibindo'}</span>`
-            : '';
+        const label = mode === 'host'
+            ? '<span class="live-indicator-label">Você está exibindo</span>'
+            : (name ? `<span class="live-indicator-label">${name} está exibindo</span>` : '');
 
         indicator.title = mode === 'host'
-            ? (currentHostName ? currentHostName + ' esta exibindo' : 'Voce e o host')
-            : (currentHostName ? currentHostName + ' esta exibindo' : 'Seguindo live');
+            ? 'Você está exibindo'
+            : (currentHostName ? currentHostName + ' está exibindo' : 'Seguindo live');
         indicator.setAttribute('aria-label', indicator.title);
         indicator.innerHTML = mode === 'host'
             ? '<span class="live-record-dot"></span>' + label
@@ -150,8 +153,15 @@
 
         if (path === 'music.php') {
             const id = params.get('id') || '';
-            const playlistTom = params.get('playlistTom') || '';
-            const validTom = /^[A-G](?:#|b)?$/.test(playlistTom);
+            // O tom publicado é sempre o SOANTE. O capotraste/transpose de cada
+            // aparelho é escolha pessoal e nunca trafega no live: host com capo 2
+            // e seguidor sem capo tocam a mesma música, cada um na sua forma.
+            const cifraEl = document.getElementById('song-cifra');
+            const displayedTom = String(
+                cifraEl?.dataset.tomSoante || document.getElementById('tom')?.textContent || ''
+            ).trim();
+            const playlistTom = displayedTom || params.get('playlistTom') || '';
+            const validTom = /^[A-G](?:#|b)?(?:m)?$/.test(playlistTom);
             const validId = /^\d{1,8}$/.test(id);
             const pagina = validId
                 ? 'music.php?id=' + id + (validTom ? '&playlistTom=' + encodeURIComponent(playlistTom) : '')
@@ -255,6 +265,15 @@
 
     async function assumirHost() {
         if (!canHost) return;
+        if (!navigator.onLine) {
+            setDisconnectedStatus();
+            return;
+        }
+        if (!window.CifroConnectivity?.isServerAvailable()
+            && navigator.onLine
+            && window.CifroConnectivity?.current() === 'verificando') {
+            await window.CifroConnectivity.probe().catch(function () { return false; });
+        }
         if (!window.CifroConnectivity?.isServerAvailable()) {
             setDisconnectedStatus();
             return;
@@ -300,6 +319,11 @@
 
     async function atualizarHost(keepAlive) {
         if (getMode() !== 'host' || hostBusy) return;
+        if (!window.CifroConnectivity?.isServerAvailable()
+            && navigator.onLine
+            && window.CifroConnectivity?.current() === 'verificando') {
+            await window.CifroConnectivity.probe().catch(function () { return false; });
+        }
         if (!window.CifroConnectivity?.isServerAvailable()) {
             setDisconnectedStatus();
             return;
@@ -389,6 +413,11 @@
 
     async function consultarStatus() {
         if (pollingBusy) return;
+        if (!window.CifroConnectivity?.isServerAvailable()
+            && navigator.onLine
+            && window.CifroConnectivity?.current() === 'verificando') {
+            await window.CifroConnectivity.probe().catch(function () { return false; });
+        }
         if (!window.CifroConnectivity?.isServerAvailable()) {
             setDisconnectedStatus();
             return;
@@ -441,7 +470,7 @@
             pollingBusy = false;
             if (getMode() === 'follow' && document.visibilityState !== 'hidden') {
                 clearTimeout(pollingTimer);
-                pollingTimer = setTimeout(consultarStatus, Math.min(8000, pollMs + unchangedPolls * 1100));
+                pollingTimer = setTimeout(consultarStatus, pollMs);
             }
         }
     }
@@ -461,6 +490,7 @@
     function bind() {
         const hostBtn = document.getElementById('livePlay') || document.getElementById('liveHostButton');
         const followBtn = document.getElementById('entrarlivePlay') || document.getElementById('liveFollowButton');
+        const shortcut = document.getElementById('entrarlivePlaynow');
 
         if (hostBtn && !canHost) {
             hostBtn.hidden = true;
@@ -482,6 +512,14 @@
             followBtn.addEventListener('click', function (event) {
                 event.preventDefault();
                 entrarOuSairLive();
+            });
+        }
+
+        if (shortcut && !shortcut.dataset.liveBound) {
+            shortcut.dataset.liveBound = '1';
+            shortcut.addEventListener('click', function () {
+                setMode('follow');
+                setStatus('Seguindo live', 'follow');
             });
         }
 
@@ -526,6 +564,9 @@
     });
 
     window.addEventListener('scroll', publishScrollIfChanged, { passive: true });
+    document.addEventListener('cifro:tom-changed', function () {
+        if (getMode() === 'host') atualizarHost(false);
+    });
     document.addEventListener('visibilitychange', function () {
         if (document.visibilityState === 'hidden') {
             stopPolling();
@@ -543,7 +584,9 @@
         assumirHost,
         entrarOuSairLive,
         atualizarPaginaHost: atualizarHost,
-        consultarStatus
+        consultarStatus,
+        // Exposto para que avisos não interrompam quem está no palco.
+        getMode
     };
 
     if (document.readyState === 'loading') {

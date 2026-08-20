@@ -69,12 +69,27 @@
               <option value="">Não identificado</option>
             </select>
           </label>
-          <label class="compact-field compact-field--classification" for="classificacao">
-            <span>Classificação</span>
-            <select id="classificacao">
-              <option value="">Não classificada</option>
-            </select>
+          <label class="compact-field compact-field--capo" for="transposicaoInstrumento">
+            <span id="transposicaoLabel">Capotraste</span>
+            <input id="transposicaoInstrumento" type="number" step="1" min="-12" max="12" value="0" inputmode="numeric" aria-describedby="transposicaoHint">
           </label>
+          <div class="compact-field compact-field--capo-actions">
+            <button type="button" class="btn btn--secondary" id="sugerirTransposicao">Sugerir</button>
+            <small id="transposicaoHint" aria-live="polite"></small>
+          </div>
+          <label class="compact-field compact-field--classification" for="classificacao">
+            <span>Categoria</span>
+            <select id="classificacao">
+              <option value="">Sem categoria</option>
+            </select>
+            <small id="categoriaAviso" aria-live="polite" hidden></small>
+            <span id="novaCategoriaCampo" hidden>
+              <input id="novaCategoriaNome" type="text" maxlength="100" placeholder="Nome da categoria" autocomplete="off">
+              <button type="button" class="btn btn--secondary" id="novaCategoriaSalvar">Criar categoria</button>
+              <button type="button" class="btn btn--secondary" id="novaCategoriaCancelar">Cancelar</button>
+            </span>
+          </label>
+          <?php if (help_center_visible_for_user()): ?><button type="button" class="help-context-link" data-help-article="categorias" data-help-source="editor-categoria">Como funcionam as categorias?</button><?php endif; ?>
         </div>
 
         <span class="dirty-indicator" id="dirtyIndicator" title="Alterações não salvas" aria-label="Alterações não salvas" hidden></span>
@@ -122,16 +137,16 @@
       </div>
 
       <div class="import-modal__panel" id="importTabLink" role="tabpanel">
-        <p>Cole o link de uma cifra do CifraClub e a aplicação busca o conteúdo automaticamente.</p>
-        <label for="importUrlInput">Link do CifraClub</label>
-        <input id="importUrlInput" type="url" placeholder="https://www.cifraclub.com.br/...">
+        <p>Cole o link de uma cifra e a aplicação busca o conteúdo automaticamente.</p>
+        <label for="importUrlInput">Link da cifra</label>
+        <input id="importUrlInput" type="url" placeholder="https://...">
         <div class="import-fetch-error" id="importFetchError" role="alert" hidden></div>
       </div>
 
       <div class="import-modal__panel" id="importTabText" hidden role="tabpanel">
         <p>Cole o conteúdo da cifra. Um link pode ser guardado como referência, mas não é acessado automaticamente.</p>
         <label for="importSourceUrl">Link de origem (opcional)</label>
-        <input id="importSourceUrl" type="url" placeholder="https://www.cifraclub.com.br/...">
+        <input id="importSourceUrl" type="url" placeholder="https://...">
         <label for="importContent">Conteúdo da cifra</label>
         <textarea id="importContent" rows="14" placeholder="Nome da música&#10;Artista&#10;Tom: C&#10;&#10;C  G  Am  F"></textarea>
         <button type="button" class="btn btn--secondary" id="previewImportButton">Gerar preview</button>
@@ -139,6 +154,14 @@
 
       <label class="import-rights"><input id="importRights" type="checkbox" checked> Confirmo que tenho autorização para usar este conteúdo.</label>
       <div class="import-preview" id="importPreview" role="status" aria-live="polite" hidden></div>
+
+      <div class="import-capo" id="importCapoBox" hidden>
+        <label>
+          <input type="checkbox" id="importAplicarCapo" checked>
+          <span id="importCapoTexto"></span>
+        </label>
+        <p class="import-capo__aviso" id="importCapoAviso" role="alert" hidden></p>
+      </div>
       <div class="import-modal__actions">
         <button type="button" class="btn btn--secondary" id="cancelImportButton">Cancelar</button>
         <button type="button" class="btn btn--primary" id="confirmImportButton" disabled>Usar no editor</button>
@@ -146,7 +169,8 @@
     </div>
   </div>
 
-  <script>window.CIFRO_USER_ID = '<?= e($_SESSION['usuario']['id'] ?? '') ?>'; window.CIFRO_BAND_ID = '<?= e(current_band_id()) ?>';</script>
+  <script>window.CIFRO_USER_ID = '<?= e($_SESSION['usuario']['id'] ?? '') ?>'; window.CIFRO_BAND_ID = '<?= e(current_band_id()) ?>'; window.CIFRO_CONFIG = <?= json_encode(cifro_transposicao_config(), JSON_UNESCAPED_UNICODE) ?>;</script>
+  <script>window.CIFRO_PODE_EDITAR_CONTEUDO = <?= can_edit_content() ? 'true' : 'false' ?>;</script>
   <script src="<?= asset_url('/src/js/cifro-connectivity.js') ?>"></script>
   <script src="<?= asset_url('/src/js/cifro-sync.js') ?>"></script>
   <script src="<?= asset_url('/src/vendor/tinymce/tinymce.min.js') ?>"></script>

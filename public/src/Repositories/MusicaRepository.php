@@ -44,7 +44,7 @@ class MusicaRepository {
         if (!empty($musica['id'])) {
             if (!$this->findById((int)$musica['id'], $bandaId)) throw new RuntimeException('Música não encontrada.');
             $stmt = $this->pdo->prepare(
-                'UPDATE musicas SET nome=?, artista=?, classificacao=?, cifra=?, bit=?, source_url=? WHERE id=? AND banda_id=?'
+                'UPDATE musicas SET nome=?, artista=?, classificacao=?, cifra=?, bit=?, source_url=?, transposicao_instrumento=? WHERE id=? AND banda_id=?'
             );
             $stmt->execute([
                 $musica['nome'],
@@ -53,6 +53,7 @@ class MusicaRepository {
                 $musica['cifra'] ?? '',
                 $musica['bit'] ?? '',
                 $musica['source_url'] ?? null,
+                (int)($musica['transposicao_instrumento'] ?? 0),
                 (int)$musica['id'],
                 $bandaId,
             ]);
@@ -60,7 +61,7 @@ class MusicaRepository {
         }
 
         $stmt = $this->pdo->prepare(
-            'INSERT INTO musicas (banda_id, nome, artista, classificacao, cifra, bit, source_url) VALUES (?,?,?,?,?,?,?)'
+            'INSERT INTO musicas (banda_id, nome, artista, classificacao, cifra, bit, source_url, transposicao_instrumento) VALUES (?,?,?,?,?,?,?,?)'
         );
         $stmt->execute([
             $bandaId,
@@ -70,6 +71,7 @@ class MusicaRepository {
             $musica['cifra'] ?? '',
             $musica['bit'] ?? '',
             $musica['source_url'] ?? null,
+            (int)($musica['transposicao_instrumento'] ?? 0),
         ]);
         return (int)$this->pdo->lastInsertId();
     }
@@ -84,8 +86,8 @@ class MusicaRepository {
         $original = $this->findById($id, $bandaId);
         if (!$original) throw new RuntimeException('Música não encontrada.');
         $stmt = $this->pdo->prepare(
-            'INSERT INTO musicas (banda_id, nome, artista, classificacao, cifra, bit)
-             VALUES (?,?,?,?,?,?)'
+            'INSERT INTO musicas (banda_id, nome, artista, classificacao, cifra, bit, transposicao_instrumento)
+             VALUES (?,?,?,?,?,?,?)'
         );
         $stmt->execute([
             $bandaId,
@@ -94,6 +96,7 @@ class MusicaRepository {
             $original['classificacao'],
             $original['cifra'],
             $original['bit'],
+            (int)($original['transposicao_instrumento'] ?? 0),
         ]);
         return (int)$this->pdo->lastInsertId();
     }

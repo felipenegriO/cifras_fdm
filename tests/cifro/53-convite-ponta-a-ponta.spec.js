@@ -46,7 +46,8 @@ test('admin convida novo membro e membro ativa conta pelo link', async ({ browse
   });
 
   await admin.goto('/src/backend/users/editoruser.php');
-  await expect(admin.locator('h1')).toContainText('Usuários da banda');
+  // A lista de membros virou aba de Minha Banda: o h1 da página é "Minha Banda".
+  await expect(admin.locator('.mb-aba-titulo')).toContainText('Usuários da banda');
 
   await admin.getByRole('button', { name: 'Novo Usuário' }).click();
   await expect(admin.locator('#modalOverlay')).toBeVisible();
@@ -129,7 +130,8 @@ test('admin reenvia convite para membro inativo e novo token é gerado', async (
   }
 
   await admin.goto('/src/backend/users/editoruser.php');
-  await expect(admin.locator('h1')).toContainText('Usuários da banda');
+  // A lista de membros virou aba de Minha Banda: o h1 da página é "Minha Banda".
+  await expect(admin.locator('.mb-aba-titulo')).toContainText('Usuários da banda');
   // Filtra por inativos para exibir o usuário recém-desativado
   await admin.locator('#filtroStatusUsuarios').selectOption('inativos');
   await expect(admin.locator('.user-identity').filter({ hasText: EMAIL })).toBeVisible({ timeout: 5000 });

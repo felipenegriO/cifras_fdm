@@ -42,7 +42,7 @@ final class CifraClubImportProviderTest extends TestCase
         $this->assertSame('Música de Teste', $result['title']);
         $this->assertSame('Artista Teste', $result['artist']);
         $this->assertSame('C', $result['metadata']['tom']);
-        $this->assertSame('2', $result['metadata']['capo']);
+        $this->assertSame(2, $result['metadata']['capo']);
         $this->assertStringContainsString('[Intro] C  G  Am  F', $result['content']);
         $this->assertStringContainsString('Linha de exemplo da letra', $result['content']);
         $this->assertStringNotContainsString('Tom: C', $result['content']);
@@ -111,5 +111,30 @@ final class CifraClubImportProviderTest extends TestCase
         $this->expectException(RuntimeException::class);
         $this->expectExceptionMessage('Não foi possível extrair a cifra desta página.');
         $provider->import('https://www.cifraclub.com.br/artista/musica/');
+    }
+
+    public function testLeCapotrasteDeclaradoForaDaCifra(): void
+    {
+        $html = file_get_contents(__DIR__ . '/../fixtures/cifraclub-capo-fora-do-pre.html');
+        $provider = new CifraClubImportProvider(['httpGet' => fn() => $html]);
+
+        $result = $provider->import('https://www.cifraclub.com.br/artista-teste/musica/');
+
+        $this->assertSame(2, $result['metadata']['capo']);
+        $this->assertSame('A', $result['metadata']['tom']);
+        $this->assertStringContainsString('[Intro] G  D  Em  C', $result['content']);
+    }
+
+    public function testDevolveCapotrasteNuloQuandoAPaginaNaoInforma(): void
+    {
+        $html = '<!DOCTYPE html><html><body>'
+            . '<h1>Sem capo</h1><h2>Artista</h2>'
+            . '<div class="cifra_cnt"><pre id="cifra_clean">C  G  Am  F' . "\n" . 'letra</pre></div>'
+            . '</body></html>';
+
+        $provider = new CifraClubImportProvider(['httpGet' => fn() => $html]);
+        $result = $provider->import('https://www.cifraclub.com.br/a/b/');
+
+        $this->assertNull($result['metadata']['capo']);
     }
 }

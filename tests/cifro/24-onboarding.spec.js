@@ -180,6 +180,7 @@ test.describe.serial('Onboarding — jornada completa', () => {
 
   test('plano gratuito bloqueia a criação de uma segunda banda', async ({ page }) => {
     await page.goto('/logout.php');
+    await page.click('#confirmarLogout');
     await page.goto('/login.php');
     await page.fill('#email', EMAIL);
     await page.fill('#senha', SENHA);

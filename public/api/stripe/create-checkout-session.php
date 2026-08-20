@@ -51,14 +51,22 @@ if ($bandaId === '') {
     exit;
 }
 
-$appUrl     = rtrim((string)env('APP_URL', ''), '/');
+// . app_base() é obrigatório: APP_URL é a raiz do domínio e o app pode viver
+// numa subpasta (cifro.online/beta/public). O rewrite de HTML não alcança esta
+// URL, porque ela é enviada ao Stripe e usada por ELE no retorno — sem o
+// prefixo, o músico paga e cai num 404. Mesmo padrão do MailService.
+$appUrl     = rtrim((string)env('APP_URL', ''), '/') . app_base();
 if ($appUrl === '') {
     api_error('app_url_not_configured', 'URL base do aplicativo não configurada.', 503);
     exit;
 }
 $userEmail  = (string)($_SESSION['usuario']['email'] ?? '');
-$successUrl = $appUrl . '/plano.php?checkout=success&session_id={CHECKOUT_SESSION_ID}';
-$cancelUrl  = $appUrl . '/plano.php?checkout=cancel';
+// Aponta direto para a aba, sem depender do redirecionamento de plano.php:
+// a URL é montada aqui a cada pagamento (não há Payment Link estático cuja URL
+// ficaria no painel do Stripe), então o pagamento deixa de depender de uma
+// tela que virou apenas compatibilidade.
+$successUrl = $appUrl . '/minha-banda.php?aba=plano&checkout=success&session_id={CHECKOUT_SESSION_ID}';
+$cancelUrl  = $appUrl . '/minha-banda.php?aba=plano&checkout=cancel';
 
 $payload = StripeCheckoutHelper::buildPayload(
     priceId: $priceId,

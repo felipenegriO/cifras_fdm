@@ -54,7 +54,10 @@ test.describe('Setlist', () => {
         { timeout: 15000 });
       const result = await page.evaluate(() => {
         window.renderPlaylistsMenu();
-        const item = document.querySelector('.liPlaylist-musica');
+        const playlist = Array.from(document.querySelectorAll('.liPlaylist')).find(element =>
+          element.firstElementChild?.textContent === '__E2E_SETLIST_INDEX__'
+        );
+        const item = playlist?.querySelector('.liPlaylist-musica');
         return item ? item.textContent : '';
       });
       expect(result).toMatch(/\[D\]/);

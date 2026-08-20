@@ -32,6 +32,10 @@
         }
         .sb-card:hover { background: var(--bg-2); border-color: var(--brand); }
         .sb-card--offline-disabled { opacity: .5; cursor: not-allowed; border-style: dashed; }
+        .sb-card--bloqueada { opacity: .55; cursor: not-allowed; border-style: dashed; }
+        .sb-card--bloqueada:hover { background: var(--bg-1); border-color: var(--border); }
+        .sb-aviso { border: 1px solid var(--border); border-left: 3px solid #f59e0b; border-radius: 10px;
+                    padding: 10px 12px; margin-bottom: 14px; font-size: var(--text-sm); color: var(--text-1); }
         .sb-card__avatar {
             width: 48px; height: 48px; border-radius: var(--radius-md);
             background: var(--brand-soft); color: var(--brand);
@@ -102,6 +106,14 @@
     <h1 class="sb-title">Selecionar banda</h1>
     <p class="sb-sub">Bem-vindo, <?= e($usuario['nome'] ?? 'Usuário') ?>. Escolha a banda que deseja acessar.</p>
 
+    <?php $semAcesso = (string) ($_GET['semacesso'] ?? ''); if ($semAcesso !== ''): ?>
+        <div class="sb-aviso" role="status">
+            Você não tem mais acesso à banda que estava usando
+            (<?= e(strtolower(BandaAcessoPolicy::rotulo($semAcesso))) ?>).
+            Escolha outra banda abaixo ou crie uma nova.
+        </div>
+    <?php endif; ?>
+
     <div class="sb-grid">
         <?php if (empty($bandas)): ?>
             <div class="sb-empty">Você ainda não tem uma banda. Crie uma para começar seu repertório.</div>
@@ -115,7 +127,25 @@
                     $planoLabel = cifro_plan_label($plano);
                     $planoModifier = $plano === 'bloqueado' ? ' sb-card__plan--bloqueado'
                         : (in_array($plano, ['mensal', 'semestral', 'anual', 'ativo'], true) ? ' sb-card__plan--paid' : '');
+                    // Master administra bandas inativas; para os demais, uma banda
+                    // sem acesso aparece na lista mas não abre — exceto quando o
+                    // motivo é o plano, que precisa abrir para poder ser pago.
+                    $motivoBloqueio = $perfil === 'master'
+                        ? null
+                        : BandaAcessoPolicy::motivoParaBloquear($banda, $perfil);
                 ?>
+                <?php if (BandaAcessoPolicy::impedeAbrir($motivoBloqueio)): ?>
+                <div class="sb-card sb-card--bloqueada" data-band-id="<?= e($banda['id']) ?>" data-motivo="<?= e($motivoBloqueio) ?>" aria-disabled="true">
+                    <div class="sb-card__avatar"><img src="<?= e($logo) ?>" alt=""></div>
+                    <div class="sb-card__info">
+                        <p class="sb-card__name"><?= e($banda['nome']) ?></p>
+                        <div class="sb-card__meta">
+                            <p class="sb-card__role"><?= $perfilLabel ?></p>
+                            <span class="sb-card__plan sb-card__plan--bloqueado"><?= e(BandaAcessoPolicy::rotulo($motivoBloqueio)) ?></span>
+                        </div>
+                    </div>
+                </div>
+                <?php continue; endif; ?>
                 <a class="sb-card" data-band-id="<?= e($banda['id']) ?>" href="#" onclick="selecionarBanda('<?= e($banda['id']) ?>', event)">
                     <div class="sb-card__avatar"><img src="<?= e($logo) ?>" alt=""></div>
                     <div class="sb-card__info">
@@ -154,7 +184,11 @@
 <script>
 cifroSync.cacheBands(<?= json_encode(array_map(fn($b) => [
     'banda_id' => $b['id'], 'nome' => $b['nome'], 'perfil' => $b['usuario_perfil'] ?? 'basico',
-    'logo' => $b['logo'] ?? null, 'ativo' => (bool)($b['ativo'] ?? true)
+    // `logo_url` já resolvido aqui, não no cliente: quem sabe montar o
+    // endereço é band_logo_url(), e duplicar essa regra em JS criaria uma
+    // segunda fonte para a mesma coisa. `logo` continua cru para quem já o lê.
+    'logo' => $b['logo'] ?? null, 'logo_url' => band_logo_url($b['logo'] ?? null),
+    'ativo' => (bool)($b['ativo'] ?? true)
 ], $bandas), JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) ?>).catch(() => {});
 
 async function refreshOfflineCards() {
@@ -186,6 +220,22 @@ function fecharModalNovaBanda() {
     document.getElementById('inputNomeBanda').value = '';
 }
 
+// Uma resposta não-JSON (404 de deploy em subpasta, 500 do PHP, página de
+// erro de proxy) caía no catch genérico e virava "Erro de conexão." — que
+// manda o usuário procurar problema na internet dele quando o problema é do
+// servidor. Aqui a resposta crua vira uma mensagem que diz o que houve.
+async function lerJson(res, acao) {
+    const texto = await res.text();
+    try {
+        return JSON.parse(texto);
+    } catch {
+        console.error(`[cifro] resposta não-JSON ao ${acao}:`, res.status, res.url, texto.slice(0, 300));
+        const erro = new Error('resposta_invalida');
+        erro.mensagemUsuario = `O servidor respondeu de forma inesperada ao ${acao} (HTTP ${res.status}). Tente de novo; se persistir, avise o suporte.`;
+        throw erro;
+    }
+}
+
 async function criarBanda() {
     const nome = document.getElementById('inputNomeBanda').value.trim();
     if (!nome) { cifroToast && cifroToast('Informe o nome da banda.', 'warning'); return; }
@@ -201,7 +251,7 @@ async function criarBanda() {
             headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
             body: JSON.stringify({ nome })
         });
-        const json = await res.json();
+        const json = await lerJson(res, 'criar banda');
 
         if (res.ok && json.ok) {
             // Auto-select the new band
@@ -210,7 +260,7 @@ async function criarBanda() {
                 headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
                 body: JSON.stringify({ bandaId: json.id })
             });
-            const selJson = await sel.json();
+            const selJson = await lerJson(sel, 'selecionar banda');
             if (selJson.sucesso) {
                 cifroSync.selectOnlineBand(json.id);
                 window.location.href = '/index.php';
@@ -224,8 +274,8 @@ async function criarBanda() {
         } else {
             cifroToast && cifroToast(json.mensagem || 'Erro ao criar banda.', 'error');
         }
-    } catch {
-        cifroToast && cifroToast('Erro de conexão.', 'error');
+    } catch (e) {
+        cifroToast && cifroToast(e?.mensagemUsuario || 'Erro de conexão.', 'error');
     } finally {
         btn.disabled = false;
         btn.textContent = 'Criar banda';

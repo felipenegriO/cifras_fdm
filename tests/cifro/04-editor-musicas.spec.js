@@ -9,6 +9,7 @@ test.use({ storageState: 'tests/.auth/user.json' });
 test('importa conteúdo colado com preview, origem e confirmação de direitos', async ({ page }) => {
   await page.goto('/src/backend/editor/editor.php');
   await page.locator('#importSongButton').click();
+  await page.locator('#importTabTextButton').click();
   await page.locator('#importSourceUrl').fill('https://www.cifraclub.com.br/artista/musica/');
   await page.locator('#importContent').fill('Minha Música - Minha Banda\nTom: C\n\nC  G  Am  F\nPrimeira linha');
   await page.locator('#importRights').check();

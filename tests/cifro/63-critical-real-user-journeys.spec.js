@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { dbQuery } from '../helpers/db.js';
+import { TEST_EMAIL, TEST_PASSWORD } from '../helpers/auth.js';
 
 const MASTER = 'tests/.auth/user.json';
 const ADMIN = 'tests/.auth/paid-admin.json';
@@ -233,7 +234,7 @@ test('8. roteiro sincronizado abre após F5 offline', async ({ browser }) => {
     await prepareOffline(page);
     await context.setOffline(true);
     await page.reload({ waitUntil: 'domcontentloaded' });
-    await page.getByRole('button', { name: /Abrir repertórios/i }).click();
+    await page.locator('#playlistButton').click();
     await page.locator('.liRoteiro a', { hasText: title }).click();
     await expect(page.locator('#roteiro-title')).toHaveText(title);
     await expect(page.locator('#roteiro-body')).toContainText('Palco offline');
@@ -264,6 +265,10 @@ for (const [role, state] of [['gestor', GESTOR], ['básico', BASICO], ['externo'
   });
 }
 
+// Categorias e Usuários viraram abas de Minha Banda e saíram do menu lateral.
+// Repertórios fica de fora porque funciona offline, de propósito.
+const MENUS_QUE_EXIGEM_SERVIDOR = ['Minha Banda', 'Músicas', 'Bandas'];
+
 test('8. menus administrativos exibem bloqueio sem rede e sem servidor', async ({ browser }) => {
   const { context, page } = await contextPage(browser, ADMIN);
   const assertBlocked = async label => {
@@ -287,11 +292,11 @@ test('8. menus administrativos exibem bloqueio sem rede e sem servidor', async (
     await refreshBand(page);
     await prepareOffline(page);
     await context.setOffline(true);
-    for (const label of ['Categorias', 'Músicas', 'Usuários']) await assertBlocked(label);
+    for (const label of MENUS_QUE_EXIGEM_SERVIDOR) await assertBlocked(label);
     await context.setOffline(false);
     await context.addCookies([{ name: 'cifro_e2e_server_down', value: '1', url: test.info().project.use.baseURL }]);
     expect(await page.evaluate(() => navigator.onLine)).toBe(true);
-    for (const label of ['Categorias', 'Músicas', 'Usuários']) await assertBlocked(label);
+    for (const label of MENUS_QUE_EXIGEM_SERVIDOR) await assertBlocked(label);
   } finally {
     await context.setOffline(false).catch(() => {});
     await context.clearCookies({ name: 'cifro_e2e_server_down' }).catch(() => {});
@@ -415,4 +420,57 @@ test('10. instalação PWA antiga é atualizada sem limpar dados', async ({ brow
       request.onerror = () => reject(request.error);
     }))).toBe('Legado preservado');
   } finally { await context.close(); }
+});
+
+test('11. login atualiza instalacao antiga sem exigir reinstalacao', async ({ browser }) => {
+  const context = await browser.newContext({ storageState: { cookies: [], origins: [] }, serviceWorkers: 'allow' });
+  const page = await context.newPage();
+  try {
+    await page.goto('/api/csrf.php');
+    await page.evaluate(async () => {
+      const stale = await navigator.serviceWorker.register('/service-worker.php?e2e_stale_login=1', { scope: '/' });
+      await new Promise(resolve => {
+        if (stale.active?.state === 'activated') return resolve();
+        const worker = stale.installing || stale.waiting;
+        worker?.addEventListener('statechange', () => {
+          if (worker.state === 'activated') resolve();
+        });
+        setTimeout(resolve, 5000);
+      });
+      if (!navigator.serviceWorker.controller) {
+        await new Promise(resolve => {
+          navigator.serviceWorker.addEventListener('controllerchange', resolve, { once: true });
+          setTimeout(resolve, 5000);
+        });
+      }
+      const version = await new Promise(resolve => {
+        const channel = new MessageChannel();
+        channel.port1.onmessage = event => resolve(event.data.version);
+        navigator.serviceWorker.controller.postMessage({ type: 'GET_VERSION' }, [channel.port2]);
+      });
+      if (version !== 'e2e-stale-login') throw new Error('Worker antigo não controlou a página.');
+    });
+
+    await page.goto('/login.php');
+    await expect(page.locator('#loginForm')).toBeVisible();
+    await page.locator('#email').fill(TEST_EMAIL);
+    await page.locator('#senha').fill(TEST_PASSWORD);
+    const refreshedIndexRequest = page.waitForRequest(request => {
+      const url = new URL(request.url());
+      return request.method() === 'GET' && url.pathname === '/index.php' && url.searchParams.has('_cifro_auth');
+    });
+    await page.locator('button[type="submit"]').click();
+
+    await refreshedIndexRequest;
+    await expect(page).toHaveURL(/\/index\.php$/, { timeout: 20000 });
+    await expect(page.locator('#music-list')).toBeVisible({ timeout: 20000 });
+    await expect(page.locator('#stale-landing-e2e')).toHaveCount(0);
+    await expect.poll(() => page.evaluate(async () => {
+      const registration = await navigator.serviceWorker.ready;
+      return new URL(registration.active?.scriptURL || location.href).pathname;
+    }), { timeout: 20000 }).toBe('/service-worker.php');
+    expect(await page.evaluate(() => Boolean(navigator.serviceWorker.controller))).toBe(true);
+  } finally {
+    await context.close();
+  }
 });

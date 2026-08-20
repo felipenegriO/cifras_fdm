@@ -233,6 +233,40 @@
             </div>
         </section>
 
+        <!-- ===== Instrumento e capotraste ===== -->
+        <section class="config-section" aria-labelledby="sec-capotraste">
+            <header class="config-section__header"><h2 class="config-section__title" id="sec-capotraste">Instrumento e capotraste</h2></header>
+
+            <div class="config-row">
+                <div class="config-row__label">
+                    <p class="config-row__title">O que você toca</p>
+                    <p class="config-row__desc">Define o nome e os limites do ajuste: capotraste no violão, transpose no teclado.</p>
+                </div>
+                <div class="config-row__control">
+                    <select id="cfgInstrumento" aria-label="Instrumento">
+                        <option value="violao">Violão ou guitarra</option>
+                        <option value="teclado">Teclado ou piano</option>
+                        <option value="outro">Outro instrumento ou voz</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="config-row">
+                <div class="config-row__label">
+                    <p class="config-row__title">Quando usar <span id="cfgCapoTermo">capotraste</span></p>
+                    <p class="config-row__desc" id="cfgCapoDesc">Nível básico busca só formas abertas, sem pestana.</p>
+                </div>
+                <div class="config-row__control">
+                    <select id="cfgTransposicaoPreferencia" aria-label="Preferência de capotraste">
+                        <option value="simplificar">Sempre simplificar</option>
+                        <option value="basico">Nível básico</option>
+                        <option value="cadastrado">Só quando a música pedir</option>
+                        <option value="nunca">Nunca usar</option>
+                    </select>
+                </div>
+            </div>
+        </section>
+
         <!-- ===== Apresentação ===== -->
         <section class="config-section" aria-labelledby="sec-apresentacao">
             <header class="config-section__header"><h2 class="config-section__title" id="sec-apresentacao">Apresentação</h2></header>
@@ -265,6 +299,33 @@
             </div>
         </section>
 
+        <?php if (help_center_enabled()): ?>
+        <section class="config-section" aria-labelledby="sec-ajuda-title" id="sec-ajuda">
+            <header class="config-section__header"><h2 class="config-section__title" id="sec-ajuda-title">Ajuda</h2></header>
+            <div class="config-row">
+                <div class="config-row__label">
+                    <p class="config-row__title">Exibir Central de Ajuda</p>
+                    <p class="config-row__desc">Mostra guias, glossário e orientações contextuais. Ao desativar, a preferência é salva na sua conta e a ajuda não volta a aparecer.</p>
+                </div>
+                <div class="config-row__control">
+                    <label class="switch">
+                        <input type="checkbox" id="cfgHelpEnabled" <?= help_center_disabled_for_user($usuario) ? '' : 'checked' ?> aria-label="Exibir Central de Ajuda">
+                        <span class="switch__slider"></span>
+                    </label>
+                </div>
+            </div>
+            <?php if (help_center_visible_for_user($usuario)): ?>
+            <div class="config-row config-row--compact" data-help-entry>
+                <div class="config-row__label">
+                    <p class="config-row__title">Conheça a Central de Ajuda</p>
+                    <p class="config-row__desc">Consulte guias de tarefas e orientações para problemas offline.</p>
+                </div>
+                <div class="config-row__control"><a href="<?= e(base_url('/ajuda.php')) ?>" class="btn btn--secondary btn--sm">Abrir ajuda</a></div>
+            </div>
+            <?php endif; ?>
+        </section>
+        <?php endif; ?>
+
         <!-- ===== Conta ===== -->
         <section class="config-section" aria-labelledby="sec-conta">
             <header class="config-section__header"><h2 class="config-section__title" id="sec-conta">Conta</h2></header>
@@ -288,6 +349,7 @@
                 </div>
                 <div class="config-row__control" style="display:flex;gap:8px;flex-wrap:wrap">
                     <a href="/api/account/export.php" class="btn btn--secondary btn--sm">Exportar meus dados</a>
+                    <button type="button" id="logoutAllButton" class="btn btn--secondary btn--sm">Sair de todos os aparelhos</button>
                     <button type="button" id="deleteAccountButton" class="btn btn--danger btn--sm">Excluir conta</button>
                 </div>
             </div>
@@ -462,6 +524,41 @@
                 showSaveResult(saved, 'Tamanho da cifra salvo');
             });
 
+            // ---- Instrumento e capotraste ----
+            var instrumentoSel = document.getElementById('cfgInstrumento');
+            var capoSel = document.getElementById('cfgTransposicaoPreferencia');
+            var capoTermo = document.getElementById('cfgCapoTermo');
+            var capoDesc = document.getElementById('cfgCapoDesc');
+
+            function termoDoInstrumento(instrumento) {
+                return instrumento === 'violao' ? 'capotraste'
+                    : instrumento === 'teclado' ? 'transpose' : 'transposição';
+            }
+
+            // Pestana só existe em instrumento de corda; para teclado o que pesa
+            // é tecla preta. O nível básico é o mesmo conceito nos dois casos.
+            function aplicarVocabulario() {
+                capoTermo.textContent = termoDoInstrumento(instrumentoSel.value);
+                capoDesc.textContent = instrumentoSel.value === 'violao'
+                    ? 'Nível básico busca só formas abertas, sem pestana.'
+                    : 'Nível básico busca o tom com menos teclas pretas.';
+            }
+
+            instrumentoSel.value = cfgGetEnum('instrumento', ['violao', 'teclado', 'outro'], 'outro');
+            capoSel.value = cfgGetEnum('transposicaoPreferencia', ['simplificar', 'basico', 'cadastrado', 'nunca'], 'cadastrado');
+            aplicarVocabulario();
+
+            instrumentoSel.addEventListener('change', async function () {
+                aplicarVocabulario();
+                var saved = await cfgSave('instrumento', instrumentoSel.value);
+                showSaveResult(saved, 'Instrumento salvo');
+            });
+
+            capoSel.addEventListener('change', async function () {
+                var saved = await cfgSave('transposicaoPreferencia', capoSel.value);
+                showSaveResult(saved, 'Preferência salva');
+            });
+
             // ---- Apresentação: velocidade ----
             var savedSpeed = cfgGetEnum('scrollSpeed', ['slow', 'normal', 'fast'], 'normal');
             var speedSel = document.getElementById('cfgScrollSpeed');
@@ -479,6 +576,24 @@
                 var saved = await cfgSave('keepAwake', wakeChk.checked ? 'true' : 'false');
                 showSaveResult(saved, 'Preferência salva');
             });
+
+            var helpChk = document.getElementById('cfgHelpEnabled');
+            if (helpChk) {
+                var helpDisabled = cfgGetEnum('ajudaDesativada', ['true', 'false'], 'false');
+                helpChk.checked = helpDisabled !== 'true';
+                helpChk.addEventListener('change', async function () {
+                    var disabled = helpChk.checked ? 'false' : 'true';
+                    var saved = await cfgSave('ajudaDesativada', disabled);
+                    if (saved) {
+                        localStorage.setItem('cifro-ajudaDesativada', disabled);
+                        showSaveResult(true, helpChk.checked ? 'Central de Ajuda ativada' : 'Central de Ajuda desativada');
+                        setTimeout(function () { location.reload(); }, 500);
+                    } else {
+                        helpChk.checked = !helpChk.checked;
+                        showSaveResult(false, '');
+                    }
+                });
+            }
 
             // ---- Sync status ----
             var syncDot = document.getElementById('cfgSyncDot');
@@ -593,6 +708,21 @@
         })();
     </script>
     <script>
+      document.getElementById('logoutAllButton')?.addEventListener('click', async () => {
+        if (!confirm('Isto desconecta sua conta de todos os aparelhos, inclusive deste. Continuar?')) return;
+        const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
+        const response = await fetch('/api/account/logout-all.php', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf }
+        });
+        const result = await response.json();
+        if (!response.ok) {
+          alert(result.error?.message || result.mensagem || 'Não foi possível desconectar os aparelhos.');
+          return;
+        }
+        location.href = '/login.php';
+      });
+
       document.getElementById('deleteAccountButton')?.addEventListener('click', async () => {
         const email = prompt('Digite seu e-mail para confirmar a exclusão definitiva da conta:');
         if (!email) return;

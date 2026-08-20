@@ -21,7 +21,16 @@
     artist: document.getElementById('artista'),
     bpm: document.getElementById('bit'),
     key: document.getElementById('tomPadrao'),
+    transposicao: document.getElementById('transposicaoInstrumento'),
+    transposicaoLabel: document.getElementById('transposicaoLabel'),
+    transposicaoHint: document.getElementById('transposicaoHint'),
+    sugerirTransposicao: document.getElementById('sugerirTransposicao'),
     classification: document.getElementById('classificacao'),
+    categoriaAviso: document.getElementById('categoriaAviso'),
+    novaCategoriaCampo: document.getElementById('novaCategoriaCampo'),
+    novaCategoriaNome: document.getElementById('novaCategoriaNome'),
+    novaCategoriaSalvar: document.getElementById('novaCategoriaSalvar'),
+    novaCategoriaCancelar: document.getElementById('novaCategoriaCancelar'),
     dirtyIndicator: document.getElementById('dirtyIndicator'),
     saveButton: document.getElementById('saveButton'),
     saveButtonLabel: document.getElementById('saveButtonLabel'),
@@ -41,6 +50,10 @@
     importContent: document.getElementById('importContent'),
     importRights: document.getElementById('importRights'),
     importPreview: document.getElementById('importPreview'),
+    importCapoBox: document.getElementById('importCapoBox'),
+    importAplicarCapo: document.getElementById('importAplicarCapo'),
+    importCapoTexto: document.getElementById('importCapoTexto'),
+    importCapoAviso: document.getElementById('importCapoAviso'),
     confirmImportButton: document.getElementById('confirmImportButton'),
     textarea: document.getElementById('cifraInput'),
     editorError: document.getElementById('editorLoadError')
@@ -50,14 +63,152 @@
     return Array.isArray(window.songs) ? window.songs : [];
   }
 
+  const NOVA_CATEGORIA = '__nova__';
+
+  // "+ Nova categoria…" é uma ação de menu, não uma opção selecionável: o
+  // select nunca pode ficar parado em NOVA_CATEGORIA, senão salvar a música
+  // (inclusive via Ctrl+S) mandaria esse sentinela como classificacao.
+  // categoriaAnterior guarda a última categoria "de verdade" para restaurar
+  // o select assim que NOVA_CATEGORIA aparecer como valor.
+  let categoriaAnterior = '';
+
+  function definirCategoriaSelecionada(valor) {
+    categoriaAnterior = valor || '';
+    elements.classification.value = categoriaAnterior;
+    // Atribuição programática de .value não dispara "input", então
+    // detectDirty() (ligado a esse evento) nunca rodaria sozinho aqui. Sem
+    // esta chamada, criar uma categoria pelo editor marca a música como
+    // selecionada mas não como suja: o indicador fica apagado, o toast diz
+    // "selecionada" e trocar de música descarta a categorização em silêncio.
+    detectDirty();
+  }
+
+  function podeCriarCategoria() {
+    return window.CIFRO_PODE_EDITAR_CONTEUDO === true;
+  }
+
   function renderCategories() {
     const selected = elements.classification.value;
-    elements.classification.replaceChildren(new Option('Não classificada', ''));
-    (Array.isArray(window.categorias) ? window.categorias : []).forEach(category => {
+    const categorias = Array.isArray(window.categorias) ? window.categorias : [];
+    elements.classification.replaceChildren(new Option('Sem categoria', ''));
+    categorias.forEach(category => {
       elements.classification.add(new Option(category.nome, category.nome));
     });
-    elements.classification.value = selected;
+    if (podeCriarCategoria()) {
+      elements.classification.add(new Option('+ Nova categoria…', NOVA_CATEGORIA));
+    }
+    definirCategoriaSelecionada(selected === NOVA_CATEGORIA ? '' : selected);
+    renderCategoriaAviso(categorias.length);
   }
+
+  function renderCategoriaAviso(total) {
+    const aviso = elements.categoriaAviso;
+    if (!aviso) return;
+    aviso.replaceChildren();
+    if (total > 0) {
+      if (!podeCriarCategoria()) aviso.textContent = 'Só gestores criam categorias novas.';
+      aviso.hidden = !aviso.textContent;
+      return;
+    }
+    aviso.append(document.createTextNode('Sua banda ainda não tem categorias.'));
+    if (podeCriarCategoria()) {
+      const link = document.createElement('a');
+      link.href = (window.APP_BASE || '') + '/minha-banda.php?aba=categorias';
+      link.textContent = 'Criar agora';
+      aviso.append(document.createTextNode(' '), link);
+    }
+    aviso.hidden = false;
+  }
+
+  function abrirCampoNovaCategoria() {
+    elements.novaCategoriaCampo.hidden = false;
+    elements.novaCategoriaNome.value = '';
+    elements.novaCategoriaNome.focus();
+  }
+
+  function fecharCampoNovaCategoria() {
+    elements.novaCategoriaCampo.hidden = true;
+  }
+
+  // Garante que o <select> tenha uma <option> para `nome` mesmo que o sync
+  // pós-criação não tenha atualizado window.categorias (offline ou sessão
+  // marcada inválida, ver cifro-sync.js). Sem isso, selecionar `nome` deixa
+  // o select com selectedIndex -1 e .value '' — a música salva sem
+  // categoria enquanto o toast afirma que ela foi selecionada.
+  function garantirOpcaoCategoria(nome) {
+    const options = Array.from(elements.classification.options);
+    if (options.some(option => option.value === nome)) return;
+    const indexNova = options.findIndex(option => option.value === NOVA_CATEGORIA);
+    const option = new Option(nome, nome);
+    if (indexNova >= 0) elements.classification.add(option, indexNova);
+    else elements.classification.add(option);
+  }
+
+  async function criarCategoria() {
+    const nome = elements.novaCategoriaNome.value.trim();
+    if (!nome) return;
+    const api = (window.APP_BASE || '') + '/src/backend/categorias/api.php';
+    elements.novaCategoriaSalvar.disabled = true;
+    try {
+      const response = await fetch(api, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nome })
+      });
+      const data = await response.json().catch(() => ({}));
+      // 409 com categoria significa que já existe uma equivalente: seleciona a
+      // que existe em vez de insistir em criar uma segunda.
+      if (!response.ok && !(response.status === 409 && data.categoria)) {
+        throw new Error(data.error || 'Não foi possível criar a categoria.');
+      }
+      const criada = data.categoria || { nome };
+      await cifroSync.sync(window.CIFRO_BAND_ID, { force: true });
+      renderCategories();
+      garantirOpcaoCategoria(criada.nome);
+      definirCategoriaSelecionada(criada.nome);
+      elements.novaCategoriaCampo.hidden = true;
+      if (window.cifroToast) cifroToast('Categoria "' + criada.nome + '" selecionada.', 'success');
+    } catch (error) {
+      if (window.cifroToast) cifroToast(error.message, 'error');
+    } finally {
+      elements.novaCategoriaSalvar.disabled = false;
+    }
+  }
+
+  elements.classification.addEventListener('change', () => {
+    if (elements.classification.value === NOVA_CATEGORIA) {
+      // Restaura a seleção anterior imediatamente: o select nunca fica
+      // parado em NOVA_CATEGORIA, então salvar enquanto o popup está aberto
+      // (botão Salvar ou Ctrl+S) usa a categoria de antes, não o sentinela.
+      // Passa por definirCategoriaSelecionada (em vez de atribuir .value
+      // direto) para que detectDirty() rode de novo: selecionar o sentinela
+      // dispara "input" com valor __nova__ antes deste "change", o que liga
+      // o indicador de sujeira; sem recalcular aqui ele fica aceso mesmo
+      // depois de Cancelar.
+      definirCategoriaSelecionada(categoriaAnterior);
+      abrirCampoNovaCategoria();
+    } else {
+      definirCategoriaSelecionada(elements.classification.value);
+      elements.novaCategoriaCampo.hidden = true;
+    }
+  });
+  elements.novaCategoriaSalvar.addEventListener('click', criarCategoria);
+  elements.novaCategoriaCancelar.addEventListener('click', fecharCampoNovaCategoria);
+  // Não há <form> em editor.php, então Enter não tem submissão implícita
+  // nenhuma para acionar: sem este handler, digitar o nome e apertar Enter
+  // não fazia nada. stopPropagation evita que o Enter também alcance o
+  // keydown global (Ctrl+S etc.) enquanto o popup está aberto.
+  elements.novaCategoriaNome.addEventListener('keydown', event => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      event.stopPropagation();
+      criarCategoria();
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      fecharCampoNovaCategoria();
+    }
+  });
 
   function getContent() {
     if (!state.editor) return elements.textarea.value;
@@ -144,8 +295,27 @@
       bit: elements.bpm.value,
       classificacao: elements.classification.value,
       cifra: getContent(),
-      source_url: state.importSourceUrl
+      source_url: state.importSourceUrl,
+      transposicao_instrumento: elements.transposicao.value
     });
+  }
+
+  function instrumentoDoUsuario() {
+    return (window.CIFRO_CONFIG && window.CIFRO_CONFIG.instrumento) || 'outro';
+  }
+
+  // O rótulo segue o instrumento de quem edita, mas a faixa é a união dos
+  // instrumentos: o cadastro vale para a banda inteira, não só para quem digitou.
+  function configurarCampoTransposicao() {
+    elements.transposicaoLabel.textContent = window.CifroChords.rotuloDeslocamento(instrumentoDoUsuario());
+  }
+
+  function atualizarLegendaTransposicao() {
+    const valor = Number(elements.transposicao.value) || 0;
+    const tom = detectedKey(getContent())?.key || '';
+    elements.transposicaoHint.textContent = (!valor || !tom)
+      ? ''
+      : 'formas em ' + window.CifroChords.tomDasFormas(tom, valor);
   }
 
   function setBaseline() {
@@ -233,10 +403,12 @@
     elements.title.value = song.nome || '';
     elements.bpm.value = song.bit || '';
     elements.artist.value = song.artista || '';
-    elements.classification.value = song.classificacao || '';
+    definirCategoriaSelecionada(song.classificacao || '');
+    elements.transposicao.value = Number(song.transposicao_instrumento) || 0;
     state.importSourceUrl = song.source_url || '';
     setContent(String(song.cifra || '').trim());
     updateDetectedKey();
+    atualizarLegendaTransposicao();
     updateDocumentTitle();
     setStatus('');
     setBaseline();
@@ -251,9 +423,11 @@
     elements.title.value = '';
     elements.bpm.value = '';
     elements.artist.value = '';
-    elements.classification.value = '';
+    definirCategoriaSelecionada('');
+    elements.transposicao.value = 0;
     setContent('');
     updateDetectedKey();
+    atualizarLegendaTransposicao();
     updateDocumentTitle();
     setStatus('');
     setBaseline();
@@ -381,7 +555,8 @@
       source_url: state.importSourceUrl,
       bit: elements.bpm.value,
       artista: elements.artist.value,
-      classificacao: elements.classification.value
+      classificacao: elements.classification.value,
+      transposicao_instrumento: Number(elements.transposicao.value) || 0
     };
 
     try {
@@ -607,10 +782,20 @@
 
   function plainTextToHtml(text) {
     const html = splitIntoSections(text).map(sectionToHtml).join('').trim();
+    if (!html) return '';
     // O TinyMCE fragmenta em vários <p> quando recebe muitos <b> adjacentes
     // separados só por espaço (comum em linhas de acorde). Envolver tudo
     // num único bloco evita essa quebra e mantém a cifra como um bloco só.
     return `<div>${html}</div>`;
+  }
+
+  // Espelha TransposicaoInstrumento::casaDeCapo do PHP: a aba de colar texto
+  // não passa pelo servidor, então precisa entender "2ª casa" por conta própria.
+  function casaDeCapo(texto) {
+    const encontrado = String(texto ?? '').match(/(?<![\d-])(\d{1,2})/);
+    if (!encontrado) return null;
+    const casa = parseInt(encontrado[1], 10);
+    return casa >= 1 && casa <= 12 ? casa : null;
   }
 
   function parseImportedSong(rawText) {
@@ -635,6 +820,7 @@
     }
     const content = lines.slice(contentStart).join('\n').trim();
     if (!content) throw new Error('A cifra não possui letra ou acordes para importar.');
+    metadata.capo = casaDeCapo(metadata.capo);
     return { title: title.slice(0, 200), artist: artist.slice(0, 200), content, metadata };
   }
 
@@ -648,6 +834,8 @@
     elements.importTabText.hidden = isLink;
     elements.importFetchError.hidden = true;
     elements.importPreview.hidden = true;
+    elements.importCapoBox.hidden = true;
+    elements.importCapoAviso.hidden = true;
     elements.importModal.dataset.preview = '';
     elements.confirmImportButton.disabled = true;
   }
@@ -658,6 +846,32 @@
     elements.importPreview.textContent = `${parsed.title}${parsed.artist ? ` — ${parsed.artist}` : ''} · ${parsed.content.split('\n').length} linhas${detected?.key ? ` · tom ${detected.key}` : ''}`;
     elements.importPreview.hidden = false;
     elements.confirmImportButton.disabled = !elements.importRights.checked;
+    montarConfirmacaoDeCapo(parsed, detected?.key || '');
+  }
+
+  // O CifraClub escreve o "Tom:" como o som que sai e o corpo da cifra como as
+  // formas a tocar. Guardamos sempre o tom soante, então importar com capotraste
+  // significa subir a cifra — e isso nunca acontece sem o usuário confirmar.
+  function montarConfirmacaoDeCapo(parsed, tomDoCorpo) {
+    const capo = Number(parsed.metadata?.capo) || 0;
+    elements.importCapoBox.hidden = !capo || !tomDoCorpo;
+    elements.importCapoAviso.hidden = true;
+    if (elements.importCapoBox.hidden) return;
+
+    const tomReal = window.CifroChords.tomDasFormas(tomDoCorpo, -capo);
+    elements.importCapoTexto.textContent =
+      `A página informa capotraste na ${capo}ª casa. Os acordes estão em ${tomDoCorpo}, então o tom real é ${tomReal}. Salvar no tom real com capotraste ${capo}.`;
+
+    // Trava contra corromper cifra: se o tom declarado não bater com o corpo
+    // somado ao capotraste, o layout da origem mudou ou a página está errada.
+    const tomDaPagina = window.CifroChords.normalizeKey(parsed.metadata?.tom || '');
+    const confere = !tomDaPagina || tomDaPagina === window.CifroChords.normalizeKey(tomReal);
+    elements.importAplicarCapo.checked = confere;
+    if (!confere) {
+      elements.importCapoAviso.textContent =
+        `A página informa tom ${parsed.metadata.tom}, mas o corpo somado ao capotraste dá ${tomReal}. Confira antes de aplicar.`;
+      elements.importCapoAviso.hidden = false;
+    }
   }
 
   async function fetchImportFromUrl() {
@@ -666,7 +880,7 @@
 
     const url = elements.importUrlInput.value.trim();
     if (!url) {
-      elements.importFetchError.textContent = 'Informe um link do CifraClub.';
+      elements.importFetchError.textContent = 'Informe o link da cifra.';
       elements.importFetchError.hidden = false;
       return;
     }
@@ -743,12 +957,25 @@
     elements.title.value = parsed.title;
     elements.artist.value = parsed.artist;
     elements.bpm.value = '';
-    elements.classification.value = '';
-    setContent(plainTextToHtml(parsed.content));
+    definirCategoriaSelecionada('');
+
+    const capo = Number(parsed.metadata?.capo) || 0;
+    const aplicarCapo = capo > 0 && !elements.importCapoBox.hidden && elements.importAplicarCapo.checked;
+    // Subir a cifra em `capo` semitons leva das formas para o tom que soa.
+    const conteudo = aplicarCapo ? window.CifroChords.transposeHtml(parsed.content, capo) : parsed.content;
+
+    setContent(plainTextToHtml(conteudo));
+    elements.transposicao.value = aplicarCapo ? capo : 0;
+    atualizarLegendaTransposicao();
     setDirty(true);
     updateDocumentTitle();
     closeImport();
-    setStatus('Cifra importada para revisão. Confira o conteúdo antes de salvar.', 'success');
+    setStatus(
+      aplicarCapo
+        ? `Cifra importada no tom real, com capotraste ${capo}. Confira antes de salvar.`
+        : 'Cifra importada para revisão. Confira o conteúdo antes de salvar.',
+      'success'
+    );
   }
 
   function cleanImportedHtml(rawHtml) {
@@ -921,6 +1148,19 @@
     activateMobilePanel('workspace');
     elements.search?.addEventListener('input', renderSongs);
     [elements.title, elements.artist, elements.bpm, elements.classification].filter(Boolean).forEach(input => input.addEventListener('input', detectDirty));
+    elements.transposicao?.addEventListener('input', () => {
+      atualizarLegendaTransposicao();
+      detectDirty();
+    });
+    elements.sugerirTransposicao?.addEventListener('click', () => {
+      const nivel = window.CIFRO_CONFIG?.transposicaoPreferencia === 'basico' ? 'basico' : 'simplificar';
+      elements.transposicao.value = window.CifroChords.sugerirDeslocamento(getContent(), {
+        instrumento: instrumentoDoUsuario(),
+        nivel
+      });
+      atualizarLegendaTransposicao();
+      detectDirty();
+    });
     elements.key?.addEventListener('change', changeDefaultKey);
     document.getElementById('newSongButton')?.addEventListener('click', newSong);
     document.getElementById('newSongMenuButton')?.addEventListener('click', () => {
@@ -965,6 +1205,7 @@
       }
     });
 
+    configurarCampoTransposicao();
     await Promise.all([initialiseEditor(), cifroSync.load(window.CIFRO_BAND_ID)]);
     renderCategories();
     renderSongs();

@@ -322,9 +322,10 @@ test.describe('Live — módulo cliente (window.LiveMode)', () => {
 
   test('sessão de host sem ID salvo encerra e exibe live desconectada', async ({ page }) => {
     await page.goto('/index.php');
-    await page.evaluate((key) => {
-      sessionStorage.setItem(key, 'host');
-    }, 'cifroLiveMode_default');
+    await page.evaluate(() => {
+      const bandId = window.CIFRO_BAND_ID || 'default';
+      sessionStorage.setItem(`cifroLiveMode_${bandId}`, 'host');
+    });
     await page.evaluate(() => window.LiveMode.atualizarPaginaHost(false));
     await expect(page.locator('#liveStatus')).toHaveText('Live desconectada');
   });
@@ -333,10 +334,11 @@ test.describe('Live — módulo cliente (window.LiveMode)', () => {
     let called = false;
     await page.route('**/api/live/update.php', route => { called = true; route.abort(); });
     await page.goto('/index.php');
-    await page.evaluate((keys) => {
-      sessionStorage.setItem(keys.modeKey, 'host');
-      localStorage.setItem(keys.hostIdKey, 'host-offline');
-    }, { modeKey: 'cifroLiveMode_default', hostIdKey: 'cifroLiveHostId_default' });
+    await page.evaluate(() => {
+      const bandId = window.CIFRO_BAND_ID || 'default';
+      sessionStorage.setItem(`cifroLiveMode_${bandId}`, 'host');
+      localStorage.setItem(`cifroLiveHostId_${bandId}`, 'host-offline');
+    });
     await context.setOffline(true);
     await page.evaluate(() => window.LiveMode.atualizarPaginaHost(false));
     await expect(page.locator('#liveStatus')).toHaveText('Live desconectada');
@@ -563,7 +565,11 @@ test.describe('Live — módulo cliente (window.LiveMode)', () => {
     const wrapper = page.locator('#mostrarbtnplay');
     if (await wrapper.count()) {
       await expect(wrapper).toHaveCSS('display', 'block');
-      await expect(page.locator('#entrarlivePlaynow')).toHaveAttribute('href', 'music.php?id=999999');
+      const shortcut = page.locator('#entrarlivePlaynow');
+      await expect(shortcut).toHaveAttribute('href', 'music.php?id=999999');
+      await page.evaluate(() => document.getElementById('entrarlivePlaynow').addEventListener('click', event => event.preventDefault(), { once: true }));
+      await shortcut.dispatchEvent('click');
+      await expect.poll(() => page.evaluate(() => sessionStorage.getItem(`cifroLiveMode_${window.CIFRO_BAND_ID || 'default'}`))).toBe('follow');
     }
   });
 
@@ -622,6 +628,7 @@ test.describe('Live — módulo cliente (window.LiveMode)', () => {
       route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, hostNome: 'Rita' }) });
     });
     await page.goto(`/music.php?id=${songId}&playlistTom=C`);
+    await expect(page.locator('#tom')).toHaveText('C');
     await page.evaluate(() => window.LiveMode.assumirHost());
     await expect(page.locator('#liveStatus')).toHaveText('Voce e o host');
     expect(capturedPayload).not.toBeNull();

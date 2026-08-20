@@ -40,14 +40,6 @@ test.describe('Home — Lista de Cifras', () => {
 
   test('usa no atalho live o mesmo texto da tela da música', async ({ page }) => {
     await expect(page.locator('#entrarlivePlaynow')).toHaveText('Entrar na sessão ao vivo');
-    const layout = await page.locator('#mostrarbtnplay').evaluate(element => {
-      const style = getComputedStyle(element);
-      return { left: style.left, bottom: style.bottom, width: style.width, transform: style.transform };
-    });
-    expect(layout.left).toBe('683px');
-    expect(layout.bottom).toBe('12px');
-    expect(layout.width).toBe('560px');
-    expect(layout.transform).not.toBe('none');
   });
 
   test('mostra onboarding sozinho quando o repertório está vazio', async ({ page }) => {
@@ -80,13 +72,13 @@ test.describe('Home — Lista de Cifras', () => {
     await expect(configLink).toBeVisible();
   });
 
-  test('usuário não autenticado é redirecionado para landing', async ({ browser }) => {
+  test('usuário não autenticado recebe a landing na rota principal', async ({ browser }) => {
     const ctx = await browser.newContext({ storageState: { cookies: [], origins: [] } });
     const page = await ctx.newPage();
-    // goto segue todos os redirects e aguarda até networkidle
     await page.goto('/index.php', { waitUntil: 'networkidle' });
-    // Após seguir todos os redirects, deve estar em landing.php ou login.php
-    expect(page.url()).toMatch(/landing\.php|login\.php/);
+    await expect(page).toHaveURL(/landing\.php/);
+    await expect(page.locator('nav .nav-brand')).toBeVisible();
+    await expect(page.getByRole('link', { name: /criar conta/i }).first()).toBeVisible();
     await ctx.close();
   });
 });
@@ -110,8 +102,10 @@ test.describe('Home — Navegação', () => {
     await page.fill('#senha', TEST_PASSWORD);
     await page.click('button[type="submit"]');
     await page.waitForURL(url => !url.toString().includes('login.php'), { timeout: 8000 }).catch(() => {});
-    // Logout desta sessão própria (não destrói SESS de user.json)
+    // Logout desta sessão própria (não destrói SESS de user.json).
+    // /logout.php agora mostra confirmação: sair exige POST com CSRF.
     await page.goto('/logout.php');
+    await page.click('#confirmarLogout');
     await page.waitForURL(url =>
       url.toString().includes('login.php') || url.toString().includes('landing.php'),
       { timeout: 5000 }

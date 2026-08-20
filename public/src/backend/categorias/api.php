@@ -41,6 +41,13 @@ try {
 } catch (SyncConflictException $e) {
     http_response_code(409);
     echo json_encode(['ok' => false, 'error' => $e->getMessage(), 'content_revision' => $e->getCurrentRevision()]);
+} catch (CategoriaDuplicadaException $e) {
+    http_response_code(409);
+    echo json_encode([
+        'ok' => false,
+        'error' => $e->getMessage(),
+        'categoria' => $e->getCategoriaExistente(),
+    ]);
 } catch (PDOException $e) {
     if ((string)$e->getCode() === '23000') {
         http_response_code(409);

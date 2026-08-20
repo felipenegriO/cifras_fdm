@@ -10,7 +10,11 @@ if (!headers_sent()) {
     header('Cache-Control: public, max-age=300, s-maxage=3600');
 }
 
-$siteUrl   = rtrim((string) env('APP_URL', 'https://cifro.online'), '/');
+// . app_base() porque o app pode viver em subpasta (cifro.online/beta/public):
+// sem ele o canonical aponta para a raiz errada, a og:image dá 404 (link
+// compartilhado no WhatsApp fica sem imagem) e a instrução "abra o <host>"
+// manda o músico para um endereço que não é o do app.
+$siteUrl   = rtrim((string) env('APP_URL', 'https://cifro.online'), '/') . app_base();
 $canonical = $siteUrl . '/';
 $ogImage   = $siteUrl . '/og-image.png';
 $gaId      = trim((string) env('GA4_MEASUREMENT_ID', ''));
@@ -33,7 +37,7 @@ $hasShot = static fn (string $f): bool => is_file($shotDir . $f);
 $shotSlots = [
     ['file' => 'leitura.png',   'alt' => 'Tela de leitura do Cifrô com a cifra em tela cheia, acordes e letra em cores diferentes, fonte grande, fundo escuro e controle de tom ao lado — pronto pra tocar no palco.'],
     ['file' => 'editor.png',    'alt' => 'Editor do Cifrô com a cifra colada: acordes reconhecidos e destacados automaticamente acima da letra.'],
-    ['file' => 'importar.png',  'alt' => 'Tela de importar cifra do Cifrô: cole o link do CifraClub e o conteúdo é buscado automaticamente.'],
+    ['file' => 'importar.png',  'alt' => 'Tela de importar cifra do Cifrô: cole o link da cifra e o conteúdo é buscado automaticamente.'],
 ];
 
 $heroSlides = [];
@@ -82,8 +86,8 @@ $faqItems = [
         'a' => 'Ficam guardados para operar o serviço e nada mais: não vendemos nem repassamos dados para publicidade. Cada banda só enxerga o próprio conteúdo. Você pode exportar tudo ou apagar a conta quando quiser, direto em Configurações. Os detalhes estão na <a href="' . e((string) env('PRIVACY_URL', '/privacidade.php')) . '" class="link-brand">Política de Privacidade</a>.',
     ],
     [
-        'q' => 'Por que não usar o Cifra Club, que é de graça?',
-        'a' => 'Use — ele é ótimo para achar e aprender uma música. O Cifrô resolve outro problema: guardar a versão que a sua banda toca, no tom de vocês, montar a ordem do domingo e abrir tudo ao mesmo tempo no celular de cada músico. E aqui o plano é por banda: menos de R$ 10 por mês para todo mundo, contra uma assinatura por pessoa em outros lugares.',
+        'q' => 'Por que não usar os sites de cifra de graça?',
+        'a' => 'Use — eles são ótimos para achar e aprender uma música. O Cifrô resolve outro problema: guardar a versão que a sua banda toca, no tom de vocês, montar a ordem do domingo e abrir tudo ao mesmo tempo no celular de cada músico. E aqui o plano é por banda: menos de R$ 10 por mês para todo mundo, contra uma assinatura por pessoa em outros lugares.',
     ],
     [
         'q' => 'E se o Cifrô acabar?',

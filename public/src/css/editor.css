@@ -122,6 +122,45 @@ body {
   font-size: var(--text-sm);
 }
 
+/*
+ * `#novaCategoriaCampo` é um <span> filho direto de `.compact-field`, então
+ * sem isto ele herdaria o `.compact-field > span` acima (pensado só para o
+ * rótulo flutuante do campo): position:absolute no canto do campo e
+ * pointer-events:none — o popup ficava sobrepondo campos vizinhos e o
+ * input/botão dentro dele ficavam clicáveis apenas na aparência, o clique
+ * caía sempre no elemento por baixo.
+ */
+.compact-field > span#novaCategoriaCampo {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-1);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-2);
+  color: initial;
+  font-size: initial;
+  font-weight: initial;
+  line-height: initial;
+  pointer-events: auto;
+  white-space: nowrap;
+}
+
+#novaCategoriaCampo input,
+#novaCategoriaCampo button {
+  pointer-events: auto;
+}
+
+#novaCategoriaCampo input {
+  min-height: 36px;
+  width: 180px;
+}
+
 .compact-field--title { flex: 1.4 1 190px; }
 .compact-field--artist { flex: 1 1 130px; }
 .compact-field--bpm { flex: 0 0 76px; }
@@ -218,6 +257,10 @@ body {
 .import-rights { display: flex; align-items: center; gap: 10px; min-height: 44px; }
 .import-rights input { width: 20px; height: 20px; }
 .import-preview { padding: 12px; border: 1px solid var(--border-1); border-radius: var(--radius-sm); background: var(--bg-2); }
+.import-capo { padding: 12px; border: 1px solid var(--border-1); border-radius: var(--radius-sm); background: var(--bg-2); }
+.import-capo label { display: flex; align-items: flex-start; gap: 10px; min-height: 44px; }
+.import-capo input { flex: none; width: 20px; height: 20px; margin-top: 2px; }
+.import-capo__aviso { margin: 8px 0 0; color: var(--danger, #c0392b); font-size: var(--fs-sm, .875rem); }
 .import-modal__actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
 
 .import-modal__tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border-1); }

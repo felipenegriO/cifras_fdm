@@ -28,6 +28,7 @@ Esta pasta é a fonte de contexto funcional e técnico para pessoas e agentes de
 - [Modo Ensaio](dominios/modo-ensaio.md)
 - [Offline, PWA e sincronização](dominios/offline-pwa-sync.md)
 - [Planos e cobrança](dominios/planos-e-cobranca.md)
+- [Ajuda e suporte](dominios/ajuda-e-suporte.md)
 
 ## Convenções
 

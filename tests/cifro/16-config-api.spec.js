@@ -121,7 +121,7 @@ test.describe('Config API — salvar_config.php', () => {
       headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
     });
 
-    let response = await post({ tema: 'auto', cifraSize: '14', scrollSpeed: 'slow', keepAwake: true });
+    let response = await post({ tema: 'auto', cifraSize: '14', scrollSpeed: 'slow', keepAwake: true, ajudaDesativada: false });
     expect(response.status(), await response.text()).toBe(200);
     response = await post({ tema: 'light', cifraSize: 22, scrollSpeed: 'fast', keepAwake: 'false' });
     expect(response.status()).toBe(200);
@@ -133,6 +133,7 @@ test.describe('Config API — salvar_config.php', () => {
       { scrollSpeed: 1 },
       { scrollSpeed: 'rápida' },
       { keepAwake: 1 },
+      { ajudaDesativada: 1 },
       { cifraSize: 'texto' },
     ]) {
       response = await post(invalid);
@@ -146,7 +147,7 @@ test.describe('Config API — salvar_config.php', () => {
     });
     expect((await response.json()).sucesso).toBe(false);
 
-    response = await post({ tema: 'dark', cifraSize: 18, scrollSpeed: 'normal', keepAwake: 'false' });
+    response = await post({ tema: 'dark', cifraSize: 18, scrollSpeed: 'normal', keepAwake: 'false', ajudaDesativada: 'false' });
     expect(response.status()).toBe(200);
   });
 });

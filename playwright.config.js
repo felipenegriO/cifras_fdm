@@ -28,7 +28,7 @@ process.env.APP_ENV = 'test';
 const ci = Boolean(process.env.CI);
 const collectJsCoverage = process.env.JS_COVERAGE === '1';
 const collectPhpCoverage = process.env.PHP_COVERAGE === '1';
-const port = collectPhpCoverage ? 8091 : 8090;
+const port = Number(process.env.CIFRO_E2E_PORT || (collectPhpCoverage ? 8091 : 8090));
 const baseURL = `http://127.0.0.1:${port}`;
 const rootPath = process.cwd().replace(/\\/g, '/');
 const webServerEnv = { ...process.env };
@@ -43,6 +43,10 @@ for (const key of [
   // quebra a verificação de assinatura nos testes.
   'STRIPE_WEBHOOK_SECRET', 'STRIPE_PRICE_MENSAL', 'STRIPE_PRICE_SEMESTRAL', 'STRIPE_PRICE_ANUAL',
 ]) delete webServerEnv[key];
+process.env.STRIPE_WEBHOOK_SECRET = 'whsec_playwright';
+process.env.STRIPE_PRICE_MENSAL = 'price_test_mensal';
+process.env.STRIPE_PRICE_SEMESTRAL = 'price_test_semestral';
+process.env.STRIPE_PRICE_ANUAL = 'price_test_anual';
 const coverageOnlyTests = /(?:31-browser-branch-matrix|36-music-view-branches|37-rehearsal-audio-youtube-branches|38-offline-tools-branches|39-script-branches|40-php-under80-coverage|41-php-under80-endpoints|42-php-endpoint-residual-branches|43-js-residual-branches|44-js-ui-fallbacks|45-cifro-sync-validation|46-editor-residual-branches|47-live-residual-branches|48-rehearsal-audio-pitch-residual)\.spec\.js/;
 
 const reporters = collectJsCoverage
@@ -91,9 +95,22 @@ const reporters = collectJsCoverage
 export default defineConfig({
   testDir: './tests',
   globalTeardown: './tests/setup/global.teardown.js',
-  timeout: 60000,
+  timeout: 90000,
   expect: { timeout: 5000 },
-  retries: ci ? 1 : 0,
+  // Uma retentativa também localmente, não só no CI.
+  //
+  // O servidor de teste é `php -S`, single-thread (PHP 8.0 no Windows não tem
+  // PHP_CLI_SERVER_WORKERS, que depende de fork). Sob a bateria inteira ele
+  // engasga e derruba requisições — o sintoma no navegador é
+  // `[cifroSync] sync failed: TypeError: Failed to fetch`, e a vítima muda a
+  // cada execução. Com `retries: 1` isso aparece como "flaky", que é a
+  // descrição honesta, em vez de "failed".
+  //
+  // CUIDADO: um bug intermitente do PRODUTO também vira "flaky" aqui. Por isso
+  // o conjunto flaky conhecido está registrado em DEBT-003 no backlog.md — um
+  // teste flaky que não esteja naquela lista é novidade e merece investigação,
+  // não mais uma retentativa.
+  retries: 1,
   workers: 1,
   reporter: reporters,
 
@@ -117,8 +134,8 @@ export default defineConfig({
       name: 'cifro',
       testDir: './tests/cifro',
       testIgnore: [
-        /26-offline-sync\.spec\.js/,
-        /30-service-worker-coverage\.spec\.js/,
+        /(?:26-offline-sync|30-service-worker-coverage|60-real-offline-user-flow|61-incremental-song-sync|62-playlist-persistence|63-critical-real-user-journeys|65-help-center-offline|66-offline-persistent-login)\.spec\.js/,
+        /(?:32-rehearsal-real-flow|34-rehearsal-state|55-stripe-sandbox)\.spec\.js/,
         coverageOnlyTests,
       ],
       dependencies: ['setup'],
@@ -157,7 +174,7 @@ export default defineConfig({
     {
       name: 'pwa',
       testDir: './tests/cifro',
-      testMatch: /(?:26-offline-sync|30-service-worker-coverage|60-real-offline-user-flow|61-incremental-song-sync|62-playlist-persistence|63-critical-real-user-journeys)\.spec\.js/,
+      testMatch: /(?:26-offline-sync|30-service-worker-coverage|60-real-offline-user-flow|61-incremental-song-sync|62-playlist-persistence|63-critical-real-user-journeys|65-help-center-offline|66-offline-persistent-login)\.spec\.js/,
       timeout: 120000,
       dependencies: ['setup'],
       use: {
@@ -182,9 +199,7 @@ export default defineConfig({
   ],
 
   webServer: {
-    command: collectPhpCoverage
-      ? `C:/xampp/php/php.exe -S 127.0.0.1:8091 -t public ${rootPath}/router.php`
-      : `C:/xampp/php/php.exe -S 127.0.0.1:8090 -t public ${rootPath}/router.php`,
+    command: `C:/xampp/php/php.exe -S 127.0.0.1:${port} -t public ${rootPath}/router.php`,
     env: {
       ...webServerEnv,
       APP_ENV: 'test',

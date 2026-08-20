@@ -110,15 +110,59 @@ class CifraClubImportProvider implements ChordImportProvider
             throw new RuntimeException('Não foi possível extrair a cifra desta página.');
         }
 
+        // O layout atual do CifraClub declara tom e capotraste em elementos
+        // próprios, fora da cifra — o cabeçalho dentro do <pre> é o formato
+        // antigo. Procuramos nos dois lugares, nessa ordem.
+        $capo = TransposicaoInstrumento::casaDeCapo($metadata['capo'] ?? '');
+        if ($capo === null) {
+            $capo = self::capoDeclaradoNaPagina($xpath);
+        }
+
+        $tom = $metadata['tom'] ?? null;
+        if ($tom === null) {
+            $tom = self::tomDeclaradoNaPagina($xpath);
+        }
+
         return [
             'title' => mb_substr($title, 0, 200),
             'artist' => mb_substr($artist, 0, 200),
             'content' => $content,
             'metadata' => [
-                'tom' => $metadata['tom'] ?? null,
-                'capo' => $metadata['capo'] ?? null,
+                'tom' => $tom,
+                'capo' => $capo,
                 'afinação' => $metadata['afinação'] ?? $metadata['afinacao'] ?? null,
             ],
         ];
+    }
+
+    /**
+     * As classes CSS do CifraClub são ofuscadas e mudam sem aviso, então a
+     * busca é pelo texto "capotraste", que é estável. O translate() é como se
+     * faz comparação sem diferenciar maiúscula no XPath 1.0 do DOMXPath.
+     */
+    private static function capoDeclaradoNaPagina(DOMXPath $xpath): ?int
+    {
+        $nodes = $xpath->query(
+            '//*[@id="cifra_capo"]'
+            . ' | //*[contains(translate(., "CAPOTRASE", "capotrase"), "capotraste")]'
+        );
+        foreach ($nodes ?: [] as $node) {
+            $casa = TransposicaoInstrumento::casaDeCapo(trim($node->textContent));
+            if ($casa !== null) {
+                return $casa;
+            }
+        }
+        return null;
+    }
+
+    private static function tomDeclaradoNaPagina(DOMXPath $xpath): ?string
+    {
+        $nodes = $xpath->query('//*[@id="cifra_tom"]');
+        foreach ($nodes ?: [] as $node) {
+            if (preg_match('/tom:\s*([A-G][#b]?m?)/iu', trim($node->textContent), $match) === 1) {
+                return $match[1];
+            }
+        }
+        return null;
     }
 }

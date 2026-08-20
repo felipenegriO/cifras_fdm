@@ -40,7 +40,7 @@ $bandaNome = $_SESSION['banda_atual']['nome'] ?? 'sua banda';
       <a href="/plano.php#planos" class="btn-lg btn-primary">
         Regularizar plano
       </a>
-      <a href="/login.php?logout=1" class="btn-lg btn-ghost">Sair</a>
+      <a href="/logout.php" class="btn-lg btn-ghost">Sair</a>
     </div>
   </div>
 </body>

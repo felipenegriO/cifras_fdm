@@ -15,13 +15,29 @@ class UserConfigValidator
             'cifraSize' => self::validateCifraSize($value),
             'scrollSpeed' => self::validateScrollSpeed($value),
             'keepAwake' => self::validateKeepAwake($value),
+            'ajudaDesativada' => self::validateBoolean($value),
+            'instrumento' => self::validateInstrumento($value),
+            'transposicaoPreferencia' => self::validatePreferenciaTransposicao($value),
             default => null,
         };
     }
 
     public static function isKeySuportada(string $key): bool
     {
-        return in_array($key, ['tema', 'cifraSize', 'scrollSpeed', 'keepAwake'], true);
+        return in_array($key, [
+            'tema', 'cifraSize', 'scrollSpeed', 'keepAwake', 'ajudaDesativada',
+            'instrumento', 'transposicaoPreferencia',
+        ], true);
+    }
+
+    private static function validateInstrumento($value): ?string
+    {
+        return is_string($value) && TransposicaoInstrumento::instrumentoValido($value) ? $value : null;
+    }
+
+    private static function validatePreferenciaTransposicao($value): ?string
+    {
+        return is_string($value) && in_array($value, TransposicaoInstrumento::PREFERENCIAS, true) ? $value : null;
     }
 
     private static function validateTema($value): ?string
@@ -41,6 +57,11 @@ class UserConfigValidator
     }
 
     private static function validateKeepAwake($value): ?string
+    {
+        return self::validateBoolean($value);
+    }
+
+    private static function validateBoolean($value): ?string
     {
         if ($value === true || $value === 'true') {
             return 'true';

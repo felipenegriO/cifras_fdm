@@ -7,7 +7,7 @@ OperationalLogger::log('info', 'sync.data_requested', ['operation' => 'read']);
 
 $bandaId = current_band_id();
 if (!$bandaId) {
-    echo json_encode(['content_revision' => 0, 'musicas' => [], 'playlists' => [], 'roteiros' => [], 'categorias' => []]);
+    echo json_encode(['content_revision' => 0, 'musicas' => [], 'playlists' => [], 'roteiros' => [], 'categorias' => [], 'preferencias_musica' => []]);
     exit;
 }
 
@@ -21,6 +21,12 @@ $musicas   = $musicaRepo->getAllByBanda($bandaId);
 $playlists = $playlistRepo->getAllByBanda($bandaId);
 $roteiros  = $roteiroRepo->getAllByBanda($bandaId);
 $categorias = $categoriaRepo->getAllByBanda($bandaId);
+// Personalização do músico logado. Vive fora da revisão da banda de propósito:
+// é dado pessoal, e não deve invalidar o cache offline dos outros integrantes.
+$preferencias = (new UsuarioMusicaRepository())->listarPorUsuario(
+    (string) ($_SESSION['usuario']['id'] ?? ''),
+    $bandaId
+);
 
 // Normalise for JS: match legacy field names (songs use 'nome', 'cifra', 'bit', etc.)
 // Playlists: itens already decoded by repository
@@ -39,6 +45,7 @@ echo json_encode([
     'playlists'       => $playlists,
     'roteiros'        => $roteiros,
     'categorias'      => $categorias,
+    'preferencias_musica' => $preferencias,
     'plano'           => $banda['plano'] ?? null,
     'trial_expira_em' => $banda['trial_expira_em'] ?? null,
 ], JSON_UNESCAPED_UNICODE);

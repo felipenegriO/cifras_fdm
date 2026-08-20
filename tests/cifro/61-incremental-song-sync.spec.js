@@ -11,6 +11,8 @@ function assertSafeE2eDatabase() {
 }
 
 function ensureChangeLog() {
+  const exists = Number(dbQuery("SELECT COUNT(*) total FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='sync_changes'").rows[0]?.total || 0);
+  if (exists > 0) return;
   dbQuery(`CREATE TABLE IF NOT EXISTS sync_changes (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     banda_id CHAR(36) NOT NULL,
@@ -25,14 +27,19 @@ function ensureChangeLog() {
 }
 
 async function login(page) {
-  await page.goto('/login.php');
-  await page.locator('#email').fill(TEST_EMAIL);
-  await page.locator('#senha').fill(TEST_PASSWORD);
-  await page.getByRole('button', { name: /entrar/i }).click();
-  if (page.url().includes('select-banda')) {
-    await page.locator('.sb-card').first().click();
-    await page.waitForURL(/index\.php/);
+  await page.addInitScript(() => localStorage.setItem('cifroBetaWelcomeSeen', '1'));
+  await page.goto('/index.php');
+  const authenticated = await page.evaluate(() => Boolean(window.CIFRO_USER_ID)).catch(() => false);
+  if (!authenticated) {
+    await page.goto('/login.php');
+    await page.locator('#email').fill(TEST_EMAIL);
+    await page.locator('#senha').fill(TEST_PASSWORD);
+    await page.getByRole('button', { name: /entrar/i }).click();
+    await page.waitForURL(/index\.php|select-banda\.php/);
   }
+  await page.goto('/select-banda.php');
+  await page.locator('.sb-card[data-band-id="00000000-0000-4000-8000-000000000002"]').click();
+  await page.waitForURL(/index\.php/);
   await expect(page).toHaveURL(/index\.php/);
 }
 
@@ -113,6 +120,7 @@ test('criação, navegação sem mudança e edição sincronizam somente a músi
       const saved = await saveSong(page);
       songId = saved.id;
       expect(saved.musica.nome).toBe(original.nome);
+      await expect.poll(() => page.evaluate(id => cifroSync.getRecentSong(window.CIFRO_BAND_ID, id)?.nome || '', songId)).toBe(original.nome);
     });
 
     await test.step('volta à home e prepara somente a nova música', async () => {
@@ -185,11 +193,60 @@ test('criação, navegação sem mudança e edição sincronizam somente a músi
   }
 });
 
+test('cifra aberta recebe alteração remota sem exigir recarregamento', async ({ page }) => {
+  assertSafeE2eDatabase();
+  ensureChangeLog();
+  const suffix = Date.now();
+  const original = `__E2E_ATUALIZACAO_ABERTA_${suffix}__`;
+  const updated = `${original}_NOVA`;
+  let songId = null;
+  try {
+    await login(page);
+    await waitEditor(page);
+    await page.locator('#titulo').fill(original);
+    await setCifra(page, '<b>C</b><br>Conteúdo anterior');
+    songId = Number((await saveSong(page)).id);
+
+    await page.goto('/index.php');
+    await page.evaluate(() => cifroSync.sync(window.CIFRO_BAND_ID, { force: true }));
+    await page.locator('#search').fill(original);
+    await page.locator('#music-list a', { hasText: original }).click();
+    await expect(page.locator('#song-cifra')).toContainText('Conteúdo anterior');
+    const documentInstance = await page.evaluate(() => {
+      window.__cifroDocumentInstance = crypto.randomUUID();
+      return window.__cifroDocumentInstance;
+    });
+
+    const csrf = await (await page.request.get('/api/csrf.php')).json();
+    const version = await (await page.request.get('/api/sync/version.php')).json();
+    const response = await page.request.post('/src/backend/editor/api.php', {
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf.csrf_token },
+      data: JSON.stringify({
+        id: songId,
+        nome: updated,
+        cifra: '<b>D</b><br>Conteúdo atualizado remotamente',
+        artista: '',
+        classificacao: '',
+        bit: '',
+        baseRevision: version.content_revision,
+      }),
+    });
+    expect(response.status(), await response.text()).toBe(200);
+
+    await page.evaluate(() => cifroSync.sync(window.CIFRO_BAND_ID));
+    await expect(page.locator('#song-title')).toHaveText(updated);
+    await expect(page.locator('#song-cifra')).toContainText('Conteúdo atualizado remotamente');
+    expect(await page.evaluate(() => window.__cifroDocumentInstance)).toBe(documentInstance);
+  } finally {
+    if (songId) dbQuery('DELETE FROM musicas WHERE id=?', [songId]);
+  }
+});
+
 test('exclusão feita em outro navegador propaga somente o ID removido e permanece offline', async ({ browser }) => {
   assertSafeE2eDatabase();
   ensureChangeLog();
-  const mutatorContext = await browser.newContext();
-  const observerContext = await browser.newContext({ serviceWorkers: 'allow' });
+  const mutatorContext = await browser.newContext({ storageState: 'tests/.auth/user.json' });
+  const observerContext = await browser.newContext({ storageState: 'tests/.auth/user.json', serviceWorkers: 'allow' });
   const mutator = await mutatorContext.newPage();
   const observer = await observerContext.newPage();
   const nome = `__E2E_INCREMENTAL_DELETE_${Date.now()}__`;
@@ -241,8 +298,8 @@ test('exclusão feita em outro navegador propaga somente o ID removido e permane
 
 test('dois navegadores não sobrescrevem edição concorrente e o perdedor recupera a versão atual', async ({ browser }) => {
   assertSafeE2eDatabase();
-  const firstContext = await browser.newContext();
-  const secondContext = await browser.newContext();
+  const firstContext = await browser.newContext({ storageState: 'tests/.auth/user.json' });
+  const secondContext = await browser.newContext({ storageState: 'tests/.auth/user.json' });
   const first = await firstContext.newPage();
   const second = await secondContext.newPage();
   const nome = `__E2E_CONFLICT_${Date.now()}__`;

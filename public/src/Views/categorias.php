@@ -23,13 +23,24 @@
     .category-name { flex: 1; min-width: 0; font-weight: var(--fw-medium); overflow-wrap: break-word; word-break: normal; }
     .category-actions { display: flex; gap: var(--space-2); }
     .category-empty { padding: var(--space-6); text-align: center; color: var(--text-2); }
+    .category-count { flex: 0 0 auto; font-size: var(--text-sm); color: var(--text-2); white-space: nowrap; }
+    .category-row .btn[disabled] { opacity: .5; cursor: not-allowed; }
     @media (max-width: 480px) { .category-form { flex-wrap: wrap; } .category-form input { flex-basis: 100%; } }
+    .category-onboarding { border: 1px solid var(--border-1); border-radius: var(--radius-md); background: var(--bg-1); padding: var(--space-5); margin-bottom: var(--space-4); }
+    .category-onboarding h2 { margin: 0 0 var(--space-2); font-size: var(--text-lg); }
+    .category-onboarding p { margin: 0 0 var(--space-4); color: var(--text-2); font-size: var(--text-sm); line-height: 1.5; }
+    .category-kit { border: 1px solid var(--border-1); border-radius: var(--radius-sm); padding: var(--space-3); margin-bottom: var(--space-3); }
+    .category-kit__title { font-weight: var(--fw-medium); font-size: var(--text-sm); margin-bottom: var(--space-2); }
+    .category-kit__chips { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-bottom: var(--space-3); }
+    .category-kit__chip { font-size: var(--text-xs); padding: 2px var(--space-2); border-radius: 999px; border: 1px solid var(--border-1); color: var(--text-2); }
+    .category-onboarding__foot { margin: var(--space-4) 0 0; font-size: var(--text-xs); }
   </style>
 </head>
 <body>
   <?php render_partial('topnav'); ?>
   <main class="categories-page">
     <h1>Categorias</h1>
+    <div id="categoryOnboarding" hidden></div>
     <form class="category-form" id="categoryForm">
       <input type="hidden" id="categoryId">
       <label class="sr-only" for="categoryName">Nome da categoria</label>

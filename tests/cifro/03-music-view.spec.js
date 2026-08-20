@@ -12,12 +12,14 @@ async function getCsrf(page) {
   return body.csrf_token || '';
 }
 
-async function validSongId(page) {
-  const response = await page.goto('/api/sync/data.php');
-  expect(response?.ok()).toBeTruthy();
-  const data = JSON.parse(await page.locator('body').textContent());
+async function validSongId(page, createFresh = true) {
+  const response = await page.request.get('/api/sync/data.php');
+  expect(response.ok()).toBeTruthy();
+  const data = await response.json();
   const song = data.musicas?.find(item => item?.id);
-  if (song?.id) return song.id;
+  const fixture = data.musicas?.find(item => item?.nome === '__MUSIC_VIEW_FIXTURE__');
+  if (createFresh && fixture?.id) return fixture.id;
+  if (!createFresh && song?.id) return song.id;
 
   const csrf = await getCsrf(page);
   const created = await page.request.post('/src/backend/editor/api.php', {
@@ -78,7 +80,7 @@ test.describe('Visualização de Cifra', () => {
 
 test.describe('Controles de Cifra', () => {
   test.beforeEach(async ({ page }) => {
-    const id = await validSongId(page);
+    const id = await validSongId(page, true);
     // Habilita a quick bar antes de navegar (simula usuário com barra de controles ativa)
     await page.addInitScript(() => localStorage.setItem('musicShowQuickBar', '1'));
     await page.goto(`/music.php?id=${encodeURIComponent(id)}`, { waitUntil: 'domcontentloaded' });

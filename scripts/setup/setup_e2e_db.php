@@ -18,15 +18,24 @@ $schemaPath = __DIR__ . '/../../create_tables.sql';
 if (!is_file($schemaPath)) {
     throw new RuntimeException("Schema não encontrado em {$schemaPath}. O banco E2E ficaria vazio.");
 }
-$schema = file_get_contents($schemaPath);
-$statements = preg_split('/;\s*(?:\r?\n|$)/', preg_replace('/^\s*--.*$/m', '', $schema));
-foreach ($statements as $statement) {
-    if (trim($statement) === '') continue;
-    try { $pdo->exec($statement); }
-    catch (PDOException $error) {
-        if (!in_array((int)($error->errorInfo[1] ?? 0), [1060, 1061], true)) throw $error;
-    }
+require_once __DIR__ . '/../../public/src/Services/MigrationRunner.php';
+
+// splitStatements() em vez de preg_split('/;\s*(?:\r?\n|$)/'): o regex quebrava
+// em qualquer ponto e vírgula seguido de quebra de linha, inclusive dentro de
+// uma string SQL. Não mordia hoje, mas esperava o primeiro valor default com
+// ponto e vírgula.
+$schema = (string) file_get_contents($schemaPath);
+foreach (MigrationRunner::splitStatements($schema) as $statement) {
+    if (stripos($statement, 'SET ') === 0) continue;
+    // Sem tolerância a erro: o banco acabou de ser criado do zero, então
+    // qualquer falha aqui é schema quebrado, não estado preexistente.
+    $pdo->exec($statement);
 }
+
+// Mesma sequência da produção: baseline e depois migrations. Sem isto, a base
+// de teste seria a única do projeto que nunca exercita uma migration — e uma
+// migration quebrada só apareceria no deploy.
+(new MigrationRunner($pdo, __DIR__ . '/../../migrations'))->applyAll();
 
 $email = (string) env('TEST_EMAIL', 'admin@e2e.local');
 $password = (string) env('TEST_PASSWORD', 'CifroE2E#2026!');

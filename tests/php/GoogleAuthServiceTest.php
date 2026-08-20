@@ -171,4 +171,45 @@ final class GoogleAuthServiceTest extends TestCase
         $service = new GoogleAuthService($this->createMock(UserRepository::class), $this->createMock(BandaRepository::class));
         self::assertSame([], $this->callPostFormReal($service, 'http://url-invalida.invalid.test.local/x'));
     }
+
+    public function testUsuarioNovoVindoDeConviteNaoGanhaBandaPropria(): void
+    {
+        $usuarios = $this->createMock(UserRepository::class);
+        $bandas   = $this->createMock(BandaRepository::class);
+        $convites = $this->createMock(BandaConviteRepository::class);
+
+        $usuarios->method('findByGoogleSub')->willReturn(null);
+        $usuarios->method('findByEmail')->willReturn(null);
+
+        // A prova: nenhuma banda é criada quando existe convite.
+        $bandas->expects(self::never())->method('save');
+        $usuarios->expects(self::once())->method('save')->with(self::callback(
+            fn(array $u) => $u['bandas'] === [['id' => 'banda-convidada', 'perfil' => 'basico']]
+        ));
+        $convites->expects(self::once())->method('registrarUso')->with('token-convite');
+
+        $servico = new GoogleAuthService($usuarios, $bandas, $convites);
+        $user = $servico->resolveOrCreateUser([
+            'sub' => 'sub-1', 'email' => 'novo@exemplo.com', 'email_verified' => true, 'name' => 'Novo',
+        ], ['token' => 'token-convite', 'banda_id' => 'banda-convidada']);
+
+        self::assertSame([['id' => 'banda-convidada', 'perfil' => 'basico']], $user['bandas']);
+    }
+
+    public function testSemConviteOFluxoDoGoogleContinuaCriandoABandaDoUsuario(): void
+    {
+        $usuarios = $this->createMock(UserRepository::class);
+        $bandas   = $this->createMock(BandaRepository::class);
+
+        $usuarios->method('findByGoogleSub')->willReturn(null);
+        $usuarios->method('findByEmail')->willReturn(null);
+        $bandas->expects(self::once())->method('save');
+
+        $servico = new GoogleAuthService($usuarios, $bandas);
+        $user = $servico->resolveOrCreateUser([
+            'sub' => 'sub-2', 'email' => 'sozinho@exemplo.com', 'email_verified' => true, 'name' => 'Sozinho',
+        ]);
+
+        self::assertSame('administrador', $user['bandas'][0]['perfil']);
+    }
 }

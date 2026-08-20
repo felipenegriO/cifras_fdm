@@ -23,7 +23,11 @@ if (($GLOBALS['__cifro_app_base'] = rtrim((string)getenv('APP_BASE'), '/')) !== 
         $buffer = preg_replace('/((?:href|src|action)=")\/(?!\/)(?!' . $noBase . ')/', '$1' . $base . '/', $buffer);
         // JS inline: location.href = '/' / window.location.href = "/" / fetch('/
         $buffer = preg_replace("/((?:window\.)?location(?:\.href)?\s*=\s*['\"])\/(?!\/)(?!{$noBase})/", '$1' . $base . '/', $buffer);
-        $buffer = preg_replace("/(fetch\(['\"])\/(?!\/)(?!{$noBase})/", '$1' . $base . '/', $buffer);
+        // \w*fetch e case-insensitive de propósito: o app chama tanto fetch('/…')
+        // quanto wrappers como cifroFetch('/…'). A regex antiga só pegava o
+        // minúsculo exato, então cifroFetch escapava e a URL ia sem o prefixo —
+        // 404 em deploy de subpasta, com o app parecendo funcionar no resto.
+        $buffer = preg_replace("/(\w*fetch\(['\"])\/(?!\/)(?!{$noBase})/i", '$1' . $base . '/', $buffer);
         return $buffer;
     });
 }
@@ -31,7 +35,27 @@ if (($GLOBALS['__cifro_app_base'] = rtrim((string)getenv('APP_BASE'), '/')) !== 
 // ── Inject JS error reporter into every HTML response ───────────────────────
 ob_start(function (string $buffer): string {
     if (stripos($buffer, '</body>') === false) return $buffer;
-    $tag = '<script src="' . (rtrim((string)getenv('APP_BASE'), '/')) . '/src/js/cifro-error-reporter.js" defer></script>';
+    $base = rtrim((string)getenv('APP_BASE'), '/');
+    $tag = '';
+    if (($_SESSION['autenticado'] ?? false) === true && stripos($buffer, 'id="cifroPwaSplash"') === false) {
+        $css = htmlspecialchars(asset_url('/src/css/pwa-splash.css'), ENT_QUOTES, 'UTF-8');
+        $js = htmlspecialchars(asset_url('/src/js/pwa-splash.js'), ENT_QUOTES, 'UTF-8');
+        $logo = htmlspecialchars(asset_url('/src/images/pwa-splash-logo.svg'), ENT_QUOTES, 'UTF-8');
+        $head = '<link rel="stylesheet" href="' . $css . '">'
+            . '<script>(function(){try{var standalone=matchMedia("(display-mode: standalone)").matches||navigator.standalone===true;var reduced=matchMedia("(prefers-reduced-motion: reduce)").matches;var shown=sessionStorage.getItem("cifroPwaSplashShown")==="1";if(standalone&&!reduced&&!shown){document.documentElement.classList.add("cifro-pwa-splash-pending");setTimeout(function(){document.documentElement.classList.remove("cifro-pwa-splash-pending")},4200)}}catch(e){}})()</script>';
+        $splash = '<div id="cifroPwaSplash" class="cifro-pwa-splash" data-logo="' . $logo . '" aria-hidden="true" hidden>'
+            . '<div class="cifro-pwa-splash__ambient cifro-pwa-splash__ambient--a"></div>'
+            . '<div class="cifro-pwa-splash__ambient cifro-pwa-splash__ambient--b"></div>'
+            . '<div class="cifro-pwa-splash__grain"></div>'
+            . '<div class="cifro-pwa-splash__brand"><div class="cifro-pwa-splash__halo"></div>'
+            . '<div class="cifro-pwa-splash__logo"><canvas class="cifro-pwa-splash__logo-canvas" width="640" height="640"></canvas>'
+            . '<canvas class="cifro-pwa-splash__particles" width="640" height="640"></canvas></div></div></div>';
+        $buffer = str_ireplace('</head>', $head . '</head>', $buffer);
+        $buffer = preg_replace('/<body([^>]*)>/i', '<body$1>' . $splash, $buffer, 1) ?? $buffer;
+        $tag .= '<script src="' . $js . '"></script>';
+    }
+    $tag .= '<script src="' . $base . '/src/js/cifro-sw-register.js" defer></script>'
+        . '<script src="' . $base . '/src/js/cifro-error-reporter.js" defer></script>';
     return str_ireplace('</body>', $tag . '</body>', $buffer);
 });
 
@@ -146,6 +170,14 @@ validate_production_env();
 
 // ===== Security headers =====
 if (!headers_sent()) {
+    // HSTS aqui além do .htaccess: atrás do proxy da hospedagem o Apache vê
+    // %{HTTPS} como "off" e a diretiva condicionada a env=HTTPS não dispara.
+    // O PHP enxerga o X-Forwarded-Proto e acerta nos dois cenários.
+    $__https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+        || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
+    if ($__https) {
+        header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
+    }
     header('X-Content-Type-Options: nosniff');
     header('X-Frame-Options: SAMEORIGIN');
     header('Referrer-Policy: strict-origin-when-cross-origin');
@@ -155,6 +187,11 @@ if (!headers_sent()) {
 
 // ===== Secure session cookie params =====
 if (session_status() === PHP_SESSION_NONE) {
+    // O timeout de inatividade da aplicação é de 8h (SESSION_IDLE_SECONDS
+    // abaixo) — sem isto, o garbage collector do PHP usa o padrão de 1440s
+    // (24min) e pode apagar o arquivo de sessão em disco muito antes disso,
+    // derrubando a sessão sem passar pela checagem de inatividade.
+    ini_set('session.gc_maxlifetime', '28800');
     $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
         || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
     session_set_cookie_params([
@@ -163,7 +200,7 @@ if (session_status() === PHP_SESSION_NONE) {
         'domain'   => '',
         'secure'   => $isHttps,
         'httponly' => true,
-        'samesite' => 'Strict',
+        'samesite' => 'Lax',
     ]);
 }
 
@@ -185,6 +222,75 @@ if (isset($_SESSION['_last_activity']) && (time() - $_SESSION['_last_activity'])
 if (session_status() === PHP_SESSION_ACTIVE) {
     $_SESSION['_last_activity'] = time();
 }
+
+// ===== Login persistente via token "lembrar-me" =====
+// Roda antes de qualquer require_auth: se a sessão morreu (navegador fechado,
+// inatividade, coleta do GC) mas o token continua válido, a sessão é recriada
+// de forma transparente. A página então já sai autenticada do servidor, o que
+// mantém o cache do service worker sendo alimentado normalmente.
+function cifro_tentar_login_por_token(): void {
+    if (!empty($_SESSION['autenticado'])) return;
+
+    $valor = AuthTokenCookie::ler();
+    if ($valor === '') return;
+
+    try {
+        $repo    = new AuthTokenRepository();
+        $service = new AuthTokenService($repo);
+        $resultado = $service->validar($valor);
+
+        if ($resultado['status'] === 'reuso_detectado') {
+            // Cookie clonado: derruba a família inteira e exige senha.
+            $repo->revogarTodosDoUsuario($resultado['usuarioId']);
+            AuthTokenCookie::apagar();
+            OperationalLogger::log('warning', 'auth.remember_token_reuse', ['result' => 'revoked']);
+            return;
+        }
+
+        if ($resultado['status'] !== 'valido' && $resultado['status'] !== 'valido_concorrente') {
+            AuthTokenCookie::apagar();
+            return;
+        }
+
+        // Montado como em login.php: o construtor exige AuthService, mesmo que
+        // a recriação por token não passe por autenticação de senha.
+        $userRepository = new UserRepository();
+        $controller = new AuthController(new AuthService($userRepository), $userRepository);
+
+        // A conta é checada ANTES de rotacionar: se ela não pode mais entrar
+        // (desativada, validade vencida), o token deixa de existir em vez de
+        // continuar renovando o acesso de quem já foi desligado.
+        if (!$controller->finalizeLoginPorToken($resultado['usuarioId'])) {
+            $repo->revogarTodosDoUsuario($resultado['usuarioId']);
+            AuthTokenCookie::apagar();
+            OperationalLogger::log('warning', 'auth.remember_token_conta_recusada', ['result' => 'revoked']);
+            return;
+        }
+
+        // 'valido_concorrente' é uma requisição irmã chegando com o validador
+        // que acabou de ser substituído: autentica, mas rotacionar de novo aqui
+        // invalidaria o cookie que a requisição vencedora já mandou ao navegador.
+        if ($resultado['status'] === 'valido') {
+            $partes = $service->parseCookie($valor);
+            // Rotação condicional: se outra requisição concorrente já trocou o
+            // validador, rowCount()===0 e não mexemos no cookie — sem isso as
+            // duas rotacionariam e o navegador ficaria com um valor condenado.
+            $novoValidador = $repo->rotacionar($partes['seletor'], $partes['validador']);
+            if ($novoValidador !== null) {
+                AuthTokenCookie::gravar($partes['seletor'], $novoValidador);
+            }
+        }
+
+        OperationalLogger::log('info', 'auth.remember_token_used', ['result' => 'success']);
+    } catch (Throwable $e) {
+        // Banco fora do ar: não recria a sessão e NÃO apaga o cookie — o
+        // usuário cai no fluxo normal de não autenticado e o token volta a
+        // funcionar quando o banco voltar.
+        return;
+    }
+}
+
+cifro_tentar_login_por_token();
 
 if (!class_exists('CifroTestTerminate', false)) {
     /** Thrown by cifro_terminate() instead of exit() when running under PHPUnit. */
@@ -226,6 +332,142 @@ function google_oauth_configured(): bool {
         && trim((string) env('GOOGLE_REDIRECT_URI', '')) !== '';
 }
 
+// ===== Revalidação de acesso a cada requisição =====
+// A sessão é uma foto tirada no login: sozinha, ela não percebe que a conta foi
+// desativada, que o músico saiu da banda ou que a banda foi desligada. Sem esta
+// checagem, tirar o acesso de alguém só teria efeito quando a sessão morresse.
+//
+// Duas consequências bem diferentes, de propósito:
+//   conta inválida  -> desconecta de vez (é a pessoa que perdeu o acesso)
+//   banda inválida  -> continua logado, perde só aquela banda
+function cifro_revalidar_acesso(bool $json = false): void {
+    static $jaRodou = false;
+    if ($jaRodou) return;                       // uma query por requisição, não por guarda
+    $jaRodou = true;
+
+    $usuarioId = (string) ($_SESSION['usuario']['id'] ?? '');
+    if ($usuarioId === '') return;
+
+    $bandaId = current_band_id();
+    try {
+        $estado = (new UserRepository())->estadoDeAcesso($usuarioId, $bandaId !== '' ? $bandaId : null);
+    } catch (Throwable $e) {
+        return; // banco fora do ar não pode deslogar todo mundo
+    }
+
+    // --- conta ---
+    $usuario = $estado['usuario'];
+    if ($usuario === null || (new AuthService(new UserRepository()))->motivoParaRecusarConta($usuario) !== null) {
+        cifro_encerrar_acesso_da_conta($json);
+        return;
+    }
+    // Mantém a validade da sessão alinhada com o banco, senão
+    // cifro_session_user_expired() segue julgando pela foto antiga.
+    $_SESSION['usuario']['validade'] = $usuario['validade'] ?? '';
+
+    // A lista de bandas também é foto do login. Sem atualizar, quem cria uma
+    // segunda banda não ganha o seletor de bandas na topnav (que decide por
+    // count($_SESSION['usuario']['bandas']) > 1) até deslogar e entrar de novo.
+    $_SESSION['usuario']['bandas'] = $estado['bandas'] ?? [];
+
+    // --- banda ---
+    if (is_master()) return;                     // master administra bandas inativas
+    if ($bandaId === '') {
+        // Sem banda selecionada — seja porque o acesso caiu numa requisição
+        // anterior, seja porque ele nunca teve uma. Páginas de palco não têm o
+        // que mostrar; manda escolher (ou criar) uma banda.
+        cifro_exigir_banda_selecionada($json);
+        return;
+    }
+    $motivo = BandaAcessoPolicy::motivoParaBloquear($estado['banda'], $estado['vinculo']);
+
+    // Plano bloqueado NÃO é perda de acesso — é cobrança. A banda continua
+    // sendo dele e ele precisa chegar à tela onde paga. Quem barra o palco
+    // nesse caso é cifro_check_plano(), que já libera minha-banda/plano.
+    // Se desselecionássemos a banda aqui, cifro_check_plano() não veria banda
+    // nenhuma, a aba de plano ficaria sem o que cobrar e o administrador
+    // ficaria trancado do lado de fora do próprio pagamento.
+    if ($motivo === BandaAcessoPolicy::PLANO_BLOQUEADO) {
+        $motivo = null;
+    }
+
+    if ($motivo === null) {
+        // A sessão é uma foto do login; sem isto ela continuaria mandando
+        // depois que o banco mudou. O caso que dói é o plano: o webhook do
+        // Stripe libera a banda no banco e o músico seguia barrado pelo limite
+        // do plano antigo até deslogar — "paguei e não liberou".
+        $_SESSION['banda_atual']['perfil'] = (string) $estado['vinculo'];
+        $_SESSION['banda_atual']['plano']  = (string) ($estado['banda']['plano'] ?? 'gratuito');
+        $_SESSION['banda_atual']['nome']   = (string) ($estado['banda']['nome'] ?? '');
+        $_SESSION['banda_atual']['trial_expira_em'] = $estado['banda']['trial_expira_em'] ?? null;
+        return;
+    }
+    cifro_encerrar_acesso_a_banda($motivo, $json);
+}
+
+/** Conta caiu: sessão destruída, token revogado, login explica o motivo. */
+function cifro_encerrar_acesso_da_conta(bool $json): void {
+    $usuarioId = (string) ($_SESSION['usuario']['id'] ?? '');
+    try {
+        if ($usuarioId !== '') (new AuthTokenRepository())->revogarTodosDoUsuario($usuarioId);
+    } catch (Throwable $e) {}
+    AuthTokenCookie::apagar();
+
+    $_SESSION = [];
+    if (session_status() === PHP_SESSION_ACTIVE) session_destroy();
+    OperationalLogger::log('warning', 'auth.conta_desativada_em_sessao', ['result' => 'disconnected']);
+
+    if ($json) {
+        http_response_code(401);
+        if (!headers_sent()) header('Content-Type: application/json; charset=utf-8');
+        echo json_encode(['ok' => false, 'sucesso' => false, 'error' => 'conta_inativa', 'mensagem' => 'Sua conta foi desativada.']);
+        cifro_terminate();
+    }
+    if (!headers_sent()) header('Location: ' . base_url('/login.php?inativo=1'));
+    cifro_terminate();
+}
+
+/**
+ * Sem banda selecionada: as páginas de palco mandam escolher uma.
+ * Mantido separado de cifro_encerrar_acesso_a_banda porque aqui não houve
+ * revogação agora — pode ser um músico que ainda não tem banda nenhuma.
+ */
+function cifro_exigir_banda_selecionada(bool $json): void {
+    if ($json) return; // APIs já respondem 404 via require_current_band_json
+    $pagina = basename((string) ($_SERVER['PHP_SELF'] ?? ''));
+    if (in_array($pagina, ['select-banda.php', 'logout.php', 'login.php', 'landing.php', 'config.php', 'minha-banda.php', 'plano.php', 'plano-expirado.php', 'beta-indisponivel.php'], true)) {
+        return;
+    }
+    if (!headers_sent()) header('Location: ' . base_url('/select-banda.php'));
+    cifro_terminate();
+}
+
+/** Banda caiu: segue logado, mas sem banda selecionada. */
+function cifro_encerrar_acesso_a_banda(string $motivo, bool $json): void {
+    unset($_SESSION['banda_atual']);
+    OperationalLogger::log('warning', 'auth.acesso_banda_revogado', ['result' => 'blocked', 'motivo' => $motivo]);
+
+    if ($json) {
+        http_response_code(403);
+        if (!headers_sent()) header('Content-Type: application/json; charset=utf-8');
+        echo json_encode([
+            'ok' => false, 'sucesso' => false, 'error' => 'banda_sem_acesso',
+            'motivo' => $motivo,
+            'mensagem' => 'Você não tem mais acesso a esta banda: ' . BandaAcessoPolicy::rotulo($motivo) . '.',
+        ]);
+        cifro_terminate();
+    }
+
+    // Páginas que precisam funcionar SEM banda não podem redirecionar para si
+    // mesmas — senão o músico entra num laço.
+    $pagina = basename((string) ($_SERVER['PHP_SELF'] ?? ''));
+    if (in_array($pagina, ['select-banda.php', 'logout.php', 'login.php', 'landing.php', 'config.php', 'minha-banda.php', 'plano.php', 'plano-expirado.php', 'beta-indisponivel.php'], true)) {
+        return;
+    }
+    if (!headers_sent()) header('Location: ' . base_url('/select-banda.php?semacesso=' . urlencode($motivo)));
+    cifro_terminate();
+}
+
 function require_auth_json() {
     if (!isset($_SESSION['autenticado']) || $_SESSION['autenticado'] !== true) {
         http_response_code(401);
@@ -241,6 +483,7 @@ function require_auth_json() {
         echo json_encode(['ok' => false, 'sucesso' => false, 'error' => 'Sessao expirada.', 'mensagem' => 'Sessao expirada.']);
         cifro_terminate();
     }
+    cifro_revalidar_acesso(true);
     require_closed_beta_json();
 }
 
@@ -301,6 +544,8 @@ function require_auth() {
         cifro_terminate();
     }
 
+    cifro_revalidar_acesso(false);
+
     $policy = ClosedBetaPolicy::fromEnvironment();
     $page = basename((string) ($_SERVER['PHP_SELF'] ?? ''));
     if (!in_array($page, ['select-banda.php', 'logout.php', 'beta-indisponivel.php'], true) && !$policy->allows(current_band_id())) {
@@ -317,7 +562,11 @@ function cifro_check_plano(): void {
 
     $plano = $banda['plano'] ?? 'gratuito';
     if ($plano === 'bloqueado') {
-        if (!in_array(basename($_SERVER['PHP_SELF'] ?? ''), ['plano-expirado.php', 'plano.php'], true)) {
+        // Além das telas de pagamento, precisam continuar de pé as duas saídas:
+        // trocar de banda (quem tem outra não pode ficar preso na que deve) e
+        // sair da conta.
+        $liberadas = ['plano-expirado.php', 'plano.php', 'minha-banda.php', 'select-banda.php', 'logout.php'];
+        if (!in_array(basename($_SERVER['PHP_SELF'] ?? ''), $liberadas, true)) {
             if (!headers_sent()) header('Location: ' . base_url('/plano-expirado.php'));
             cifro_terminate();
         }
@@ -402,6 +651,39 @@ function has_active_band_plan(): bool {
 
 function can_manage_bands(): bool {
     return is_master() || (current_band_role() === 'administrador' && has_active_band_plan());
+}
+
+function help_center_enabled(): bool {
+    return filter_var(env('HELP_CENTER_ENABLED', 'true'), FILTER_VALIDATE_BOOLEAN);
+}
+
+function help_center_disabled_for_user(?array $user = null): bool {
+    $user ??= $_SESSION['usuario'] ?? [];
+    $value = $user['config']['ajudaDesativada'] ?? 'false';
+    return $value === true || $value === 'true' || $value === 1 || $value === '1';
+}
+
+function help_center_visible_for_user(?array $user = null): bool {
+    return help_center_enabled() && !help_center_disabled_for_user($user);
+}
+
+/**
+ * Preferências de capotraste/transpose do usuário, para injetar no JS.
+ * Chave ausente vale null: é o que dispara o modal de primeiro acesso. Vai
+ * embutido na página em vez de por fetch porque a tela de música precisa do
+ * valor já no primeiro render, inclusive offline.
+ */
+function cifro_transposicao_config(?array $user = null): array {
+    $user ??= $_SESSION['usuario'] ?? [];
+    $config = $user['config'] ?? [];
+    $instrumento = $config['instrumento'] ?? null;
+    $preferencia = $config['transposicaoPreferencia'] ?? null;
+    return [
+        'instrumento' => is_string($instrumento) && TransposicaoInstrumento::instrumentoValido($instrumento)
+            ? $instrumento : null,
+        'transposicaoPreferencia' => is_string($preferencia) && in_array($preferencia, TransposicaoInstrumento::PREFERENCIAS, true)
+            ? $preferencia : null,
+    ];
 }
 
 function can_host_live(): bool {

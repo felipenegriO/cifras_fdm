@@ -180,7 +180,7 @@ final class AuthControllerTest extends TestCase
         self::assertSame('b1', $_SESSION['banda_atual']['id']);
         self::assertSame('Banda 1', $_SESSION['banda_atual']['nome']);
         self::assertSame('mensal', $_SESSION['banda_atual']['plano']);
-        self::assertSame(['index.php'], $redirects);
+        self::assertMatchesRegularExpression('/^index\.php\?_cifro_auth=[a-f0-9]{16}$/', $redirects[0]);
     }
 
     public function testHandleLoginSucessoComConfigBandaAtualUsaEssaBanda(): void
@@ -205,7 +205,7 @@ final class AuthControllerTest extends TestCase
 
         $controller->handleLogin();
         self::assertSame('b2', $_SESSION['banda_atual']['id']);
-        self::assertSame(['/select-banda.php'], $redirects);
+        self::assertMatchesRegularExpression('#^/select-banda\.php\?_cifro_auth=[a-f0-9]{16}$#', $redirects[0]);
     }
 
     public function testHandleLoginSucessoSemBandasNaoDefineBandaAtual(): void
@@ -224,7 +224,7 @@ final class AuthControllerTest extends TestCase
 
         $controller->handleLogin();
         self::assertArrayNotHasKey('banda_atual', $_SESSION);
-        self::assertSame(['index.php'], $redirects);
+        self::assertMatchesRegularExpression('/^index\.php\?_cifro_auth=[a-f0-9]{16}$/', $redirects[0]);
     }
 
     public function testHandleLoginRespeitaUrlcallback(): void

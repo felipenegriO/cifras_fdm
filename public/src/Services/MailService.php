@@ -45,6 +45,7 @@ class MailService {
         $appUrl = rtrim(env('APP_URL', 'https://cifro.com.br'), '/') . app_base();
         $link   = $appUrl . '/definir-senha.php?token=' . urlencode($token);
 
+        $mailerInterno = $mail === null;   // injetado por teste não abre conexão
         $mail ??= self::mailer();
         $mail->addAddress($usuario['email'], $usuario['nome']);
         $mail->isHTML(true);
@@ -57,7 +58,7 @@ class MailService {
             'Definir minha senha'
         );
         $mail->AltBody = "Bem-vindo ao Cifrô!\n\nAcesse o link abaixo para definir sua senha:\n{$link}\n\nVálido por 48 horas.";
-        self::sendLogged($mail, 'welcome');
+        self::sendLogged($mail, 'welcome', $mailerInterno);
     }
 
     /** Convite quando admin cria usuário pelo painel. */
@@ -65,6 +66,7 @@ class MailService {
         $appUrl = rtrim(env('APP_URL', 'https://cifro.com.br'), '/') . app_base();
         $link   = $appUrl . '/definir-senha.php?token=' . urlencode($token);
 
+        $mailerInterno = $mail === null;   // injetado por teste não abre conexão
         $mail ??= self::mailer();
         $mail->addAddress($usuario['email'], $usuario['nome']);
         $mail->isHTML(true);
@@ -77,7 +79,7 @@ class MailService {
             'Aceitar convite'
         );
         $mail->AltBody = "Você foi convidado para o Cifrô!\n\nAcesse:\n{$link}\n\nVálido por 48 horas.";
-        self::sendLogged($mail, 'invite');
+        self::sendLogged($mail, 'invite', $mailerInterno);
     }
 
     /** Reset de senha. */
@@ -85,6 +87,7 @@ class MailService {
         $appUrl = rtrim(env('APP_URL', 'https://cifro.com.br'), '/') . app_base();
         $link   = $appUrl . '/reset-senha.php?token=' . urlencode($token);
 
+        $mailerInterno = $mail === null;   // injetado por teste não abre conexão
         $mail ??= self::mailer();
         $mail->addAddress($usuario['email'], $usuario['nome']);
         $mail->isHTML(true);
@@ -97,7 +100,7 @@ class MailService {
             'Redefinir minha senha'
         );
         $mail->AltBody = "Redefinição de senha Cifrô\n\nAcesse:\n{$link}\n\nVálido por 1 hora.";
-        self::sendLogged($mail, 'password_reset');
+        self::sendLogged($mail, 'password_reset', $mailerInterno);
     }
 
     /** Confirmação de pagamento / assinatura ativada. */
@@ -110,6 +113,7 @@ class MailService {
             default     => ucfirst($plano),
         };
 
+        $mailerInterno = $mail === null;   // injetado por teste não abre conexão
         $mail ??= self::mailer();
         $mail->addAddress($usuario['email'], $usuario['nome']);
         $mail->isHTML(true);
@@ -124,7 +128,7 @@ class MailService {
             'Ver meu plano'
         );
         $mail->AltBody = "Pagamento confirmado!\n\nPlano {$planoLabel} para {$banda['nome']} ativo até {$validade}.\n\nAcesse: {$appUrl}/plano.php";
-        self::sendLogged($mail, 'payment_confirmation');
+        self::sendLogged($mail, 'payment_confirmation', $mailerInterno);
     }
 
     /** Lembrete de renovação (disparado por invoice.upcoming, ~7 dias antes). */
@@ -137,6 +141,7 @@ class MailService {
             default     => ucfirst($plano),
         };
 
+        $mailerInterno = $mail === null;   // injetado por teste não abre conexão
         $mail ??= self::mailer();
         $mail->addAddress($usuario['email'], $usuario['nome']);
         $mail->isHTML(true);
@@ -150,13 +155,14 @@ class MailService {
             'Gerenciar plano'
         );
         $mail->AltBody = "Renovação em breve!\n\nO plano {$planoLabel} da banda {$banda['nome']} renova em {$dataRenovacao}.\n\nGerenciar: {$appUrl}/plano.php";
-        self::sendLogged($mail, 'payment_reminder');
+        self::sendLogged($mail, 'payment_reminder', $mailerInterno);
     }
 
     /** Aviso de plano expirado. */
     public static function sendPlanExpired(array $usuario, array $banda, ?PHPMailer $mail = null): void {
         $appUrl = rtrim(env('APP_URL', 'https://cifro.online'), '/') . app_base();
 
+        $mailerInterno = $mail === null;   // injetado por teste não abre conexão
         $mail ??= self::mailer();
         $mail->addAddress($usuario['email'], $usuario['nome']);
         $mail->isHTML(true);
@@ -170,10 +176,34 @@ class MailService {
             'Renovar agora'
         );
         $mail->AltBody = "Seu plano expirou!\n\nRenove em: {$appUrl}/plano.php";
-        self::sendLogged($mail, 'plan_expired');
+        self::sendLogged($mail, 'plan_expired', $mailerInterno);
     }
 
-    private static function sendLogged(PHPMailer $mail, string $operation): void {
+    /**
+     * Em ambiente de teste o envio é bloqueado por padrão.
+     *
+     * Todo disparo passa por aqui, então esta é a única porta que precisa ser
+     * guardada. Sem isso, rodar a bateria de testes abre conexões SMTP reais
+     * contra a conta de produção — repetido ao longo de um dia de trabalho,
+     * isso é indistinguível de abuso e leva o provedor a suspender o e-mail.
+     *
+     * Para exercitar o SMTP de verdade (os testes @group integration existem
+     * justamente para isso), habilite explicitamente:
+     *   MAIL_ALLOW_REAL_SEND=true npm run test:integration
+     */
+    private static function envioBloqueadoEmTeste(bool $mailerInterno): bool {
+        if (!$mailerInterno) return false;   // mock de teste: não há rede envolvida
+        if (strtolower((string) env('APP_ENV', 'production')) !== 'test') return false;
+        return !filter_var(env('MAIL_ALLOW_REAL_SEND', 'false'), FILTER_VALIDATE_BOOLEAN);
+    }
+
+    private static function sendLogged(PHPMailer $mail, string $operation, bool $mailerInterno = true): void {
+        if (self::envioBloqueadoEmTeste($mailerInterno)) {
+            // Registra como se tivesse ido, para o fluxo do app seguir igual;
+            // o provedor 'bloqueado_em_teste' deixa claro no log que não foi.
+            OperationalLogger::log('info', 'email.sent', ['provider' => 'bloqueado_em_teste', 'operation' => $operation, 'result' => 'success']);
+            return;
+        }
         try {
             $mail->send();
             OperationalLogger::log('info', 'email.sent', ['provider' => 'smtp', 'operation' => $operation, 'result' => 'success']);

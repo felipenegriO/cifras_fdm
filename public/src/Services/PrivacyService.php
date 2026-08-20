@@ -26,11 +26,21 @@ class PrivacyService
         );
         $legalStmt->execute([$userId]);
 
+        // Personalização de capotraste por música: é dado do usuário, então
+        // sai na exportação junto com o resto.
+        $prefsStmt = $this->pdo->prepare(
+            'SELECT um.musica_id, m.nome AS musica, um.transposicao_instrumento
+             FROM usuario_musica um INNER JOIN musicas m ON m.id = um.musica_id
+             WHERE um.usuario_id=? ORDER BY um.musica_id'
+        );
+        $prefsStmt->execute([$userId]);
+
         return [
             'exported_at' => gmdate('c'),
             'account' => $user,
             'band_memberships' => $bandsStmt->fetchAll(),
             'legal_acceptances' => $legalStmt->fetchAll(),
+            'personalizacoes_de_musica' => $prefsStmt->fetchAll(),
         ];
     }
 

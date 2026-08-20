@@ -14,16 +14,22 @@ if (!$bandaId || $since === false || $since === null || $since < 0) {
 
 $revisionRepo = new SyncRevisionRepository();
 $current = $revisionRepo->get($bandaId);
+// Vai em todas as respostas: a personalizacao do musico nao participa da
+// revisao da banda, entao o caminho incremental precisa recebe-la sempre.
+$preferencias = (new UsuarioMusicaRepository())->listarPorUsuario(
+    (string) ($_SESSION['usuario']['id'] ?? ''),
+    $bandaId
+);
 if ($since >= $current) {
     session_write_close();
-    echo json_encode(['banda_id' => $bandaId, 'from_revision' => $since, 'content_revision' => $current, 'full_sync_required' => false, 'changes' => []]);
+    echo json_encode(['banda_id' => $bandaId, 'from_revision' => $since, 'content_revision' => $current, 'full_sync_required' => false, 'changes' => [], 'preferencias_musica' => $preferencias]);
     exit;
 }
 
 $rows = $revisionRepo->changesSince($bandaId, $since);
 if (!$rows || (int)$rows[0]['revision'] !== $since + 1 || (int)$rows[count($rows) - 1]['revision'] !== $current) {
     session_write_close();
-    echo json_encode(['banda_id' => $bandaId, 'from_revision' => $since, 'content_revision' => $current, 'full_sync_required' => true]);
+    echo json_encode(['banda_id' => $bandaId, 'from_revision' => $since, 'content_revision' => $current, 'full_sync_required' => true, 'preferencias_musica' => $preferencias]);
     exit;
 }
 
@@ -61,4 +67,4 @@ if ($replacePlaylists) $changes['playlists'] = ['replace' => (new PlaylistReposi
 if ($replaceCategorias) $changes['categorias'] = ['replace' => (new CategoriaRepository())->getAllByBanda($bandaId)];
 
 session_write_close();
-echo json_encode(['banda_id' => $bandaId, 'from_revision' => $since, 'content_revision' => $current, 'full_sync_required' => false, 'changes' => $changes], JSON_UNESCAPED_UNICODE);
+echo json_encode(['banda_id' => $bandaId, 'from_revision' => $since, 'content_revision' => $current, 'full_sync_required' => false, 'changes' => $changes, 'preferencias_musica' => $preferencias], JSON_UNESCAPED_UNICODE);

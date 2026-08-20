@@ -8,6 +8,7 @@ import fs from 'node:fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { randomBytes } from 'node:crypto';
+import { limparResiduoDeExecucoesAnteriores } from './limpar-residuo.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const AUTH_FILE        = path.join(__dirname, '../.auth/user.json');
@@ -25,9 +26,15 @@ const GESTOR_EMAIL = `gestor-${RUN_ID}@e2e.local`;
 const BASICO_EMAIL = `basico-${RUN_ID}@e2e.local`;
 const EXTERNO_EMAIL = `externo-${RUN_ID}@e2e.local`;
 const PAID_ADMIN_EMAIL = `paid-admin-${RUN_ID}@e2e.local`;
+const DEFAULT_BAND_ID = '00000000-0000-4000-8000-000000000002';
 
 // ─── Login principal (administrador/master) ───────────────────────────────────
 setup('autenticar e salvar estado', async ({ page, browser }) => {
+  // Antes de qualquer coisa: devolve o banco ao estado do seed. Sem isto, as
+  // bandas criadas e não removidas por execuções anteriores se acumulam, e o
+  // select-banda.php mais abaixo passa a procurar um card no meio de dezenas.
+  limparResiduoDeExecucoesAnteriores();
+
   await page.goto('/login.php');
   await expect(page.locator('#loginForm')).toBeVisible();
 
@@ -38,14 +45,7 @@ setup('autenticar e salvar estado', async ({ page, browser }) => {
   // Garante que está autenticado — topnav ou select-banda devem aparecer
   await expect(page.locator('nav.topnav, .select-banda-container, .index-container').first()).toBeVisible({ timeout: 10000 });
 
-  // Se caiu em select-banda, seleciona a primeira banda disponível
-  if (page.url().includes('select-banda')) {
-    const firstCard = page.locator('.sb-card').first();
-    if (await firstCard.isVisible()) {
-      await firstCard.click();
-      await page.waitForURL(/index\.php/i, { timeout: 8000 });
-    }
-  }
+  await selectDefaultBand(page);
 
   await writeStorageState(page.context(), AUTH_FILE);
   await fs.writeFile(RUN_FILE, JSON.stringify({ emails: [GESTOR_EMAIL, BASICO_EMAIL, EXTERNO_EMAIL, PAID_ADMIN_EMAIL] }), 'utf8');
@@ -123,14 +123,8 @@ async function provisionarUsuarioPerfil(adminPage, { email, nome, bandaPerfil, a
 
     await expect(p.locator('nav.topnav, .select-banda-container, .index-container').first()).toBeVisible({ timeout: 10000 });
 
-    // Se caiu em select-banda, seleciona a primeira banda
-    if (p.url().includes('select-banda')) {
-      const card = p.locator('.sb-card').first();
-      if (await card.isVisible({ timeout: 3000 })) {
-        await card.click();
-        await p.waitForURL(/index\.php/i, { timeout: 8000 });
-      }
-    }
+    await selectDefaultBand(p);
+    await definirPreferenciaDeCapotraste(p);
 
     await writeStorageState(ctx, authFile);
   } catch (e) {
@@ -140,6 +134,28 @@ async function provisionarUsuarioPerfil(adminPage, { email, nome, bandaPerfil, a
   } finally {
     await ctx.close();
   }
+}
+
+/**
+ * Sem isto, o modal de primeiro acesso do capotraste abre na home e bloqueia o
+ * clique na lista de músicas em todo teste que usar estes usuários. Só o spec
+ * dedicado (74-capotraste) deve exercitar o primeiro acesso, e ele apaga a
+ * preferência de propósito.
+ */
+async function definirPreferenciaDeCapotraste(page) {
+  const csrf = await (await page.request.get('/api/csrf.php')).json();
+  await page.request.post('/src/backend/users/salvar_config.php', {
+    data: JSON.stringify({ config: { instrumento: 'violao', transposicaoPreferencia: 'cadastrado' } }),
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf.csrf_token || '' },
+  });
+}
+
+async function selectDefaultBand(page) {
+  await page.goto('/select-banda.php');
+  const card = page.locator(`.sb-card[data-band-id="${DEFAULT_BAND_ID}"]`);
+  await expect(card).toBeVisible({ timeout: 8000 });
+  await card.click();
+  await page.waitForURL(/index\.php/i, { timeout: 8000 });
 }
 
 function requiredEnv(name) {

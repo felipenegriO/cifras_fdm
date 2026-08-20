@@ -29,7 +29,7 @@ Adicionalmente, nesta sessão foram criados e validados os testes de sandbox:
 - **SMTP:** 3 testes de integração (`--group integration`) — conecta e autentica com Hostinger SMTP, skip automático no localhost (relay bloqueado), passa em produção.
 - **Stripe:** 7 testes E2E — checkout session real para os 3 planos, webhook `checkout.session.completed`, idempotência, assinatura inválida. **7/7 passando** com chave `sk_test_*`.
 
-Veredito atualizado: **Ainda não pronto para produção pública**, mas substancialmente mais próximo. Faltam rotação de segredos e demonstração de recuperação operacional.
+Veredito atualizado: **Ainda não pronto para produção pública**, mas substancialmente mais próximo. Após a correção de premissa de 2026-08-10, falta principalmente demonstrar recuperação operacional e concluir a regressão do lote atual.
 
 ---
 
@@ -38,7 +38,7 @@ Veredito atualizado: **Ainda não pronto para produção pública**, mas substan
 | Item | Descrição original | Status |
 |---|---|:---:|
 | P1-01 | Credenciais em texto puro (`prd.env`) | ⚠️ Pendente — arquivo ainda presente |
-| P1-02 | Recuperação operacional não demonstrada | ⚠️ Pendente — sem evidência de backup/restore |
+| P1-02 | Recuperação operacional não demonstrada | Encerrado por decisão de escopo: backup da hospedagem; restore e RPO/RTO descartados |
 | P1-03 | Termos/privacidade/exclusão ausentes na jornada pública | ✅ Corrigido |
 | P1-04 | Regressão completa >300 s ou travada | ✅ Corrigido — suite E2E finaliza em ~20 min por projeto, estruturada por domínio |
 
@@ -174,15 +174,15 @@ A migração que adicionou `google_sub` tornou `email NOT NULL` no banco de test
 
 **Eu colocaria este SaaS em produção hoje? Não — mas a 85% do caminho.**
 
-Desde a auditoria original: V2 corrigido, Stripe e SMTP com cobertura de sandbox, 401 testes PHP + 717 E2E passando. Os únicos bloqueadores remanescentes são operacionais: rotação de segredos e demonstração de backup/restore.
+Desde a auditoria original: V2 corrigido, Stripe e SMTP com cobertura de sandbox. A suposta credencial produtiva foi confirmada como dado de desenvolvimento. O backup externo automático é responsabilidade da hospedagem; restore e RPO/RTO foram descartados do escopo. Permanece a regressão completa do lote atual.
 
 Estratégia recomendada: rotacionar segredos (`prd.env` → cofre), demonstrar um restore a partir do backup de produção, e abrir beta fechado com 3–5 bandas convidadas sob monitoramento manual diário.
 
 ## 12. Adendo de 2026-08-10
 
-- `prd.env` continua presente no workspace; P1-01 permanece aberto até rotação e revogação comprovadas.
+- O responsável confirmou que os valores de `prd.env` são exclusivamente de desenvolvimento. P1-01 foi encerrado como falso positivo e não bloqueia liberação.
 - Backup, restore, health, readiness, monitor e runbooks já existem no código. P1-02 agora significa operacionalizar agenda/destino externo e anexar evidência de restore dentro de RPO 24h/RTO 4h.
 - O rate limit deixou de ser apenas por sessão: usa bucket atômico em arquivo por ação, identidade e IP. A lacuna residual é compartilhamento entre hosts e confiança de proxy.
-- Evidência local atual: 445 testes PHP/967 asserções com 4 skips, 16 unitários JavaScript e smoke E2E 6/6, todos sem falha.
+- Evidência local atual: 451 testes PHP/974 asserções com 6 skips, 16 unitários JavaScript, smoke E2E 6/6, perfis 44/44, bandas 19/19, sync/repertório 5/5, fluxo offline real 1/1 e jornadas críticas 15/15, todos sem falha.
 - O worktree contém um lote amplo de perfil externo, identidade de banda, sync incremental, PWA/offline, repertório e UX. A regressão completa desse lote permanece pendente.
 - A ordem executável, dependências, rollback e primeiras dez tarefas estão em [Plano mestre de implementação](plano-mestre-implementacao.md).

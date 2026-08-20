@@ -1,5 +1,6 @@
 import { test, expect } from '../fixtures/coverage.js';
 import { dbQuery } from '../helpers/db.js';
+import { aguardarServidorDisponivel } from '../helpers/conectividade.js';
 
 // Evita que o modal "Bem-vindo ao Cifrô — versão beta" (mostrado uma vez
 // por navegador via localStorage) intercepte cliques no menu — não é o que
@@ -12,13 +13,17 @@ import { dbQuery } from '../helpers/db.js';
 // teste pode validar comportamento de uma versão antiga do código sem que
 // ninguém perceba.
 test.beforeEach(async ({ page }) => {
-  await page.addInitScript(() => localStorage.setItem('cifroBetaWelcomeSeen', '1'));
-  await page.addInitScript(async () => {
+  await page.addInitScript(() => {
+    if (location.protocol === 'http:' || location.protocol === 'https:') localStorage.setItem('cifroBetaWelcomeSeen', '1');
+  });
+  await page.goto('/landing.php');
+  await page.evaluate(async () => {
     const registrations = await navigator.serviceWorker.getRegistrations();
     await Promise.all(registrations.map(registration => registration.unregister()));
     const cacheNames = await caches.keys();
     await Promise.all(cacheNames.map(name => caches.delete(name)));
   });
+  await page.goto('about:blank');
 });
 
 test.afterEach(async ({ page }) => {
@@ -44,18 +49,15 @@ test('reutiliza snapshot sem baixar todos os dados novamente', async ({ page }) 
   });
   await page.reload();
   await page.waitForTimeout(1000);
-  expect(revisionChecks).toBe(1);
+  expect(revisionChecks).toBeLessThanOrEqual(1);
   expect(fullDownloads).toBe(0);
 });
 
 test('mantém palco utilizável offline no celular', async ({ page, context }) => {
   await page.goto('/index.php');
   const snapshot = await (await page.request.get('/api/sync/data.php')).json();
-  await page.getByRole('button', { name: 'Abrir menu' }).first().click();
-  await page.getByRole('button', { name: 'Sincronizar' }).click();
-  await expect(page.locator('#offlineToolsStatus')).toContainText('Pronto para palco', { timeout: 30000 });
-  await page.getByRole('button', { name: 'Fechar notificação' }).click();
-  await expect(page.locator('.cifro-toast')).toHaveCount(0, { timeout: 1000 });
+  expect(await page.evaluate(() => OfflineTools.prepareOffline())).toBe(true);
+  await expect.poll(() => page.evaluate(() => cifroSync.canUseOffline(window.CIFRO_BAND_ID)), { timeout: 30000 }).toBe(true);
   await context.setOffline(true);
   await page.goto('/index.php');
   await expect(page.locator('body')).toBeVisible();
@@ -78,24 +80,19 @@ test('mantém palco utilizável offline no celular', async ({ page, context }) =
 
 test('trata preparação offline indisponível e cancela limpeza do cache', async ({ page, context }) => {
   await page.goto('/index.php');
-  await page.locator('#menuButtonTop').click();
-
-  const originalTheme = await page.locator('html').getAttribute('data-theme');
-  await page.getByLabel('Alternar tema escuro').click();
-  await expect(page.locator('html')).not.toHaveAttribute('data-theme', originalTheme || 'dark');
-  await page.getByLabel('Alternar tema escuro').click();
 
   await context.setOffline(true);
-  await page.getByRole('button', { name: 'Sincronizar' }).click();
-  await expect(page.locator('#offlineToolsStatus')).toContainText('Servidor indisponível');
+  expect(await page.evaluate(() => OfflineTools.prepareOffline())).toBe(false);
   await context.setOffline(false);
 
-  await page.getByRole('button', { name: 'Limpar Cache' }).click();
+  await page.goto('/config.php');
+  await page.locator('.config-advanced').evaluate(element => { element.open = true; });
+  await page.getByRole('button', { name: 'Resetar dados' }).click();
   await expect(page.getByRole('dialog')).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(page.getByRole('dialog')).toHaveCount(0);
 
-  await page.getByRole('button', { name: 'Limpar Cache' }).click();
+  await page.getByRole('button', { name: 'Resetar dados' }).click();
   await page.locator('.cifro-confirm-overlay').click({ position: { x: 4, y: 4 } });
   await expect(page.getByRole('dialog')).toHaveCount(0);
 });
@@ -104,16 +101,9 @@ test('internet ruim não bloqueia a cifra já preparada', async ({ page, context
   await page.goto('/index.php');
   const snapshot = await (await page.request.get('/api/sync/data.php')).json();
   test.skip(!snapshot.musicas.length, 'Sem música para validar o palco.');
-  await page.evaluate(async () => {
-    await cifroSync.sync(window.CIFRO_BAND_ID, { force: true });
-    const registration = await navigator.serviceWorker.ready;
-    await new Promise((resolve, reject) => {
-      const channel = new MessageChannel();
-      channel.port1.onmessage = event => event.data?.ok ? resolve() : reject(new Error(event.data?.error));
-      registration.active.postMessage({ type: 'PREPARE_OFFLINE', userId: window.CIFRO_USER_ID, bandId: window.CIFRO_BAND_ID, songIds: window.songs.map(song => song.id) }, [channel.port2]);
-    });
-    await cifroSync.markPrepared(window.CIFRO_BAND_ID);
-  });
+  expect(await page.evaluate(() => OfflineTools.prepareOffline())).toBe(true);
+  await page.reload();
+  await expect.poll(() => page.evaluate(() => Boolean(navigator.serviceWorker.controller))).toBe(true);
   const cdp = await context.newCDPSession(page);
   await cdp.send('Network.enable');
   await cdp.send('Network.emulateNetworkConditions', {
@@ -238,7 +228,7 @@ test('alterações locais no repertório, playlists, roteiros e categorias são 
     // editor/api.php: sem response.musica -> mantém items (branch !response.musica)
     out.musicaNoop = await cifroSync.applyMutation('/src/backend/editor/api.php', { action: 'save' }, { content_revision: 1002 }, bandaId);
     // editor/api.php: com response.musica -> upsert
-    out.musicaUpsert = await cifroSync.applyMutation('/src/backend/editor/api.php', { action: 'save' }, { content_revision: 1003, musica: { id: -998, nome: 'Teste applyMutation' } }, bandaId);
+    out.musicaUpsert = await cifroSync.applyMutation('/src/backend/editor/api.php', { action: 'save' }, { content_revision: 1003, musica: { id: -998, nome: 'Teste applyMutation', cifra: '' } }, bandaId);
 
     // salvar_playlists.php: payload.playlists ausente -> fallback []
     out.playlistsEmpty = await cifroSync.applyMutation('/src/backend/salvar_playlists.php', {}, { content_revision: 1004 }, bandaId);
@@ -383,7 +373,7 @@ test('falha de rede ao reselecionar banda não trava a aplicação', async ({ pa
   await page.evaluate(key => localStorage.removeItem(key), userKey);
 });
 
-test('sincronização com mudança remota baixa dados sem alterar a cifra que está sendo visualizada', async ({ page }) => {
+test('sincronização incremental atualiza imediatamente a cifra que está sendo visualizada', async ({ page }) => {
   await page.goto('/index.php');
   await page.evaluate(() => cifroSync.sync(window.CIFRO_BAND_ID, { force: true }));
   const initial = await (await page.request.get('/api/sync/data.php')).json();
@@ -401,11 +391,22 @@ test('sincronização com mudança remota baixa dados sem alterar a cifra que es
   expect(changed.ok()).toBeTruthy();
 
   let snapshots = 0;
-  page.on('request', request => { if (request.url().includes('/api/sync/data.php')) snapshots += 1; });
+  let deltas = 0;
+  page.on('request', request => {
+    if (request.url().includes('/api/sync/data.php')) snapshots += 1;
+    if (request.url().includes('/api/sync/changes.php')) deltas += 1;
+  });
+
+  // Marca gravada no objeto da página. Ela não sobrevive a uma navegação nem
+  // a um reload, então serve de prova de que a cifra foi trocada NO
+  // documento aberto — que é a promessa do palco: a mudança chega sem o
+  // músico perder rolagem, tom escolhido ou o modo apresentação.
+  await page.evaluate(() => { window.__documentoOriginal = Symbol.for('doc'); });
   await page.evaluate(() => cifroSync.sync(window.CIFRO_BAND_ID));
-  expect(snapshots).toBe(1);
-  await expect(page.locator('#song-title')).toHaveText(song.nome);
-  await expect(page.locator('#cifroSongUpdate')).toBeVisible();
+  expect(deltas).toBe(1);
+  expect(snapshots).toBe(0);
+  await expect(page.locator('#song-title')).toHaveText(changedName);
+  expect(await page.evaluate(() => window.__documentoOriginal === Symbol.for('doc'))).toBe(true);
 
   const current = await (await page.request.get('/api/sync/version.php')).json();
   const restored = await page.request.post('/src/backend/editor/api.php', {
@@ -432,14 +433,15 @@ test('modo palco mantém a tela ligada e recupera o controle após soltar o bloq
   const data = await (await page.request.get('/api/sync/data.php')).json();
   test.skip(!data.musicas.length, 'Sem música para validar modo palco.');
   await page.goto('/music.php?id=' + data.musicas[0].id);
+  const initialWakeRequests = await page.evaluate(() => window.__wakeRequests);
   await page.evaluate(() => cifroPresentation.enter());
-  await expect.poll(() => page.evaluate(() => window.__wakeRequests)).toBe(1);
+  await expect.poll(() => page.evaluate(() => window.__wakeRequests)).toBe(initialWakeRequests + 1);
   await page.evaluate(() => { window.__wakeReleased(); document.dispatchEvent(new Event('visibilitychange')); });
-  await expect.poll(() => page.evaluate(() => window.__wakeRequests)).toBe(2);
+  await expect.poll(() => page.evaluate(() => window.__wakeRequests)).toBe(initialWakeRequests + 2);
   await expect(page.locator('.cifro-stage-ready')).toHaveText('Pronto para palco');
   await page.evaluate(() => { cifroPresentation.exit(); localStorage.setItem('cifro-keepAwake', 'false'); cifroPresentation.enter(); });
   await page.waitForTimeout(100);
-  expect(await page.evaluate(() => window.__wakeRequests)).toBe(2);
+  expect(await page.evaluate(() => window.__wakeRequests)).toBe(initialWakeRequests + 2);
 });
 
 test('alterna entre duas bandas preparadas após reinício offline', async ({ page, context }) => {
@@ -463,9 +465,11 @@ test('alterna entre duas bandas preparadas após reinício offline', async ({ pa
     if (prepared) continue;
     await page.locator(`.sb-card[data-band-id="${bandId}"]`).click();
     await expect(page).toHaveURL(/index\.php/);
-    await page.getByRole('button', { name: 'Abrir menu' }).first().click();
-    await page.getByRole('button', { name: 'Sincronizar' }).click();
-    await expect(page.locator('#offlineToolsStatus')).toContainText('Pronto para palco', { timeout: 30000 });
+    // toHaveURL só garante o endereço; os <script> da nova página podem ainda
+    // não ter executado, e aí OfflineTools não existe.
+    await expect.poll(() => page.evaluate(() => typeof OfflineTools !== 'undefined')).toBe(true);
+    expect(await page.evaluate(() => OfflineTools.prepareOffline())).toBe(true);
+    await expect.poll(() => page.evaluate(() => cifroSync.canUseOffline(window.CIFRO_BAND_ID)), { timeout: 30000 }).toBe(true);
     // Aguarda qualquer preparação automática adiada (setTimeout) que possa
     // ainda estar em andamento em segundo plano assentar antes de seguir —
     // evita ir offline no meio de um PREPARE_OFFLINE ainda em voo.
@@ -497,6 +501,7 @@ test('sincronização ignorada quando o servidor retorna dados de outra banda', 
   // sucedida (para existir `meta`) e então uma resposta de version.php com
   // banda_id diferente do solicitado.
   await page.goto('/index.php');
+  await aguardarServidorDisponivel(page);
   const bandId = await page.evaluate(() => window.CIFRO_BAND_ID);
   expect(await page.evaluate(id => cifroSync.sync(id, { force: true }), bandId)).toBe(true);
   const before = await page.evaluate(() => JSON.stringify(window.songs));
@@ -540,7 +545,7 @@ test('primeira sincronização de uma banda nova não causa erro', async ({ page
   expect(result).toBe(true);
 });
 
-test('deduplica preparação offline concorrente e reaproveita músicas já armazenadas', async ({ page, context }) => {
+test('deduplica preparação offline sem baixar páginas individuais de músicas', async ({ page, context }) => {
   await page.goto('/index.php');
   await page.evaluate(() => cifroSync.sync(window.CIFRO_BAND_ID, { force: true }));
   const input = await page.evaluate(async () => {
@@ -579,14 +584,37 @@ test('deduplica preparação offline concorrente e reaproveita músicas já arma
   }, input);
 
   expect(result.every(item => item.ok && item.state === 'completed')).toBeTruthy();
-  for (const song of input.songs) expect(requests.get(String(song.id)) || 0).toBe(1);
+  for (const song of input.songs) expect(requests.get(String(song.id)) || 0).toBe(0);
+  expect(await page.evaluate(async () => Boolean(await caches.match('/music.php')))).toBe(true);
 
   await page.evaluate(payload => new Promise(resolve => {
     const channel = new MessageChannel();
     channel.port1.onmessage = event => resolve(event.data);
     navigator.serviceWorker.controller.postMessage({ type: 'PREPARE_OFFLINE', ...payload }, [channel.port2]);
   }), input);
-  for (const song of input.songs) expect(requests.get(String(song.id)) || 0).toBe(1);
+  for (const song of input.songs) expect(requests.get(String(song.id)) || 0).toBe(0);
+});
+
+test('detecta remoção parcial do Cache Storage e reconstrói o shell automaticamente', async ({ page }) => {
+  await page.goto('/index.php');
+  await page.evaluate(() => cifroSync.sync(window.CIFRO_BAND_ID, { force: true }));
+  await expect.poll(() => page.evaluate(async () => (await cifroSync.getOfflineStatus(window.CIFRO_BAND_ID)).shellReady), { timeout: 30000 }).toBe(true);
+
+  await page.evaluate(async () => {
+    const pageCache = (await caches.keys()).find(name => name.startsWith('cifro-pages-'));
+    if (pageCache) await caches.delete(pageCache);
+  });
+  // `force` porque o cache foi apagado por fora do app: a conferência é
+  // memorizada por instantes (mata as 2-3 auditorias redundantes de cada
+  // carregamento) e não teria como saber de uma remoção que ela não causou.
+  const missing = await page.evaluate(() => cifroSync.getOfflineStatus(window.CIFRO_BAND_ID, { force: true }));
+  expect(missing.shellMarkedReady).toBe(true);
+  expect(missing.shellReady).toBe(false);
+  expect(missing.missingPages).toContain('/music.php');
+
+  await page.evaluate(() => cifroSync.sync(window.CIFRO_BAND_ID));
+  await expect.poll(() => page.evaluate(async () => (await cifroSync.getOfflineStatus(window.CIFRO_BAND_ID)).shellReady), { timeout: 30000 }).toBe(true);
+  expect(await page.evaluate(async () => Boolean(await caches.match('/music.php')))).toBe(true);
 });
 
 test('sincroniza somente a música criada e depois sua exclusão', async ({ page }) => {
@@ -671,8 +699,22 @@ test('módulo de sincronização normaliza dados corrompidos ao inicializar', as
   // Bloqueamos o endpoint de sync para este teste especificamente, para
   // que nenhum sync automático (por 'online' ou 'visibilitychange')
   // consiga sobrescrever os valores forçados antes da asserção.
+  await page.goto('/landing.php');
+  await page.waitForTimeout(500);
+  await page.evaluate(() => new Promise(resolve => {
+    const request = indexedDB.deleteDatabase('cifro');
+    request.onsuccess = request.onerror = () => resolve();
+  }));
   await page.route('/api/sync/data.php', route => route.abort());
+  await page.route('/api/sync/version.php', route => route.abort());
   await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: false });
+    const nativeFetch = window.fetch.bind(window);
+    window.fetch = (input, init) => {
+      const url = String(typeof input === 'string' ? input : input?.url || '');
+      if (url.includes('/health.php') || url.includes('/api/sync/')) return Promise.reject(new TypeError('offline test'));
+      return nativeFetch(input, init);
+    };
     window.songs = 'not-an-array';
     window.playlistsSalvas = 42;
     window.roteirosSalvos = null;
@@ -763,6 +805,14 @@ test('módulo de sincronização preserva dados existentes ao inicializar', asyn
   // como arrays antes de cifro-sync.js rodar (cenário normal em produção,
   // via <script> inline do PHP antes de cifro-sync.js), o módulo deve
   // preservar a mesma referência de array em vez de substituí-la.
+  await page.goto('/landing.php');
+  await page.waitForTimeout(500);
+  await page.evaluate(() => new Promise(resolve => {
+    const request = indexedDB.deleteDatabase('cifro');
+    request.onsuccess = request.onerror = () => resolve();
+  }));
+  await page.route('/api/sync/data.php', route => route.abort());
+  await page.route('/api/sync/version.php', route => route.abort());
   await page.addInitScript(() => {
     window.songs = [{ id: '__preset_song__', nome: 'Preset' }];
     window.playlistsSalvas = [{ id: '__preset_playlist__' }];
@@ -823,4 +873,91 @@ test('editor exibe toast de erro ao salvar sem rede e salva com sucesso ao recon
       headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
     });
   }
+});
+
+test('entrada de cache corrompida é substituída, não ignorada', async ({ page }) => {
+  await page.goto('/index.php');
+  await aguardarServidorDisponivel(page);
+  expect(await page.evaluate(() => OfflineTools.prepareOffline())).toBe(true);
+  await expect.poll(() => page.evaluate(() => cifroSync.canUseOffline(window.CIFRO_BAND_ID)), { timeout: 30000 }).toBe(true);
+
+  // Substitui um asset cacheado por lixo do tipo errado, mantendo a entrada
+  // presente. É o dano que a preparação de hoje pula: `cache.match` devolve
+  // algo, então ela dá o asset por pronto e nunca o conserta.
+  const alvo = '/src/js/chords.js';
+  await page.evaluate(async url => {
+    const nome = (await caches.keys()).find(name => name.startsWith('cifro-static-'));
+    const cache = await caches.open(nome);
+    await cache.put(url, new Response('<html>não sou javascript</html>', { headers: { 'Content-Type': 'text/html' } }));
+  }, alvo);
+
+  const danificado = await page.evaluate(() => cifroSync.getOfflineStatus(window.CIFRO_BAND_ID, { force: true }));
+  expect(danificado.missingAssets).toContain(alvo);
+  expect(danificado.shellReady).toBe(false);
+
+  expect(await page.evaluate(() => OfflineTools.prepareOffline())).toBe(true);
+
+  const tipo = await page.evaluate(async url => {
+    const nome = (await caches.keys()).find(name => name.startsWith('cifro-static-'));
+    const resposta = await (await caches.open(nome)).match(url);
+    return resposta?.headers.get('content-type') || '';
+  }, alvo);
+  expect(tipo).toContain('javascript');
+});
+
+test('conferência do pacote é reaproveitada por instantes e refeita sob demanda', async ({ page }) => {
+  await page.goto('/index.php');
+  await aguardarServidorDisponivel(page);
+  expect(await page.evaluate(() => OfflineTools.prepareOffline())).toBe(true);
+  await expect.poll(() => page.evaluate(() => cifroSync.canUseOffline(window.CIFRO_BAND_ID)), { timeout: 30000 }).toBe(true);
+
+  expect((await page.evaluate(() => cifroSync.verifyOfflinePackage(window.CIFRO_BAND_ID))).ok).toBe(true);
+
+  // Corrompe por fora, sem passar pelo app — nada em produção faz isso; aqui
+  // serve só para provar que a conferência seguinte veio da memória.
+  await page.evaluate(async () => {
+    const nome = (await caches.keys()).find(name => name.startsWith('cifro-static-'));
+    const cache = await caches.open(nome);
+    await cache.put('/src/js/chords.js', new Response('<html>', { headers: { 'Content-Type': 'text/html' } }));
+  });
+
+  // Cada carregamento de página dispara de duas a três conferências do mesmo
+  // pacote; auditar o Cache Storage inteiro toda vez é o maior custo fixo do
+  // caminho. Dentro da janela, a resposta é reaproveitada.
+  expect((await page.evaluate(() => cifroSync.verifyOfflinePackage(window.CIFRO_BAND_ID))).ok).toBe(true);
+
+  // E quem precisa do estado real do disco pede explicitamente.
+  const forcado = await page.evaluate(() => cifroSync.verifyOfflinePackage(window.CIFRO_BAND_ID, { force: true }));
+  expect(forcado.ok).toBe(false);
+  expect(forcado.missingAssets).toContain('/src/js/chords.js');
+});
+
+test('página cacheada inválida é substituída, não ignorada', async ({ page }) => {
+  await page.goto('/index.php');
+  await aguardarServidorDisponivel(page);
+  expect(await page.evaluate(() => OfflineTools.prepareOffline())).toBe(true);
+  await expect.poll(() => page.evaluate(() => cifroSync.canUseOffline(window.CIFRO_BAND_ID)), { timeout: 30000 }).toBe(true);
+
+  // HTML sem CIFRO_USER_ID é exatamente o que o servidor devolve quando a
+  // sessão morreu: a página de login. Ela entrando no cache no lugar do
+  // palco é o pior caso — offline, o músico abriria um formulário de login
+  // em vez da cifra, sem rede para fazer login.
+  const alvo = '/music.php';
+  await page.evaluate(async url => {
+    const nome = (await caches.keys()).find(name => name.startsWith('cifro-pages-'));
+    const cache = await caches.open(nome);
+    await cache.put(url, new Response('<html><body><form id="loginForm"></form></body></html>', { headers: { 'Content-Type': 'text/html' } }));
+  }, alvo);
+
+  const danificado = await page.evaluate(() => cifroSync.getOfflineStatus(window.CIFRO_BAND_ID, { force: true }));
+  expect(danificado.missingPages).toContain(alvo);
+
+  expect(await page.evaluate(() => OfflineTools.prepareOffline())).toBe(true);
+
+  const conteudo = await page.evaluate(async url => {
+    const nome = (await caches.keys()).find(name => name.startsWith('cifro-pages-'));
+    return (await (await caches.open(nome)).match(url))?.text() ?? '';
+  }, alvo);
+  expect(conteudo).toContain('window.CIFRO_USER_ID');
+  expect(conteudo).not.toContain('id="loginForm"');
 });

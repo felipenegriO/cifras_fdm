@@ -6,7 +6,7 @@
     "test": "npm run test:unit && npm run test:e2e",
     "test:unit": "npm run test:unit:php && npm run test:unit:js",
     "test:unit:php": "powershell -NoProfile -Command \"$env:OPENSSL_CONF='C:/xampp/apache/conf/openssl.cnf'; C:/xampp/php/php.exe public/vendor/bin/phpunit\"",
-    "test:unit:js": "node --test tests/chords.test.js tests/music-youtube-panel-state.test.js",
+    "test:unit:js": "node --test tests/chords.test.js tests/music-youtube-panel-state.test.js tests/marketing/timeline.test.js tests/convite-share.test.js",
     "test:coverage:php": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/coverage/run-php.ps1 -Threshold 80",
     "test:coverage:js": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/coverage/run-js.ps1 -Threshold 80",
     "coverage:js:uncovered": "node scripts/coverage/summarize-js-uncovered.mjs",
@@ -23,7 +23,14 @@
     "test:integration": "powershell -NoProfile -Command \"$env:OPENSSL_CONF='C:/xampp/apache/conf/openssl.cnf'; C:/xampp/php/php.exe public/vendor/bin/phpunit --group integration\"",
     "test:integration:required": "powershell -NoProfile -Command \"$env:OPENSSL_CONF='C:/xampp/apache/conf/openssl.cnf'; C:/xampp/php/php.exe public/vendor/bin/phpunit --group integration --fail-on-skipped\"",
     "security:dependencies": "npm audit --audit-level=high",
-    "serve": "php -S localhost:8090 -t public"
+    "serve": "php -S localhost:8090 -t public",
+    "demo:seed": "C:/xampp/php/php.exe marketing/instagram/seed-demo.php",
+    "demo:serve": "C:/xampp/php/php.exe -S 127.0.0.1:8095 -t public router.php",
+    "demo:record": "node marketing/instagram/record.mjs",
+    "demo:encode": "node marketing/instagram/encode.mjs",
+    "demo:encode:lento": "node marketing/instagram/encode.mjs 0.9",
+    "demo:capa": "node marketing/instagram/cover.mjs",
+    "demo:build": "npm run demo:record && npm run demo:encode"
   },
   "devDependencies": {
     "@playwright/test": "^1.50.0",

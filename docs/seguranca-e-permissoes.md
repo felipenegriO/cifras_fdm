@@ -31,6 +31,15 @@
 - Erros de recuperação de senha não devem revelar se o usuário existe.
 - Webhook Stripe não usa sessão ou CSRF; sua autenticação é a assinatura Stripe.
 
+## Convite de banda por link
+
+- `banda_convites` guarda só o SHA-256 do token, nunca o valor em claro (ver [Modelo de dados](modelo-de-dados.md)).
+- Gerar e revogar exigem `administrador` e CSRF; a consulta de estado (`GET`) exige `administrador` mas não muda estado.
+- O **aceite é sempre `POST` com CSRF**, nunca `GET` — um `GET` que vinculasse seria disparado por prefetch do navegador ou pela pré-visualização de link de apps de mensagem (o WhatsApp abre todo link que passa por ele).
+- `cifro_rate_limit('convite_aceite', 10, 300, $usuarioId)` limita tentativas de aceite por usuário.
+- A página pública `/convite.php` mostra a mesma tela neutra para qualquer falha — token ausente, inválido, expirado ou revogado — e **nunca revela o nome da banda** fora do caso válido, para o endereço não virar sonda de quais bandas existem.
+- O teto de usuários do plano é checado **duas vezes**: na geração do link (`cifro_require_plan_limit`, 403 `plano_limit`) e de novo no aceite (`BandaConviteFlow::aceitar`). A segunda checagem fecha a corrida de alguém aceitar durante as 24h de validade depois que a banda já cresceu por outro caminho.
+
 ## Lacunas conhecidas
 
 - `cifro-sync.js` envia `banda_id` na query; os endpoints devem garantir que ele coincide com a banda autorizada.

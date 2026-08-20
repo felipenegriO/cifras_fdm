@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Cifrô — capa do Reel</title>
+  <link rel="stylesheet" href="stage.css">
+  <style>
+    /* A capa reaproveita um quadro REAL do Reel (os dois celulares sincronizados
+       pelo Modo Live) e substitui a faixa da legenda por manchete e assinatura.
+       Assim a capa e o video mostram exatamente a mesma tela, sem re-dirigir o
+       app — o servidor de desenvolvimento e single-thread e engasga com duas
+       sessoes sondando ao mesmo tempo. */
+    #quadro {
+      position: absolute; inset: 0;
+      background: url("../out/frames/frame-001110.png") center top / 1080px 1920px no-repeat;
+    }
+    /* Cobre a legenda original. O topo em degrade evita emenda visivel. */
+    #tapa {
+      position: absolute; left: 0; right: 0; top: 1130px; bottom: 0;
+      background: linear-gradient(to bottom, rgba(14,14,16,0) 0, #0e0e10 90px, #0e0e10 100%);
+    }
+    #cover-title { position: absolute; left: 120px; right: 120px; top: 1168px; text-align: center; }
+    .cover-line {
+      display: block; font-size: 66px; line-height: 1.08; font-weight: 800; white-space: nowrap;
+      letter-spacing: -.03em; text-shadow: 0 6px 40px rgba(0,0,0,.8);
+    }
+    .cover-line.accent { color: #a78bfa; }
+    #cover-mark {
+      position: absolute; left: 0; right: 0; top: 1400px;
+      display: flex; align-items: center; justify-content: center; gap: 22px;
+    }
+    #cover-mark img { width: 80px; height: 80px; border-radius: 22px;
+      box-shadow: 0 16px 40px rgba(124,58,237,.35); }
+    .mark-word { font-size: 62px; font-weight: 800; letter-spacing: -.02em; }
+    .mark-soon { font-size: 34px; font-weight: 700; color: var(--muted);
+      border-left: 3px solid #3f3f46; padding-left: 22px; }
+  </style>
+</head>
+<body>
+  <div id="stage">
+    <div id="quadro"></div>
+    <div id="tapa"></div>
+    <div id="cover-title">
+      <span class="cover-line">O host troca.</span>
+      <span class="cover-line accent">Todo mundo</span>
+      <span class="cover-line accent">acompanha.</span>
+    </div>
+    <div id="cover-mark">
+      <img src="../../../public/src/images/android-icon-512x512.png" alt="">
+      <span class="mark-word">Cifrô</span>
+      <span class="mark-soon">em breve</span>
+    </div>
+  </div>
+</body>
+</html>

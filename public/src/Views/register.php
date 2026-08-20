@@ -92,6 +92,13 @@
     <?php else: ?>
       <h2>Criar conta grátis</h2>
 
+      <?php if (!empty($convite)): ?>
+        <div style="background:rgba(124,58,237,.12);border:1px solid rgba(124,58,237,.45);border-radius:8px;padding:11px 14px;font-size:13px;color:#c4b5fd;margin-bottom:14px;line-height:1.5">
+          Você foi convidado para a banda <strong><?= e($convite['banda_nome']) ?></strong>.
+          Crie sua conta e você já entra nela.
+        </div>
+      <?php endif; ?>
+
       <?php
         $planoEscolhido = $_SESSION['cifro_plano_intencao'] ?? '';
         $planoRotulos = [
@@ -135,20 +142,22 @@
             value="<?= htmlspecialchars($_POST['email'] ?? '') ?>">
         </div>
 
-        <hr class="divider">
+        <?php if (empty($convite)): ?>
+          <hr class="divider">
 
-        <div class="form-group">
-          <label for="banda_nome">Nome da banda</label>
-          <input type="text" id="banda_nome" name="banda_nome" placeholder="Ex: Minha Banda" required
-            value="<?= htmlspecialchars($_POST['banda_nome'] ?? '') ?>">
-        </div>
+          <div class="form-group">
+            <label for="banda_nome">Nome da banda</label>
+            <input type="text" id="banda_nome" name="banda_nome" placeholder="Ex: Minha Banda" required
+              value="<?= htmlspecialchars($_POST['banda_nome'] ?? '') ?>">
+          </div>
+        <?php endif; ?>
 
         <label class="legal-consent" for="legal_acceptance">
           <input type="checkbox" id="legal_acceptance" name="legal_acceptance" value="1" required <?= isset($_POST['legal_acceptance']) ? 'checked' : '' ?>>
           <span>Li e aceito os <a href="<?= htmlspecialchars((string)env('TERMS_URL', '/termos.php')) ?>" target="_blank" rel="noopener">Termos de Uso</a> e a <a href="<?= htmlspecialchars((string)env('PRIVACY_URL', '/privacidade.php')) ?>" target="_blank" rel="noopener">Política de Privacidade</a>.</span>
         </label>
 
-        <button type="submit" class="btn-submit">Criar conta grátis</button>
+        <button type="submit" class="btn-submit"><?= empty($convite) ? 'Criar conta grátis' : 'Criar conta e entrar na banda' ?></button>
       </form>
     <?php endif; ?>
 

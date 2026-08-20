@@ -12,6 +12,7 @@ final class UserConfigValidatorTest extends TestCase
         self::assertTrue(UserConfigValidator::isKeySuportada('cifraSize'));
         self::assertTrue(UserConfigValidator::isKeySuportada('scrollSpeed'));
         self::assertTrue(UserConfigValidator::isKeySuportada('keepAwake'));
+        self::assertTrue(UserConfigValidator::isKeySuportada('ajudaDesativada'));
     }
 
     public function testChaveDesconhecidaNaoEhSuportada(): void
@@ -79,6 +80,50 @@ final class UserConfigValidatorTest extends TestCase
     {
         self::assertNull(UserConfigValidator::validate('keepAwake', 'maybe'));
         self::assertNull(UserConfigValidator::validate('keepAwake', 1));
+    }
+
+    public function testAjudaDesativadaAceitaSomenteBooleanoOuStringBoolean(): void
+    {
+        self::assertSame('true', UserConfigValidator::validate('ajudaDesativada', true));
+        self::assertSame('true', UserConfigValidator::validate('ajudaDesativada', 'true'));
+        self::assertSame('false', UserConfigValidator::validate('ajudaDesativada', false));
+        self::assertSame('false', UserConfigValidator::validate('ajudaDesativada', 'false'));
+        self::assertNull(UserConfigValidator::validate('ajudaDesativada', 1));
+        self::assertNull(UserConfigValidator::validate('ajudaDesativada', 'sim'));
+    }
+
+    // ---- instrumento e capotraste ----
+
+    public function testAceitaOsInstrumentosSuportados(): void
+    {
+        self::assertSame('violao', UserConfigValidator::validate('instrumento', 'violao'));
+        self::assertSame('teclado', UserConfigValidator::validate('instrumento', 'teclado'));
+        self::assertSame('outro', UserConfigValidator::validate('instrumento', 'outro'));
+    }
+
+    public function testRecusaInstrumentoDesconhecido(): void
+    {
+        self::assertNull(UserConfigValidator::validate('instrumento', 'gaita'));
+        self::assertNull(UserConfigValidator::validate('instrumento', 123));
+    }
+
+    public function testAceitaAsQuatroPreferenciasDeCapotraste(): void
+    {
+        foreach (['simplificar', 'basico', 'cadastrado', 'nunca'] as $preferencia) {
+            self::assertSame($preferencia, UserConfigValidator::validate('transposicaoPreferencia', $preferencia));
+        }
+    }
+
+    public function testRecusaPreferenciaDeCapotrasteDesconhecida(): void
+    {
+        self::assertNull(UserConfigValidator::validate('transposicaoPreferencia', 'sempre'));
+        self::assertNull(UserConfigValidator::validate('transposicaoPreferencia', true));
+    }
+
+    public function testInstrumentoEPreferenciaSaoSalvaveis(): void
+    {
+        self::assertTrue(UserConfigValidator::isKeySuportada('instrumento'));
+        self::assertTrue(UserConfigValidator::isKeySuportada('transposicaoPreferencia'));
     }
 
     // ---- chave desconhecida ----

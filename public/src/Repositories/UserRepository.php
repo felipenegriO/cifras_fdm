@@ -77,6 +77,69 @@ class UserRepository {
         $this->pdo->prepare('UPDATE usuarios SET google_sub=? WHERE id=?')->execute([$sub, $userId]);
     }
 
+    /**
+     * Estado ATUAL de conta e de acesso à banda, direto do banco.
+     *
+     * Existe para a revalidação por requisição: a sessão guarda uma foto do
+     * login e não percebe que o músico foi removido da banda, que a banda foi
+     * desativada ou que a conta caiu. Uma query só, para não pesar no que roda
+     * em toda página.
+     *
+     * @return array{usuario: ?array, banda: ?array, vinculo: ?string}
+     */
+    public function estadoDeAcesso(string $usuarioId, ?string $bandaId): array {
+        // Traz o usuário e TODAS as bandas dele numa query só. A lista completa
+        // é necessária porque $_SESSION['usuario']['bandas'] também é uma foto
+        // do login: sem atualizá-la, quem cria uma segunda banda não ganha o
+        // seletor de bandas até deslogar.
+        $stmt = $this->pdo->prepare(
+            'SELECT u.id, u.ativo, u.validade, u.perfil,
+                    b.id AS b_id, b.nome AS b_nome, b.ativo AS b_ativo, b.plano AS b_plano,
+                    b.trial_expira_em AS b_trial,
+                    ub.perfil AS vinculo
+               FROM usuarios u
+               LEFT JOIN usuario_banda ub ON ub.usuario_id = u.id
+               LEFT JOIN bandas b ON b.id = ub.banda_id
+              WHERE u.id = ?
+              ORDER BY b.nome'
+        );
+        $stmt->execute([$usuarioId]);
+        $linhas = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        if (!$linhas) return ['usuario' => null, 'banda' => null, 'vinculo' => null, 'bandas' => []];
+
+        $primeira = $linhas[0];
+        $bandas = [];
+        $banda = null;
+        $vinculo = null;
+
+        foreach ($linhas as $linha) {
+            if ($linha['b_id'] === null) continue;             // usuário sem banda nenhuma
+            $bandas[] = ['id' => $linha['b_id'], 'perfil' => $linha['vinculo']];
+            if ($bandaId !== null && $linha['b_id'] === $bandaId) {
+                $banda = [
+                    'id'    => $linha['b_id'],
+                    'nome'  => $linha['b_nome'],
+                    'ativo' => $linha['b_ativo'],
+                    'plano' => $linha['b_plano'],
+                    'trial_expira_em' => $linha['b_trial'],
+                ];
+                $vinculo = $linha['vinculo'];
+            }
+        }
+
+        return [
+            'usuario' => [
+                'id'       => $primeira['id'],
+                'ativo'    => $primeira['ativo'],
+                'validade' => $primeira['validade'],
+                'perfil'   => $primeira['perfil'],
+            ],
+            'banda'   => $banda,
+            'vinculo' => $vinculo,
+            'bandas'  => $bandas,
+        ];
+    }
+
     public function findById(string $id): ?array {
         $stmt = $this->pdo->prepare('SELECT * FROM usuarios WHERE id=?');
         $stmt->execute([$id]);

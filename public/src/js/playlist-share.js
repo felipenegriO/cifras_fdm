@@ -35,41 +35,11 @@
     ].join('\n');
   }
 
-  function isMobile() {
-    if (navigator.userAgentData && typeof navigator.userAgentData.mobile === 'boolean') {
-      return navigator.userAgentData.mobile;
-    }
-    return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
-  }
-
-  async function copy(text) {
-    if (navigator.clipboard && window.isSecureContext) {
-      await navigator.clipboard.writeText(text);
-      return;
-    }
-    var area = document.createElement('textarea');
-    area.value = text;
-    area.style.position = 'fixed';
-    area.style.opacity = '0';
-    document.body.appendChild(area);
-    area.select();
-    document.execCommand('copy');
-    area.remove();
-  }
-
   async function share(playlist, songs) {
-    var text = format(playlist, songs);
-    if (isMobile() && navigator.share) {
-      try {
-        await navigator.share({ title: playlist.nome || 'Repertório', text: text });
-        return 'shared';
-      } catch (error) {
-        if (error && error.name === 'AbortError') return 'cancelled';
-        throw error;
-      }
-    }
-    await copy(text);
-    return 'copied';
+    return window.CifroShare.compartilhar({
+      titulo: playlist.nome || 'Repertório',
+      texto: format(playlist, songs),
+    });
   }
 
   window.CifroPlaylistShare = { format: format, share: share };

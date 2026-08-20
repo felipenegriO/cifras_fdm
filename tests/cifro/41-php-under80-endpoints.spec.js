@@ -45,9 +45,11 @@ test.describe('public/login.php', () => {
     await page.locator('#senha').fill(TEST_PASSWORD);
     await page.locator('button[type="submit"]').click();
     await page.waitForURL(url => !url.pathname.endsWith('/login.php'));
+    // ?logout=1 não desloga mais por GET (era CSRF de logout): encaminha para
+    // a porta única, que confirma e exige POST.
     const response = await page.request.get('/login.php?logout=1', { maxRedirects: 0 });
     expect([302, 303]).toContain(response.status());
-    expect(response.headers().location).toContain('/landing.php');
+    expect(response.headers().location).toContain('/logout.php');
     await context.close();
   });
 });

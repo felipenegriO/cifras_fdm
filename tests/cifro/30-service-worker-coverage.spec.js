@@ -61,7 +61,8 @@ async function waitForDebugger(port, getSpawnError) {
 test('service worker executa instalação, cache, mensagens e recuperação offline reais', async ({ request }, testInfo) => {
   test.setTimeout(120000);
   test.skip(process.env.PHP_COVERAGE === '1', 'Cobertura JS do service worker; no PHP instrumentado passa de 1 minuto sem aumentar cobertura PHP relevante.');
-  const appOrigin = process.env.PHP_COVERAGE === '1' ? 'http://127.0.0.1:8091' : 'http://127.0.0.1:8090';
+  const appPort = process.env.PHP_COVERAGE === '1' ? '8091' : (process.env.CIFRO_E2E_PORT || '8090');
+  const appOrigin = `http://127.0.0.1:${appPort}`;
   const port = 9300 + Math.floor(Math.random() * 500);
   const profile = await mkdtemp(path.join(tmpdir(), 'cifro-sw-'));
   const chrome = spawn(chromium.executablePath(), [
@@ -259,7 +260,16 @@ test('service worker executa instalação, cache, mensagens e recuperação offl
         ]);
       }
     });
-    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.addInitScript(() => {
+      const nativeRegister = navigator.serviceWorker.register.bind(navigator.serviceWorker);
+      navigator.serviceWorker.register = (url, options) => String(url).includes('/service-worker.php')
+        ? navigator.serviceWorker.getRegistration().then(registration => registration)
+        : nativeRegister(url, options);
+    });
+    // 'load' e não 'domcontentloaded': com o service worker ativo a página
+    // ainda pode navegar depois do DOM pronto (reconciliação de banda), e o
+    // evaluate abaixo morre com "Execution context was destroyed".
+    await page.reload({ waitUntil: 'load' });
     await page.evaluate(async appOrigin => {
       await fetch('/src/css/theme.css');
       await fetch('/index.php');

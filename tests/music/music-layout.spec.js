@@ -8,7 +8,6 @@ const TOL_Y = 6;
 const TOL_VIEWPORT = 8;
 
 const PAGE_PATH = (id) => `/music.php?id=${id}`;
-const SONG_IDS = Array.from({ length: 100 }, (_, index) => index + 1);
 const CHORD_TOKEN_REGEX = /^[A-G](?:#|b)?(?:m|maj|min|dim|aug|sus|add)?\d{0,2}(?:\([^)]+\))?(?:\/[A-G](?:#|b)?)?$/i;
 
 const VIEWPORTS = [
@@ -93,8 +92,11 @@ test.describe('Music Layout', () => {
 
       await page.setViewportSize({ width: viewport.width, height: viewport.height });
       await fazerLogin(page);
+      const snapshot = await (await page.request.get('/api/sync/data.php')).json();
+      const songIds = snapshot.musicas.map(song => song.id);
+      expect(songIds.length).toBeGreaterThan(0);
 
-      for (const songId of SONG_IDS) {
+      for (const songId of songIds) {
         await page.goto(PAGE_PATH(songId), { waitUntil: 'domcontentloaded' });
 
         if (await ensureAuthenticated(page)) {

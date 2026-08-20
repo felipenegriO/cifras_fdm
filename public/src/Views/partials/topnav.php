@@ -10,7 +10,10 @@ $_isMaster    = function_exists('is_master')            && is_master();
 $_canBands    = function_exists('can_manage_bands')      && can_manage_bands();
 $_planoAtual  = $_bandaAtual['plano'] ?? '';
 $_showUpgrade = in_array($_planoAtual, ['trial', 'gratuito', 'bloqueado'], true);
+$_showHelp    = function_exists('help_center_visible_for_user') && help_center_visible_for_user();
+$_loadHelpAssets = $_showHelp && ($loadHelpAssets ?? true);
 ?>
+<?php if ($_loadHelpAssets): ?><link rel="stylesheet" href="<?= e(asset_url('/src/css/help.css')) ?>"><?php endif; ?>
 <style>
   .topnav {
     position: sticky;
@@ -70,6 +73,17 @@ $_showUpgrade = in_array($_planoAtual, ['trial', 'gratuito', 'bloqueado'], true)
     white-space: nowrap;
   }
   .topnav__link:hover { background: var(--bg-2); color: var(--text-1); }
+  .topnav__badge {
+    display: inline-block;
+    min-width: 1.25em;
+    padding: 0 .35em;
+    border-radius: 999px;
+    background: var(--danger, #c0392b);
+    color: #fff;
+    font-size: .75em;
+    line-height: 1.5;
+    text-align: center;
+  }
 
   .topnav__upgrade {
     display: inline-flex; align-items: center; gap: 6px;
@@ -126,12 +140,47 @@ $_showUpgrade = in_array($_planoAtual, ['trial', 'gratuito', 'bloqueado'], true)
         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
       <?php endif; ?>
     </a>
+    <script>
+    // O nome acima vem de $_SESSION['banda_atual'], gravado no HTML pelo
+    // servidor. Offline isso mente: o service worker guarda UMA cópia de cada
+    // página, chaveada só pelo caminho, tirada com alguma banda corrente — e
+    // ela é servida para qualquer banda que o músico escolher depois. O
+    // repertório continua certo (vem do IndexedDB pelo id da banda); quem
+    // fica para trás é só a moldura.
+    //
+    // Corrigir no cliente, e não no cache, é de propósito: cachear uma página
+    // por banda multiplicaria o armazenamento do palco e recriaria o
+    // problema de contexto perdido que a chave só-por-caminho resolve.
+    // Espera o DOMContentLoaded de propósito: o topnav é incluído no meio da
+    // página e o cifro-sync.js só carrega perto do fim dela, então aqui, no
+    // momento em que este bloco executa, window.cifroSync ainda não existe.
+    (function () {
+      function iniciar() {
+        var chip = document.querySelector('.topnav__band-chip');
+        var nome = chip && chip.querySelector('.band-name');
+        if (!nome || !window.cifroSync || !cifroSync.getBanda) return;
+        function corrigirBanda() {
+          cifroSync.getBanda(window.CIFRO_BAND_ID).then(function (banda) {
+            if (!banda || !banda.nome || nome.textContent === banda.nome) return;
+            nome.textContent = banda.nome;
+            chip.title = banda.nome + (chip.getAttribute('href') === '/select-banda.php' ? ' · trocar banda' : '');
+            var logo = chip.querySelector('.topnav__band-logo');
+            if (logo && banda.logo_url) logo.src = banda.logo_url;
+          }).catch(function () {});
+        }
+        corrigirBanda();
+        document.addEventListener('cifro:sync', corrigirBanda);
+      }
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar);
+      else iniciar();
+    })();
+    </script>
   <?php endif; ?>
 
   <span class="topnav__spacer"></span>
 
 <?php if ($_showUpgrade): ?>
-    <a href="/plano.php#planos" class="topnav__upgrade"
+    <a href="/minha-banda.php?aba=plano#planos" class="topnav__upgrade"
        aria-label="<?= $_planoAtual === 'bloqueado' ? 'Regularizar plano' : 'Fazer upgrade' ?>"
        title="Ver planos">
       <?= $_planoAtual === 'bloqueado' ? 'Regularizar plano' : 'Fazer upgrade' ?>
@@ -142,18 +191,26 @@ $_showUpgrade = in_array($_planoAtual, ['trial', 'gratuito', 'bloqueado'], true)
     <a href="/index.php" class="topnav__link">Início</a>
 
     <?php if ($_canEdit): ?>
-      <a href="/categorias.php" class="topnav__link" data-requires-server>Categorias</a>
       <a href="/src/backend/editor/editor.php" class="topnav__link" data-requires-server>Músicas</a>
       <a href="/src/backend/editor/editorplaylist.php" class="topnav__link">Repertórios</a>
     <?php endif; ?>
 
-    <?php if ($_canUsers): ?>
-      <a href="/users.php" class="topnav__link" data-requires-server>Usuários</a>
+    <?php if ($_canEdit || $_canUsers): ?>
+      <a href="/minha-banda.php" class="topnav__link" data-requires-server>Minha Banda</a>
     <?php endif; ?>
 
     <?php if ($_canBands): ?>
       <a href="/bandas.php" class="topnav__link" data-requires-server>Bandas</a>
     <?php endif; ?>
+
+    <?php if ($_showHelp): ?>
+      <a href="<?= e(base_url('/ajuda.php')) ?>" class="topnav__link" data-help-entry aria-label="Central de Ajuda" title="Central de Ajuda">Ajuda</a>
+    <?php endif; ?>
+
+    <a href="/pendencias.php" class="topnav__link" data-capo-pendencias-link hidden
+       aria-label="Pendências de capotraste" title="Pendências de capotraste">
+      Capotraste <span class="topnav__badge" data-capo-pendencias hidden>0</span>
+    </a>
 
     <a href="/config.php" class="topnav__link" aria-label="Configurações" title="Configurações">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -212,8 +269,8 @@ $_showUpgrade = in_array($_planoAtual, ['trial', 'gratuito', 'bloqueado'], true)
   }
   #menucloseButton {
     position: absolute;
-    top: 8px; left: 8px;
-    width: 40px; height: 40px;
+    top: 6px; left: 6px;
+    width: 44px; height: 44px;
     padding: 0;
     border: 0;
     border-radius: var(--radius-sm);
@@ -283,7 +340,7 @@ $_showUpgrade = in_array($_planoAtual, ['trial', 'gratuito', 'bloqueado'], true)
   <h2>Menu</h2>
   <nav class="sidemenu-nav" aria-label="Navegação principal">
     <?php if ($_showUpgrade): ?>
-    <a href="/plano.php#planos" class="topnav__upgrade sidemenu-nav__upgrade"
+    <a href="/minha-banda.php?aba=plano#planos" class="topnav__upgrade sidemenu-nav__upgrade"
        aria-label="<?= $_planoAtual === 'bloqueado' ? 'Regularizar plano' : 'Fazer upgrade' ?>">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
       <?= $_planoAtual === 'bloqueado' ? 'Regularizar plano' : 'Fazer upgrade' ?>
@@ -297,10 +354,6 @@ $_showUpgrade = in_array($_planoAtual, ['trial', 'gratuito', 'bloqueado'], true)
     </a>
 
     <?php if ($_canEdit): ?>
-    <a href="/categorias.php" class="sidemenu-nav__item" data-requires-server>
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-      Categorias
-    </a>
     <a href="/src/backend/editor/editor.php" class="sidemenu-nav__item" data-requires-server>
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
       Músicas
@@ -311,10 +364,10 @@ $_showUpgrade = in_array($_planoAtual, ['trial', 'gratuito', 'bloqueado'], true)
     </a>
     <?php endif; ?>
 
-    <?php if ($_canUsers): ?>
-    <a href="/users.php" class="sidemenu-nav__item" data-requires-server>
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-      Usuários
+    <?php if ($_canEdit || $_canUsers): ?>
+    <a href="/minha-banda.php" class="sidemenu-nav__item" data-requires-server>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20a8 8 0 1 0 0-16 8 8 0 0 0 0 16z"/><path d="M12 8v4l3 2"/></svg>
+      Minha Banda
     </a>
     <?php endif; ?>
 
@@ -326,6 +379,18 @@ $_showUpgrade = in_array($_planoAtual, ['trial', 'gratuito', 'bloqueado'], true)
     <?php endif; ?>
 
     <div class="sidemenu-nav__section-label">Conta</div>
+
+    <?php if ($_showHelp): ?>
+    <a href="<?= e(base_url('/ajuda.php')) ?>" class="sidemenu-nav__item" data-help-entry>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 1 1 5.3 1.9c-1.4 1-2.4 1.6-2.4 3.1"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+      Ajuda
+    </a>
+    <?php endif; ?>
+
+    <a href="/pendencias.php" class="sidemenu-nav__item" data-capo-pendencias-link hidden>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 9v4"/><path d="M12 17h.01"/><circle cx="12" cy="12" r="10"/></svg>
+      Capotraste <span class="topnav__badge" data-capo-pendencias hidden>0</span>
+    </a>
 
     <a href="/config.php" class="sidemenu-nav__item">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
@@ -414,3 +479,10 @@ $_showUpgrade = in_array($_planoAtual, ['trial', 'gratuito', 'bloqueado'], true)
     });
   })();
 </script>
+<?php if ($_loadHelpAssets): ?>
+<script>
+  window.CIFRO_HELP_ENABLED = true;
+  window.CIFRO_HELP_DISABLED = false;
+</script>
+<script src="<?= e(asset_url('/src/js/cifro-help.js')) ?>" defer></script>
+<?php endif; ?>

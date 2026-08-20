@@ -112,4 +112,39 @@ final class AuthServiceTest extends TestCase
         self::assertNull($result['user']);
         self::assertSame('Usuário ou senha inválidos.', $result['error']);
     }
+
+    // ---- motivoParaRecusarConta: barreiras que valem para QUALQUER forma de
+    // autenticar, inclusive o login por token "lembrar-me" ----
+
+    public function testContaAtivaSemValidadeNaoTemMotivoDeRecusa(): void
+    {
+        $service = new AuthService($this->createMock(UserRepository::class));
+        self::assertNull($service->motivoParaRecusarConta([
+            'ativo' => 1, 'perfil' => 'usuario', 'validade' => '',
+        ]));
+    }
+
+    public function testContaDesativadaEhRecusada(): void
+    {
+        $service = new AuthService($this->createMock(UserRepository::class));
+        self::assertSame('Usuário inativo.', $service->motivoParaRecusarConta([
+            'ativo' => 0, 'perfil' => 'usuario', 'validade' => '',
+        ]));
+    }
+
+    public function testUsuarioTemporarioVencidoEhRecusado(): void
+    {
+        $service = new AuthService($this->createMock(UserRepository::class));
+        self::assertSame('Usuario temporario expirado.', $service->motivoParaRecusarConta([
+            'ativo' => 1, 'perfil' => 'usuario', 'validade' => '2020-01-01',
+        ]));
+    }
+
+    public function testExternoSemValidadeEhRecusado(): void
+    {
+        $service = new AuthService($this->createMock(UserRepository::class));
+        self::assertSame('Usuario externo sem validade configurada.', $service->motivoParaRecusarConta([
+            'ativo' => 1, 'perfil' => 'externo', 'validade' => '',
+        ]));
+    }
 }

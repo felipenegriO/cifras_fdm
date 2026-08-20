@@ -8,7 +8,6 @@ import { test, expect } from '../fixtures/coverage.js';
 test.use({ storageState: 'tests/.auth/user.json' });
 
 const PROTECTED_ROUTES = [
-  '/index.php',
   '/config.php',
   '/users.php',
   '/roteiro.php',

@@ -11,6 +11,17 @@
         <env name="APP_ENV" value="test" force="true"/>
         <env name="OPENSSL_CONF" value="C:\xampp\apache\conf\openssl.cnf" force="true"/>
     </php>
+    <!-- Os testes marcados com @group integration abrem conexões SMTP REAIS
+         contra o servidor de produção. Rodá-los na suíte padrão fazia cada
+         execução autenticar 8 vezes em smtp.hostinger.com — repetido dezenas
+         de vezes num dia de trabalho, isso é indistinguível de abuso e leva a
+         conta de e-mail à suspensão. Rode-os sob demanda: npm run test:integration -->
+    <groups>
+        <exclude>
+            <group>integration</group>
+        </exclude>
+    </groups>
+
     <testsuites>
         <testsuite name="unit">
             <directory>tests/php</directory>

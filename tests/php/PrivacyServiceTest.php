@@ -20,7 +20,20 @@ final class PrivacyServiceTest extends TestCase
         $this->pdo->exec("INSERT INTO usuarios VALUES ('u1','Ana','ana@example.com','usuario',1,NULL,'{\"tema\":\"dark\"}','2026-01-01','segredo')");
         $this->pdo->exec("INSERT INTO bandas VALUES ('b1','Banda 1')");
         $this->pdo->exec("INSERT INTO usuario_banda VALUES ('u1','b1','administrador')");
+        $this->pdo->exec('CREATE TABLE musicas (id INTEGER PRIMARY KEY, banda_id TEXT, nome TEXT)');
+        $this->pdo->exec('CREATE TABLE usuario_musica (usuario_id TEXT, banda_id TEXT, musica_id INTEGER, transposicao_instrumento INTEGER, base_transposicao INTEGER, base_tom TEXT, FOREIGN KEY(usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE)');
         $this->pdo->exec("INSERT INTO user_legal_acceptances VALUES ('u1','v1','v2','2026-01-02')");
+        $this->pdo->exec("INSERT INTO musicas VALUES (7,'b1','Música da Ana')");
+        $this->pdo->exec("INSERT INTO usuario_musica VALUES ('u1','b1',7,3,0,'D')");
+    }
+
+    public function testExportacaoIncluiAsPersonalizacoesDoMusico(): void
+    {
+        $data = (new PrivacyService($this->pdo))->exportAccount('u1');
+
+        self::assertCount(1, $data['personalizacoes_de_musica']);
+        self::assertSame('Música da Ana', $data['personalizacoes_de_musica'][0]['musica']);
+        self::assertSame(3, (int) $data['personalizacoes_de_musica'][0]['transposicao_instrumento']);
     }
 
     public function testExportaSomenteDadosSegurosDaConta(): void

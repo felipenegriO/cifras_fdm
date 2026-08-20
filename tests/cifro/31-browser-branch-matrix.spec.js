@@ -1504,16 +1504,23 @@ test('categorias trata respostas vazias e falhas reais da API', async ({ page })
     await load('/src/js/categorias.js');
     await new Promise(resolve => setTimeout(resolve, 20));
     const emptyText = document.getElementById('categoryList').textContent;
+    const onboarding = document.getElementById('categoryOnboarding');
+    const onboardingHidden = onboarding.hidden;
+    const onboardingText = onboarding.textContent;
     window.fetch = original.fetch;
     window.cifroToast = original.cifroToast;
     window.cifroSync = original.cifroSync;
     window.cifroConfirm = original.cifroConfirm;
-    return { calls, text, emptyText };
+    return { calls, text, emptyText, onboardingHidden, onboardingText };
   });
 
   expect(result.calls.some(call => call.method === 'POST' && call.body.includes('Falha'))).toBe(true);
   expect(result.text).toContain('Cobertura');
-  expect(result.emptyText).toContain('Nenhuma categoria cadastrada');
+  // Lista vazia não repete a mensagem em .category-list: quem representa
+  // "nenhuma categoria" agora é o bloco de onboarding (kits de sugestão).
+  expect(result.emptyText).toBe('');
+  expect(result.onboardingHidden).toBe(false);
+  expect(result.onboardingText).toContain('Organize as músicas do seu jeito');
 });
 
 test('roteiros.js cobre roteirosSalvos indefinida e ausência de id na URL', async ({ page }) => {

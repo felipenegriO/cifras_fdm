@@ -18,8 +18,19 @@
  *   - reset limpa colunas forçadas e volta ao auto
  */
 import { test, expect } from '../fixtures/coverage.js';
+import { fazerLogin } from '../helpers/auth.js';
+import { dbQuery } from '../helpers/db.js';
 
 test.use({ storageState: 'tests/.auth/user.json' });
+
+// tests/.auth/user.json é compartilhado entre todos os specs; a fixture
+// automática `isolatedSession` (tests/fixtures/coverage.js) chama
+// session_regenerate_id() a cada teste, o que pode invalidar o cookie salvo
+// para quem rodar depois na suíte completa. fazerLogin() é um no-op se a
+// sessão ainda for válida e reloga se não for.
+test.beforeEach(async ({ page }) => {
+  await fazerLogin(page);
+});
 
 const CIFRA_LONGA = `
 <b>C</b>       <b>G</b>       <b>Am</b>      <b>F</b><br>
@@ -40,12 +51,26 @@ Sétima linha de cifra para teste de colunas<br>
 Oitava linha de cifra para teste de colunas<br>
 `.trim();
 
+const BAND_ID = '00000000-0000-4000-8000-000000000002';
+
+async function ensureSession(page) {
+  await fazerLogin(page);
+  dbQuery("UPDATE bandas SET plano='anual' WHERE id=?", [BAND_ID]);
+  const csrf = await getCsrf(page);
+  const response = await page.request.post('/src/backend/bandas/selecionar.php', {
+    data: JSON.stringify({ bandaId: BAND_ID }),
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+  });
+  expect(response.ok(), await response.text()).toBe(true);
+}
+
 async function getCsrf(page) {
   const res = await page.request.get('/api/csrf.php');
   return (await res.json()).csrf_token || '';
 }
 
 async function criarMusica(page, nome, cifra = CIFRA_LONGA) {
+  await ensureSession(page);
   const csrf = await getCsrf(page);
   const res = await page.request.post('/src/backend/editor/api.php', {
     data: JSON.stringify({ action: 'save', nome, artista: 'Teste', cifra, classificacao: '', bit: '' }),
@@ -57,6 +82,7 @@ async function criarMusica(page, nome, cifra = CIFRA_LONGA) {
 }
 
 async function deletarMusica(page, id) {
+  await ensureSession(page);
   const csrf = await getCsrf(page);
   await page.request.post('/src/backend/editor/api.php', {
     data: JSON.stringify({ action: 'delete', id }),
@@ -731,20 +757,19 @@ test.describe('Tela cheia automática ao abrir música (music.php)', () => {
     expect(display).not.toBe('none');
   });
 
-  test('cifro-presentation.js não é mais carregado na página', async ({ page }) => {
+  test('modo apresentação permanece disponível na página', async ({ page }) => {
     await page.goto(`/music.php?id=${encodeURIComponent(id)}`, { waitUntil: 'domcontentloaded' });
     const hasPresentationScript = await page.evaluate(() => typeof window.cifroPresentation !== 'undefined');
-    expect(hasPresentationScript).toBe(false);
+    expect(hasPresentationScript).toBe(true);
   });
 
-  test('cifra tem max-width aplicado por padrão (sem modo especial)', async ({ page }) => {
+  test('cifra usa toda a largura disponível no layout responsivo', async ({ page }) => {
     await page.goto(`/music.php?id=${encodeURIComponent(id)}`, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('#song-cifra', { state: 'visible' });
     const maxWidth = await page.locator('#song-cifra').evaluate(el =>
       window.getComputedStyle(el).maxWidth
     );
-    // max-width: 760px aplicado via CSS
-    expect(maxWidth).toBe('760px');
+    expect(maxWidth).toBe('none');
   });
 });
 

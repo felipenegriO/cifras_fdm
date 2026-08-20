@@ -60,15 +60,12 @@ CREATE TABLE IF NOT EXISTS usuarios (
   plano      ENUM('trial','ativo','bloqueado') NOT NULL DEFAULT 'ativo',
   trial_expira_em DATE    DEFAULT NULL,
   config     JSON         DEFAULT NULL,
+  google_sub VARCHAR(255) DEFAULT NULL,
   criado_em  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
-  UNIQUE KEY uq_email (email)
+  UNIQUE KEY uq_email (email),
+  UNIQUE KEY uq_google_sub (google_sub)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- Google account linking (one-time migration; re-running on an existing DB
--- that already has this column/key errors — apply once per environment)
-ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS google_sub VARCHAR(255) DEFAULT NULL;
-ALTER TABLE usuarios ADD UNIQUE KEY IF NOT EXISTS uq_google_sub (google_sub);
 
 -- Vínculo usuário ↔ banda
 CREATE TABLE IF NOT EXISTS usuario_banda (
@@ -96,18 +93,6 @@ CREATE TABLE IF NOT EXISTS user_legal_acceptances (
   FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-CREATE TABLE IF NOT EXISTS user_legal_acceptances (
-  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  usuario_id CHAR(36) NOT NULL,
-  terms_version VARCHAR(40) NOT NULL,
-  privacy_version VARCHAR(40) NOT NULL,
-  accepted_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  ip_hash CHAR(64) DEFAULT NULL,
-  PRIMARY KEY (id),
-  INDEX idx_legal_acceptance_user (usuario_id),
-  FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
 -- Músicas
 CREATE TABLE IF NOT EXISTS musicas (
   id           INT          NOT NULL AUTO_INCREMENT,
@@ -118,12 +103,33 @@ CREATE TABLE IF NOT EXISTS musicas (
   cifra        MEDIUMTEXT   DEFAULT NULL,
   bit          VARCHAR(50)  NOT NULL DEFAULT '',
   source_url   VARCHAR(2048) DEFAULT NULL,
+  -- Capotraste/transpose sugerido: quanto o instrumento sobe em relação às
+  -- formas mostradas. A cifra em si fica sempre no tom soante.
+  transposicao_instrumento TINYINT NOT NULL DEFAULT 0,
   atualizado_em TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   FOREIGN KEY (banda_id) REFERENCES bandas(id) ON DELETE CASCADE,
   INDEX idx_musicas_banda (banda_id),
   INDEX idx_musicas_banda_atualizado (banda_id, atualizado_em),
   INDEX idx_musicas_banda_classificacao (banda_id, classificacao)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Personalização do músico sobre a música da banda. As colunas base_* são o
+-- merge base: a foto do cadastro no instante em que o músico escolheu, para
+-- distinguir "o cadastro não mudou" de "mudou e eu tinha personalizado".
+CREATE TABLE IF NOT EXISTS usuario_musica (
+  usuario_id  CHAR(36) NOT NULL,
+  banda_id    CHAR(36) NOT NULL,
+  musica_id   INT      NOT NULL,
+  transposicao_instrumento TINYINT    DEFAULT NULL,
+  base_transposicao        TINYINT    DEFAULT NULL,
+  base_tom                 VARCHAR(8) DEFAULT NULL,
+  atualizado_em TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (usuario_id, musica_id),
+  FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE,
+  FOREIGN KEY (musica_id)  REFERENCES musicas(id)  ON DELETE CASCADE,
+  FOREIGN KEY (banda_id)   REFERENCES bandas(id)   ON DELETE CASCADE,
+  INDEX idx_usuario_musica_banda (usuario_id, banda_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Categorias de músicas por banda
@@ -193,6 +199,41 @@ CREATE TABLE IF NOT EXISTS password_reset_tokens (
   FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- Tokens "lembrar-me": mantêm o músico logado entre sessões do navegador.
+-- Só o hash do validador é guardado; o valor em claro vive apenas no cookie.
+CREATE TABLE IF NOT EXISTS auth_tokens (
+  seletor        CHAR(32)  NOT NULL,
+  validador_hash CHAR(64)  NOT NULL,
+  validador_anterior_hash CHAR(64) NULL,
+  rotacionado_em TIMESTAMP NULL,
+  usuario_id     CHAR(36)  NOT NULL,
+  criado_em      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  expira_em      DATETIME  NOT NULL,
+  usado_em       TIMESTAMP NULL,
+  PRIMARY KEY (seletor),
+  KEY idx_usuario (usuario_id),
+  KEY idx_expira (expira_em),
+  FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Convite da banda por link compartilhável (ROLE-003). Guarda só o SHA-256 do
+-- token; o valor em claro existe apenas dentro do link que circula no grupo,
+-- mesmo padrão de password_reset_tokens.
+CREATE TABLE IF NOT EXISTS banda_convites (
+  token       CHAR(64)  NOT NULL,
+  banda_id    CHAR(36)  NOT NULL,
+  criado_por  CHAR(36)  DEFAULT NULL,
+  expira_em   DATETIME  NOT NULL,
+  revogado_em DATETIME  DEFAULT NULL,
+  usos        INT       NOT NULL DEFAULT 0,
+  criado_em   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (token),
+  KEY idx_convite_banda (banda_id),
+  KEY idx_convite_expira (expira_em),
+  FOREIGN KEY (banda_id)   REFERENCES bandas(id)   ON DELETE CASCADE,
+  FOREIGN KEY (criado_por) REFERENCES usuarios(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE IF NOT EXISTS stripe_webhook_events (
   event_id VARCHAR(255) PRIMARY KEY,
   event_type VARCHAR(120) NOT NULL,
@@ -223,13 +264,3 @@ CREATE TABLE IF NOT EXISTS app_error_logs (
   INDEX idx_app_error_logs_criado (criado_em),
   INDEX idx_app_error_logs_nivel (nivel)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- ── Migração de planos: executar em bases já existentes ──────────────────────
-UPDATE bandas SET plano = 'gratuito', trial_expira_em = NULL WHERE plano = 'trial';
-ALTER TABLE bandas MODIFY COLUMN plano ENUM('trial','gratuito','mensal','semestral','anual','bloqueado','ativo','basico','banda') NOT NULL DEFAULT 'gratuito';
-
--- ── Cancelamento self-service: executar em bases já existentes ───────────────
-ALTER TABLE bandas ADD COLUMN cancelamento_agendado_em DATETIME DEFAULT NULL;
-
--- ── Membro de banda sem e-mail: executar em bases já existentes ──────────────
-ALTER TABLE usuarios MODIFY COLUMN email VARCHAR(180) DEFAULT NULL;

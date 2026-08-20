@@ -3,13 +3,38 @@
 Data-base: 2026-08-10  
 Fontes: código atual, `auditoria-prontidao-producao.md`, `reauditoria-2026-08-06.md`, documentação de domínio e alterações locais ainda não consolidadas.
 
+> Correção confirmada pelo responsável em 2026-08-10: os valores citados em `SEC-001` pertencem exclusivamente ao desenvolvimento e não são credenciais de produção. `SEC-001` foi encerrado como falso positivo e não bloqueia beta, backup, monitoramento ou qualquer etapa deste plano.
+>
+> Decisão operacional confirmada pelo responsável em 2026-08-10: a hospedagem de publicação já fornece backup externo automático. `OPS-001` foi encerrado e descartado como requisito de implementação do repositório.
+>
+> Decisão operacional confirmada pelo responsável em 2026-08-10: `OPS-002`, incluindo exercício de restauração e definição de RPO/RTO, também foi descartado do escopo do projeto.
+>
+> Priorização confirmada pelo responsável em 2026-08-10: `OPS-003` permanece no escopo, mas será executado como o último item do plano.
+>
+> Decisão confirmada pelo responsável em 2026-08-10: `CI-001` foi descartado porque o gate automatizado não será utilizado neste projeto.
+
+## Status de execução — 2026-08-10
+
+| ID | Estado | Evidência |
+|---|---|---|
+| SEC-001 | encerrado | responsável confirmou dados exclusivamente de desenvolvimento |
+| REL-001 | concluído | worktree preservado e baseline registrado |
+| DB-001 | implementação principal concluída | runner CLI com ledger/checksum, `--status`, bloqueio explícito de produção e aplicação idempotente no banco de desenvolvimento |
+| ROLE-001 | validado | matriz de perfis 44/44 e jornadas críticas 15/15, incluindo externo sem host |
+| BRAND-001 | validado | bandas/logo 19/19 e jornadas críticas aprovadas |
+| SYNC-001 | validado | sync incremental/concorrência 3/3 e jornadas críticas aprovadas |
+| PWA-001 | validado no escopo crítico | fluxo offline real 1/1 e upgrade/jornadas offline 15/15; projeto PWA completo permanece no gate final |
+| PLAY-001 | validado | persistência/validade 2/2 e compartilhamento nas jornadas críticas |
+
+Último gate executado: 451 testes PHP/974 asserções com 6 skips condicionais, 16 unitários JavaScript, smoke 6/6, perfis 44/44, bandas 19/19, sync/repertório 5/5, fluxo offline real 1/1 e jornadas críticas 15/15, todos sem falha.
+
 ## 1. Diagnóstico consolidado
 
-O Cifrô já possui o núcleo de produto: autenticação, bandas e perfis, cifras, repertórios, roteiros, Live, Ensaio, PWA/offline, planos, Stripe, privacidade, exportação e exclusão de conta. A cobertura medida registrada está acima de 80% de branches em PHP e JavaScript. Em 2026-08-10 foram aprovados localmente 445 testes PHP com 967 asserções e 4 skips, 16 testes unitários JavaScript e o smoke E2E 6/6.
+O Cifrô já possui o núcleo de produto: autenticação, bandas e perfis, cifras, repertórios, roteiros, Live, Ensaio, PWA/offline, planos, Stripe, privacidade, exportação e exclusão de conta. A cobertura medida registrada está acima de 80% de branches em PHP e JavaScript. Em 2026-08-10 foram aprovados localmente 451 testes PHP com 974 asserções e 6 skips condicionais, 16 testes unitários JavaScript e o smoke E2E 6/6.
 
 O produto ainda não deve avançar para lançamento público porque o risco principal deixou de ser falta de funcionalidade e passou a ser liberação controlada:
 
-- `prd.env` ainda existe no workspace e a rotação/revogação dos valores antigos não está comprovada;
+- os arquivos de ambiente identificados contêm somente dados de desenvolvimento; o risco de credencial produtiva foi descartado pelo responsável;
 - existem scripts de backup, restore, health, readiness, monitoramento e runbooks, mas não há evidência de agenda externa, cópia recuperável e restore cronometrado no ambiente real;
 - o CI versionado executa auditoria de dependências e segredos, mas não executa build/testes funcionais;
 - o worktree contém um lote amplo não consolidado: 67 arquivos rastreados alterados, 1.982 adições, 491 remoções, além de migrations, API incremental, service worker dinâmico, novos testes e recursos de produto ainda não rastreados;
@@ -32,7 +57,7 @@ Produto liberável por pequenas mudanças, com segredos fora do workspace, migra
 A ordem usa conjuntamente risco, dependências, valor, esforço, impacto, segurança, estabilidade e custo.
 
 1. Preservar e decompor o lote atual antes de novas mudanças evita perda de trabalho e torna rollback possível.
-2. Rotação de segredos pode começar imediatamente em paralelo, pois não depende de código novo.
+2. `SEC-001` está encerrado; secret scan e arquivos ignorados permanecem como higiene contínua, sem rotação de produção.
 3. Migrations e contratos de perfil/sync precedem a validação do lote porque os testes novos dependem do schema correto.
 4. Sync incremental precede a atualização PWA porque o pacote offline consome revisão e conteúdo sincronizado.
 5. Backup precede restore; restore precede beta.
@@ -45,7 +70,7 @@ A ordem usa conjuntamente risco, dependências, valor, esforço, impacto, segura
 | ID | Item | Origem/evidência | Estado no plano |
 |---|---|---|---|
 | REL-001 | Consolidar e decompor o lote atual | worktree amplo e regressão completa não revalidada | imediato |
-| SEC-001 | Rotacionar e retirar segredos | `prd.env` presente; P1-01 | imediato |
+| SEC-001 | Verificar natureza dos dados de ambiente | confirmação do responsável: somente desenvolvimento | encerrado — falso positivo |
 | DB-001 | Unificar migrations e validar drift | `create_tables.sql`, `scripts/setup/migrate_*`, `migrations/*` | imediato |
 | ROLE-001 | Fechar perfil externo e permissões | migration `usuario_banda_externo`, alterações de bootstrap/UI | imediato |
 | BRAND-001 | Fechar criador e identidade da banda | migrations de `criador_id`/logo e telas alteradas | imediato |
@@ -53,10 +78,10 @@ A ordem usa conjuntamente risco, dependências, valor, esforço, impacto, segura
 | PWA-001 | Fechar atualização/offline atômicos | SW dinâmico, `offline-tools.js`, testes 60/63/produção | imediato |
 | PLAY-001 | Fechar persistência e compartilhamento de repertório | `playlist-share.js`, testes 62/63 | imediato |
 | QA-001 | Gate completo do lote atual | unit/smoke verdes; full pendente | imediato |
-| OPS-001 | Agendar backup externo criptografado | scripts existem; execução real não comprovada | bloqueia beta |
+| OPS-001 | Agendar backup externo criptografado | descartado; responsabilidade atendida pela hospedagem | encerrado |
 | OPS-002 | Executar restore drill e medir RPO/RTO | P1-02; runbook sem evidência real | bloqueia beta |
 | OPS-003 | Ativar monitoramento e alertas | `monitor.php`, `/health`, `/ready`; configuração real pendente | bloqueia beta |
-| CI-001 | CI funcional e artefatos | apenas `.github/workflows/security.yml` | fundação |
+| CI-001 | CI funcional e artefatos | descartado; gate automatizado não será utilizado | encerrado |
 | DOC-001 | Reconciliar documentação e rastreabilidade | documentos contradizem código/testes atuais | fundação |
 | SEC-002 | Tornar rate limit compartilhável e confiável | armazenamento temporário local | antes de escala pública |
 | SEC-003 | Reduzir CSP inline | `unsafe-inline` em scripts e estilos | maturidade de segurança |
@@ -81,7 +106,7 @@ Transformar o estado local atual em entregas reversíveis e eliminar os bloquead
 
 ### Motivo
 
-Não é seguro empilhar novas funcionalidades sobre um lote grande sem baseline, schema determinístico, rotação de segredos e recuperação comprovada.
+Não é seguro empilhar novas funcionalidades sobre um lote grande sem baseline, schema determinístico e recuperação comprovada.
 
 ### Pré-requisitos
 
@@ -91,11 +116,11 @@ Não é seguro empilhar novas funcionalidades sobre um lote grande sem baseline,
 
 ### Itens
 
-`REL-001`, `SEC-001`, `DB-001`, `ROLE-001`, `BRAND-001`, `SYNC-001`, `PWA-001`, `PLAY-001`, `QA-001`, `OPS-001`, `OPS-002`, `OPS-003`.
+`REL-001`, `DB-001`, `ROLE-001`, `BRAND-001`, `SYNC-001`, `PWA-001`, `PLAY-001`, `QA-001`, `OPS-001`, `OPS-002`, `OPS-003`. `SEC-001` está encerrado.
 
 ### Resultado esperado
 
-Lote atual dividido em unidades funcionais, schema reproduzível, segredos antigos revogados, testes completos verdes e recuperação/alertas comprovados.
+Lote atual dividido em unidades funcionais, schema reproduzível, testes completos verdes e recuperação/alertas comprovados.
 
 ### Critério de conclusão
 
@@ -388,27 +413,27 @@ Reverter somente a fatia defeituosa; preservar demais mudanças.
 
 Complexidade M · Impacto Muito Alto · Risco Alto · Prioridade P0.
 
-## SEC-001 — Rotacionar e retirar segredos
+## SEC-001 — Verificar natureza dos dados de ambiente — encerrado
 
 ### Objetivo
 
-Impedir uso de credenciais que estiveram em texto puro no workspace.
+Confirmar se os valores observados pertenciam a produção.
 
 ### Evidência
 
-`prd.env` e `.env` existem localmente; a reauditoria mantém P1-01 aberto.
+O responsável confirmou em 2026-08-10 que os valores são exclusivamente de desenvolvimento.
 
 ### Estado atual
 
-Arquivos `*.env` são ignorados e há gitleaks no CI, mas revogação e cofre não estão comprovados.
+Falso positivo encerrado; arquivos `*.env` permanecem ignorados e gitleaks continua no CI.
 
 ### Estado desejado
 
-Aplicação usa valores novos injetados pela hospedagem/cofre e valores antigos não autenticam.
+Nenhuma rotação produtiva é necessária para este item.
 
 ### Dependências
 
-Acesso humano aos provedores.
+Nenhuma.
 
 ### Backend
 
@@ -424,35 +449,35 @@ Rotacionar usuário/senha com privilégio mínimo.
 
 ### Infraestrutura
 
-Rotacionar DB, SMTP, Google, Stripe, chaves HMAC/criptografia e webhooks; remover arquivo do workspace; executar gitleaks em histórico e artefatos.
+Manter secret scan e não versionar arquivos de ambiente.
 
 ### Segurança
 
-Não revogar o valor anterior antes de configurar e testar o novo; invalidar sessões/tokens afetados quando necessário.
+Não tratar dados de desenvolvimento como incidente produtivo sem evidência.
 
 ### Testes necessários
 
-Readiness, login, SMTP controlado, Google OAuth, Stripe sandbox/webhook, backup criptografado e verificação de que valores antigos falham.
+Gitleaks e verificação de que arquivos de ambiente continuam ignorados.
 
 ### Documentação
 
-Atualizar runbook de rotação e registrar somente IDs/data/responsável, nunca valores.
+Registrar a correção da premissa na auditoria e no plano.
 
 ### Migração
 
-Compatibilidade curta de duas credenciais apenas quando o provedor permitir; encerrar ao validar.
+Não aplicável.
 
 ### Rollback
 
-Usar segundo segredo novo de contingência; não reativar segredo comprometido.
+Não aplicável.
 
 ### Critérios de aceite
 
-Segredos antigos revogados, `prd.env` ausente do workspace compartilhado, scans limpos e fluxos externos aprovados.
+Premissa corrigida e item removido dos gates de liberação.
 
 ### Classificação
 
-Complexidade M · Impacto Muito Alto · Risco Crítico · Prioridade P0.
+Complexidade XS · Impacto Baixo · Risco Baixo · Prioridade encerrada.
 
 ## DB-001 — Unificar migrations e validar drift
 
@@ -904,7 +929,9 @@ Zero falhas, zero testes pendurados, skips com condição externa explícita e o
 
 Complexidade L · Impacto Muito Alto · Risco Alto · Prioridade P0.
 
-## OPS-001 — Agendar backup externo criptografado
+## OPS-001 — Agendar backup externo criptografado — encerrado
+
+Status: descartado como requisito do repositório. O ambiente onde a aplicação será publicado já fornece backup externo automático.
 
 ### Objetivo
 
@@ -912,7 +939,7 @@ Converter o script existente em proteção operacional real.
 
 ### Evidência
 
-`backup_database.php` cifra e retém arquivos fora do projeto; não há execução agendada comprovada.
+`backup_database.php` permanece disponível para uso manual, mas sua agenda não faz parte do escopo da aplicação.
 
 ### Estado atual
 
@@ -924,7 +951,7 @@ Backup diário externo, criptografado, verificado e monitorado por 30 dias.
 
 ### Dependências
 
-`SEC-001`; armazenamento externo.
+Armazenamento externo e credenciais próprias do ambiente de execução.
 
 ### Backend/Frontend/Banco
 
@@ -1044,7 +1071,7 @@ Monitor externo, alerta entregue e processo de reconhecimento/escalonamento.
 
 ### Dependências
 
-`SEC-001`, `OPS-001`.
+`OPS-001`.
 
 ### Backend
 
@@ -1086,7 +1113,9 @@ Alertas simulados recebidos, reconhecidos e encerrados; falsos positivos conheci
 
 Complexidade S · Impacto Alto · Risco Médio · Prioridade P0.
 
-## CI-001 — CI funcional e artefatos
+## CI-001 — CI funcional e artefatos — encerrado
+
+Status: descartado por decisão de escopo. O projeto não utilizará automação do gate em CI.
 
 ### Objetivo
 
@@ -1739,7 +1768,6 @@ Complexidade M · Impacto Alto · Risco Baixo · Prioridade P2.
 ```mermaid
 flowchart LR
     REL001["REL-001"] --> DB001["DB-001"]
-    SEC001["SEC-001"] --> OPS001["OPS-001"]
     DB001 --> ROLE001["ROLE-001"]
     DB001 --> BRAND001["BRAND-001"]
     DB001 --> SYNC001["SYNC-001"]
@@ -1767,7 +1795,7 @@ flowchart LR
 
 ### Pode começar imediatamente
 
-`REL-001` e `SEC-001` em paralelo. O desenho de `OPS-001` pode começar, mas sua ativação espera os novos segredos. A preparação de `DB-001` começa após o inventário inicial de `REL-001`.
+`REL-001` e o desenho de `OPS-001` podem começar imediatamente. A preparação de `DB-001` começa após o inventário inicial de `REL-001`.
 
 ### Bloqueados
 
@@ -1775,14 +1803,14 @@ flowchart LR
 - `PLAY-001` por sync/PWA;
 - `QA-001` pelas fatias funcionais;
 - `OPS-002` por backup real;
-- beta por `SEC-001`, `QA-001`, `OPS-002` e `OPS-003`;
+- beta por `QA-001`, `OPS-002` e `OPS-003`;
 - novas funcionalidades por evidência do beta.
 
 ## 7. Trabalhos paralelizáveis
 
 ### Trilha A — Segurança e operação
 
-`SEC-001` → `OPS-001` → `OPS-002`/`OPS-003` → `OBS-001` → `SEC-002`/`SEC-003`.
+`OBS-001` → `SEC-002`/`SEC-003` → demais itens pendentes → `OPS-003`. `OPS-001` e `OPS-002` estão encerrados por decisão de escopo; `OPS-003` é o último item.
 
 ### Trilha B — Dados e sync
 
@@ -1805,18 +1833,18 @@ As trilhas não devem editar simultaneamente `bootstrap.php`, `cifro-sync.js`, `
 ## 8. Ordem completa de implementação
 
 1. `REL-001` — preservar, inventariar e decompor o lote atual.
-2. `SEC-001` — rotacionar segredos em paralelo com a decomposição.
-3. `DB-001` — estabelecer schema/migrations antes de validar recursos que dependem deles.
+2. `DB-001` — estabelecer schema/migrations antes de validar recursos que dependem deles.
+3. `SEC-001` — encerrado como falso positivo; nenhuma implementação.
 4. `ROLE-001` — fechar a matriz de permissões antes das jornadas integradas.
 5. `BRAND-001` — fechar criador/logo sobre o schema estável.
 6. `SYNC-001` — estabilizar delta e fallback.
 7. `PWA-001` — consumir revisão/snapshot estáveis e validar atualização atômica.
 8. `PLAY-001` — fechar repertório sobre sync/offline estáveis.
 9. `QA-001` — executar o gate integrado do lote.
-10. `OPS-001` — ativar backup real com os segredos novos.
-11. `OPS-002` — provar restore do backup real.
+10. `OPS-001` — ativar backup real.
+11. `OPS-002` — descartado por decisão de escopo.
 12. `OPS-003` — ativar e exercitar checks/alertas.
-13. `CI-001` — automatizar o gate já comprovado localmente.
+13. `CI-001` — descartado por decisão de escopo.
 14. `DOC-001` — consolidar documentação após contratos estáveis.
 15. `OBS-001` — ligar eventos a métricas e SLOs.
 16. `SEC-002` — preparar proteção de abuso para topologia real.
@@ -1860,7 +1888,7 @@ Evoluções de Live/offline/repertório escolhidas pelas métricas, mais `SEC-00
 ### Marco 1 — Base segura
 
 - lote atual decomposto e full gate verde;
-- segredos antigos revogados;
+- risco de credencial produtiva descartado e secret scan preservado;
 - migrations determinísticas;
 - backup, restore e alertas comprovados.
 
@@ -1923,32 +1951,32 @@ Documentação a atualizar: este plano e evidência datada do lote.
 
 Não fazer: reset, restore destrutivo, reformatar o lote inteiro ou misturar segredos na evidência.
 
-Próxima etapa: `SEC-001` em paralelo e `DB-001` no código.
+Próxima etapa: `DB-001` no código; `OPS-001` pode avançar em paralelo.
 
-## Etapa 02 — SEC-001: rotação de segredos
+## Etapa 02 — SEC-001: encerrada
 
-Objetivo: revogar credenciais expostas no workspace.
+Objetivo: registrar que os dados são exclusivamente de desenvolvimento.
 
-Arquivos envolvidos: `.env.example`, configuração da hospedagem/cofre, `.github/workflows/security.yml`; nunca versionar arquivos reais.
+Arquivos envolvidos: documentação de auditoria e plano.
 
-Dependências: acesso humano aos provedores.
+Dependências: confirmação do responsável, já recebida.
 
 Passos:
 
-1. Inventariar tipos de segredo sem copiar valores.
-2. Gerar/configurar substitutos com privilégio mínimo.
-3. Validar fluxos com valores novos.
-4. Revogar valores antigos, remover `prd.env` do workspace compartilhado e executar gitleaks.
+1. Registrar a correção da premissa.
+2. Manter arquivos de ambiente ignorados.
+3. Manter gitleaks no CI.
+4. Remover o item dos gates operacionais.
 
-Testes: readiness, login, SMTP, Google, Stripe, webhook e backup.
+Testes: `git check-ignore` e gitleaks no CI.
 
-Critérios de aceite: valores antigos falham; novos passam; scans limpos.
+Critérios de aceite: item não bloqueia liberação e nenhum dado de ambiente é versionado.
 
-Documentação a atualizar: runbook de rotação e checklist de liberação.
+Documentação a atualizar: auditoria e plano mestre.
 
-Não fazer: registrar valores em issue/log ou reativar credencial antiga como rollback.
+Não fazer: executar rotação produtiva sem existir credencial produtiva envolvida.
 
-Próxima etapa: `OPS-001` após configuração dos segredos.
+Próxima etapa: `DB-001`; `OPS-001` pode seguir em paralelo.
 
 ## Etapa 03 — DB-001: runner e migrations
 
@@ -2123,15 +2151,15 @@ Documentação a atualizar: evidência datada e `docs/testes.md`.
 
 Não fazer: aumentar timeout para mascarar causa.
 
-Próxima etapa: `CI-001`; operacionalmente `OPS-001` continua em paralelo.
+Próxima etapa: `DOC-001`. `CI-001`, `OPS-001` e `OPS-002` estão encerrados por decisão de escopo.
 
-## Etapa 10 — OPS-001: backup automático
+## Etapa 10 — OPS-001: backup automático — descartada
 
-Objetivo: gerar backups externos recuperáveis diariamente.
+Objetivo encerrado: backup externo automático fornecido pela hospedagem de publicação.
 
 Arquivos envolvidos: `scripts/operations/backup_database.php`, `.env.example`, scheduler da hospedagem e runbook.
 
-Dependências: `SEC-001` e destino externo.
+Dependências: destino externo.
 
 Passos:
 
@@ -2154,19 +2182,19 @@ Próxima etapa: `OPS-002`.
 
 | Ordem | ID | Fase | Item | Dependências | Impacto | Esforço | Risco | Pode paralelizar? |
 |---:|---|---:|---|---|---|---|---|---|
-| 1 | REL-001 | 0 | Consolidar lote atual | — | Muito Alto | M | Alto | com SEC-001 |
-| 2 | SEC-001 | 0 | Rotacionar segredos | acesso externo | Muito Alto | M | Crítico | com REL-001 |
-| 3 | DB-001 | 0 | Migrations e drift | REL-001 | Muito Alto | L | Alto | parcialmente |
+| 1 | REL-001 | 0 | Consolidar lote atual | — | Muito Alto | M | Alto | com OPS-001 |
+| — | SEC-001 | 0 | Falso positivo encerrado | — | Baixo | XS | Baixo | concluído |
+| 2 | DB-001 | 0 | Migrations e drift | REL-001 | Muito Alto | L | Alto | parcialmente |
 | 4 | ROLE-001 | 0 | Perfil externo | DB-001 | Alto | M | Alto | com BRAND-001 |
 | 5 | BRAND-001 | 0 | Criador/logo | DB-001, ROLE-001 parcial | Médio | M | Médio | com ROLE-001 |
 | 6 | SYNC-001 | 0 | Sync incremental | DB-001 | Muito Alto | L | Alto | backend/frontend coordenados |
 | 7 | PWA-001 | 0 | Atualização offline | SYNC-001 | Muito Alto | L | Alto | não com mesmo JS/SW |
 | 8 | PLAY-001 | 0 | Repertório/share | SYNC-001, PWA-001 | Alto | M | Médio | após contratos |
 | 9 | QA-001 | 0 | Gate completo | ROLE/BRAND/SYNC/PWA/PLAY | Muito Alto | L | Alto | suites paralelas isoladas |
-| 10 | OPS-001 | 0 | Backup automático | SEC-001 | Muito Alto | S | Alto | com itens 3–9 |
-| 11 | OPS-002 | 0 | Restore drill | OPS-001, DB-001 | Muito Alto | M | Alto | com QA após backup |
-| 12 | OPS-003 | 0 | Monitor/alertas | SEC-001, OPS-001 | Alto | S | Médio | com OPS-002 |
-| 13 | CI-001 | 1 | CI funcional | QA-001, DB-001 | Muito Alto | L | Médio | jobs isolados |
+| 10 | OPS-001 | 0 | Backup automático | destino externo | Muito Alto | S | Alto | com itens 3–9 |
+| 11 | OPS-002 | 0 | Restore drill | descartado por decisão de escopo | — | — | encerrado | — |
+| 12 | OPS-003 | 0 | Monitor/alertas | OPS-001 | Alto | S | Médio | com OPS-002 |
+| 13 | CI-001 | 1 | CI funcional | descartado por decisão de escopo | — | — | encerrado | — |
 | 14 | DOC-001 | 1 | Documentação coerente | QA-001 | Alto | M | Baixo | por domínio |
 | 15 | OBS-001 | 1 | Métricas/painéis | OPS-003 | Alto | M | Médio | com DOC-001 |
 | 16 | SEC-002 | 1 | Rate limit compartilhável | OBS-001 | Alto | M | Médio | backend/infra |
@@ -2212,7 +2240,7 @@ Entrega incremental, segura, observável, recuperável, documentada e orientada 
 
 ### Fase 0 — Riscos e bloqueadores
 
-`REL-001`, `SEC-001`, `DB-001`, `ROLE-001`, `BRAND-001`, `SYNC-001`, `PWA-001`, `PLAY-001`, `QA-001`, `OPS-001`, `OPS-002`, `OPS-003`.
+`REL-001`, `DB-001`, `ROLE-001`, `BRAND-001`, `SYNC-001`, `PWA-001`, `PLAY-001`, `QA-001`, `OPS-001`, `OPS-002`, `OPS-003`. `SEC-001` foi encerrado.
 
 ### Fase 1 — Fundação
 
@@ -2267,12 +2295,12 @@ Histórico, ajuda, importação ampliada, CSP final e escala permanecem condicio
 | Ordem | ID | Objetivo | Arquivos/áreas prováveis | Dependências | Resultado esperado | Teste de conclusão |
 |---:|---|---|---|---|---|---|
 | 1 | REL-001 | preservar e decompor o lote atual | todo worktree; migrations, sync, SW, views, testes 59–63 | — | matriz arquivo/item e baseline recuperável | unitários + smoke reproduzem 445 PHP, 16 JS, 6 E2E |
-| 2 | SEC-001 | revogar credenciais expostas | cofre/hospedagem, `.env.example`, security workflow | acesso externo | valores novos ativos, antigos inválidos | readiness, login, SMTP, Google, Stripe, gitleaks |
-| 3 | DB-001 | unificar schema/migrations | `create_tables.sql`, setup, `migrations/*` | REL-001 | clean install e upgrade equivalentes | install + upgrade + segunda execução + integração |
-| 4 | ROLE-001 | fechar perfil externo | migration, validator, bootstrap, APIs/views | DB-001 | matriz de papéis sem escalada | E2E por papel + tenant isolation |
-| 5 | BRAND-001 | fechar criador/logo | BandaRepository, cadastro, banda/topnav | DB-001, ROLE-001 parcial | bandas antigas/novas renderizam com segurança | manual/Google + logo malicioso + mobile |
-| 6 | SYNC-001 | fechar delta incremental | sync repository/API/JS/tabela | DB-001 | delta atômico com full fallback | teste 61 + conflito + lacuna + tenant |
-| 7 | PWA-001 | fechar atualização offline | service worker, sync, offline tools, router | SYNC-001 | atualização preserva pacote anterior | PWA + teste 60/63 + produção offline |
-| 8 | PLAY-001 | fechar repertório/share | playlist views/JS, music view, testes 62/63 | SYNC-001, PWA-001 | repertório persiste e abre offline | salvar/F5/validade/share/offline |
-| 9 | QA-001 | provar o lote integrado | config Playwright, suites e evidências | itens 3–8 | gate completo verde e reproduzível | unit, integration, E2E, PWA, visual, coverage, produção |
-| 10 | OPS-001 | ativar backup real | backup script, scheduler, cofre, runbook | SEC-001 | dois backups externos válidos e alertados | dump/decrypt isolado + retenção + alerta de stale |
+| 2 | DB-001 | unificar schema/migrations | `create_tables.sql`, setup, `migrations/*` | REL-001 | clean install e upgrade equivalentes | install + upgrade + segunda execução + integração |
+| 3 | ROLE-001 | fechar perfil externo | migration, validator, bootstrap, APIs/views | DB-001 | matriz de papéis sem escalada | E2E por papel + tenant isolation |
+| 4 | BRAND-001 | fechar criador/logo | BandaRepository, cadastro, banda/topnav | DB-001, ROLE-001 parcial | bandas antigas/novas renderizam com segurança | manual/Google + logo malicioso + mobile |
+| 5 | SYNC-001 | fechar delta incremental | sync repository/API/JS/tabela | DB-001 | delta atômico com full fallback | teste 61 + conflito + lacuna + tenant |
+| 6 | PWA-001 | fechar atualização offline | service worker, sync, offline tools, router | SYNC-001 | atualização preserva pacote anterior | PWA + teste 60/63 + produção offline |
+| 7 | PLAY-001 | fechar repertório/share | playlist views/JS, music view, testes 62/63 | SYNC-001, PWA-001 | repertório persiste e abre offline | salvar/F5/validade/share/offline |
+| 8 | QA-001 | provar o lote integrado | config Playwright, suites e evidências | itens 3–7 | gate completo verde e reproduzível | unit, integration, E2E, PWA, visual, coverage, produção |
+| 9 | OPS-001 | ativar backup real | backup script, scheduler, cofre, runbook | destino externo | dois backups externos válidos e alertados | dump/decrypt isolado + retenção + alerta de stale |
+| 10 | OPS-002 | provar recuperação | descartado por decisão de escopo | — | encerrado | — |

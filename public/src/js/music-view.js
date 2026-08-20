@@ -58,7 +58,7 @@
                 if (document.exitFullscreen) document.exitFullscreen().catch(function () {});
             });
         }
-        requestFullscreen();
+        if (window.top === window.self) requestFullscreen();
 
         // ── Wake Lock ───────────────────────────────────────────────
         let wakeLock = null;
@@ -343,9 +343,11 @@
                         columnsSource.textContent = 'Desativar ajuste automático';
                     }
                     if (mode === 'auto') {
+                        cifra.dataset.columnMode = '';
                         cifra.dataset.forceMaxColumns = '';
                         cifra.dataset.forceMinColumns = '';
                     } else {
+                        cifra.dataset.columnMode = mode;
                         cifra.dataset.forceMaxColumns = mode;
                         cifra.dataset.forceMinColumns = mode;
                     }
@@ -394,6 +396,8 @@
                 if (lyricSource && lyricSource.classList.contains('active')) lyricSource.click();
                 if (columnsSource && cifra && !cifra.classList.contains('auto-columns')) columnsSource.click();
                 if (cifra) {
+                    cifra.dataset.columnMode = '';
+                    cifra.dataset.userFontSize = '';
                     cifra.dataset.forceMaxColumns = '';
                     cifra.dataset.forceMinColumns = '';
                     cifra.style.fontSize = '';

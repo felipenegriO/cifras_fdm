@@ -89,9 +89,19 @@ try {
             // Assinou de novo depois de ter cancelado: a marca de cancelamento
             // precisa sumir, senão a tela de plano segue dizendo "agendado".
             $bandaRepo->limparCancelamento($bandaId);
+            // O Stripe entrega invoice.paid ANTES de checkout.session.completed
+            // (medido: 2s e 1s de diferença nos dois pagamentos reais). Naquele
+            // momento a banda ainda não tem stripe_subscription_id, então
+            // findBandaBySubscription() não acha nada e a expiração vinda do
+            // Stripe se perde. Sem gravar aqui, plano_expira_em ficaria NULL até
+            // a primeira renovação — um ano inteiro no plano anual — enquanto o
+            // e-mail de confirmação já informava a data ao cliente.
+            $expiraEm = (new DateTime())->modify(planoValidade($plano));
+            $bandaRepo->atualizarExpiracao($subId, $expiraEm->getTimestamp());
+
             $banda = $bandaRepo->findById($bandaId);
             if ($banda) {
-                $validade  = (new DateTime())->modify(planoValidade($plano))->format('d/m/Y');
+                $validade  = $expiraEm->format('d/m/Y');
                 foreach ($bandaRepo->getAdmins($bandaId) as $admin) {
                     try { MailService::sendPaymentConfirmation($admin, $banda, $plano, $validade); } catch (Throwable $e) { ErrorLogger::fromThrowable($e, 'Email confirmação pagamento (checkout)', 'stripe/webhook.php:checkout'); }
                 }

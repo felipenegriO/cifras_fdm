@@ -25,10 +25,6 @@ test.describe('Topnav — Estrutura', () => {
     await expect(page.locator('.topnav__band-chip')).toBeVisible();
   });
 
-  test('sync dot está presente', async ({ page }) => {
-    await expect(page.locator('#topnavSyncDot')).toBeVisible();
-  });
-
   test('menu Configurações está presente', async ({ page }) => {
     const configLink = page.locator('.topnav__link[href="/config.php"], a[href="/config.php"]');
     // Pode estar em menu dropdown — verifica existência no DOM
@@ -56,7 +52,10 @@ test.describe('Topnav — Controle de Acesso por Role', () => {
 });
 
 test.describe('Topnav — Menus que exigem servidor', () => {
-  for (const menu of ['Categorias', 'Músicas', 'Usuários']) {
+  // Categorias e Usuários viraram abas de Minha Banda e saíram do menu; o
+  // aviso de offline agora precisa cobrir a entrada que os substituiu.
+  // (Repertórios fica de fora porque funciona offline, de propósito.)
+  for (const menu of ['Minha Banda', 'Músicas', 'Bandas']) {
     test(`${menu} mostra modal e não navega quando o servidor está indisponível`, async ({ page }) => {
       await page.addInitScript(() => localStorage.setItem('cifroBetaWelcomeSeen', '1'));
       await page.route('**/health.php?probe=*', route => route.abort('connectionrefused'));

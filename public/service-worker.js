@@ -11,9 +11,12 @@ const CONTEXT_KEY = '/__cifro_context__';
 const PREPARE_KEY_PREFIX = '/__cifro_prepare__/';
 const SONG_MANIFEST_PREFIX = '/__cifro_songs__/';
 const activePreparations = new Map();
+const HELP_ASSETS = (typeof SW_HELP_ENABLED !== 'undefined' && SW_HELP_ENABLED) ? [
+  _BASE + '/src/js/cifro-help.js', _BASE + '/src/css/help.css'
+] : [];
 const STATIC_ASSETS = [
-  _BASE + '/offline.php', _BASE + '/src/js/script.js', _BASE + '/src/js/chords.js', _BASE + '/src/js/live.js', _BASE + '/src/js/offline-tools.js',
-  _BASE + '/src/js/playlists.js', _BASE + '/src/js/playlist-share.js', _BASE + '/src/js/roteiros.js', _BASE + '/src/js/cifro-sync.js', _BASE + '/src/js/cifro-sanitize.js', _BASE + '/src/js/cifro-theme.js',
+  _BASE + '/offline.php', _BASE + '/src/js/cifro-sw-register.js', _BASE + '/src/js/script.js', _BASE + '/src/js/chords.js', _BASE + '/src/js/live.js', _BASE + '/src/js/offline-tools.js',
+  _BASE + '/src/js/playlists.js', _BASE + '/src/js/playlist-share.js', _BASE + '/src/js/cifro-share.js', _BASE + '/src/js/banda-convite-share.js', _BASE + '/src/js/roteiros.js', _BASE + '/src/js/cifro-sync.js', _BASE + '/src/js/cifro-capo-pessoal.js', _BASE + '/src/js/cifro-sanitize.js', _BASE + '/src/js/cifro-theme.js',
   _BASE + '/src/js/cifro-connectivity.js',
   _BASE + '/src/js/cifro-csrf.js', _BASE + '/src/js/cifro-confirm.js', _BASE + '/src/js/cifro-toast.js', _BASE + '/src/js/cifro-presentation.js',
   _BASE + '/src/js/bootstrap.min.js', _BASE + '/src/js/jquery-3.5.1.min.js', _BASE + '/src/js/music-view.js',
@@ -23,10 +26,15 @@ const STATIC_ASSETS = [
   _BASE + '/src/vendor/wavesurfer/wavesurfer.min.js', _BASE + '/src/vendor/soundtouch/soundtouch.min.js',
   _BASE + '/src/css/bootstrap.min.css', _BASE + '/src/css/fontlogin.css', _BASE + '/src/css/style2.css',
   _BASE + '/src/css/rehearsal.css', _BASE + '/src/css/music-view.css', _BASE + '/src/css/theme.css', _BASE + '/src/css/fonts.css',
+  _BASE + '/src/css/pwa-splash.css', _BASE + '/src/js/pwa-splash.js',
   _BASE + '/manifest.json', _BASE + '/favicon.ico', _BASE + '/src/images/cifro-mark.svg', _BASE + '/src/images/cifro-logo.svg',
-  _BASE + '/src/images/cifro-logo-dark.svg', _BASE + '/src/images/cifro-app-icon.svg'
+  _BASE + '/src/images/pwa-splash-logo.svg',
+  _BASE + '/src/images/cifro-logo-dark.svg', _BASE + '/src/images/cifro-app-icon.svg',
+  ...HELP_ASSETS
 ];
-const STAGE_PAGES = [_BASE + '/index.php', _BASE + '/music.php', _BASE + '/roteiro.php', _BASE + '/select-banda.php'];
+const BASE_PAGES = [_BASE + '/index.php', _BASE + '/music.php', _BASE + '/roteiro.php', _BASE + '/select-banda.php'];
+const HELP_PAGE = _BASE + '/ajuda.php';
+const STAGE_PAGES = [...BASE_PAGES, ...((typeof SW_HELP_ENABLED !== 'undefined' && SW_HELP_ENABLED) ? [HELP_PAGE] : [])];
 
 function validAsset(response, expectedType) {
   if (!response?.ok || response.redirected) return false;
@@ -37,7 +45,8 @@ function validAsset(response, expectedType) {
 async function validStagePage(response) {
   if (!validAsset(response, 'text/html')) return false;
   const html = await response.clone().text();
-  return (html.includes('CIFRO_USER_ID') || html.includes('CIFRO_USER_ID')) && !html.includes('id="loginForm"');
+  const user = html.match(/window\.CIFRO_USER_ID\s*=\s*['"]([^'"]+)['"]/);
+  return Boolean(user?.[1]) && !html.includes('id="loginForm"');
 }
 
 async function setContext(userId, bandId) {
@@ -61,14 +70,25 @@ function pageKey(path) {
   return path;
 }
 
+function expectedTypeFor(url) {
+  return url.endsWith('.css') ? 'text/css' : url.endsWith('.js') ? 'javascript' : url.endsWith('.php') ? 'text/html' : null;
+}
+
+// Presença não é validade. Uma entrada cacheada com o tipo errado — resposta
+// de erro, HTML de login no lugar do script — passava batida aqui, porque só
+// se perguntava se `cache.match` devolvia alguma coisa. O resultado era um
+// laço que nunca fechava: a verificação acusava o asset como faltante, a
+// preparação rodava, pulava a entrada inválida, e a verificação seguinte
+// acusava de novo. Revalidar aqui não custa no caminho comum: a preparação só
+// roda depois de a verificação já ter falhado.
 async function populateStatic(cache, onProgress) {
   for (const url of STATIC_ASSETS) {
-    if (await cache.match(url)) {
+    const expected = expectedTypeFor(url);
+    if (validAsset(await cache.match(url), expected)) {
       await onProgress?.('assets', url);
       continue;
     }
     const response = await fetch(url, { cache: 'reload', credentials: 'same-origin' });
-    const expected = url.endsWith('.css') ? 'text/css' : url.endsWith('.js') ? 'javascript' : url.endsWith('.php') ? 'text/html' : null;
     if (!validAsset(response, expected)) throw new Error('Asset inválido: ' + url);
     await cache.put(url, response);
     await onProgress?.('assets', url);
@@ -93,6 +113,31 @@ async function writeMeta(key, value) {
   return (await caches.open(META_CACHE)).put(key, new Response(JSON.stringify(value), { headers: { 'Content-Type': 'application/json' } }));
 }
 
+async function verifyOfflinePackage(userId) {
+  const staticCache = await caches.open(STATIC_CACHE);
+  const pageCache = await caches.open(PAGE_CACHE);
+  const missingAssets = [];
+  const missingPages = [];
+  for (const url of STATIC_ASSETS) {
+    const response = await staticCache.match(url);
+    const expected = url.endsWith('.css') ? 'text/css' : url.endsWith('.js') ? 'javascript' : url.endsWith('.php') ? 'text/html' : null;
+    if (!validAsset(response, expected)) missingAssets.push(url);
+  }
+  for (const path of BASE_PAGES) {
+    const response = await pageCache.match(pageKey(path));
+    if (!(response && await validStagePage(response))) missingPages.push(path);
+  }
+  const context = await getContext();
+  const contextMatches = Boolean(context?.userId && String(context.userId) === String(userId));
+  return {
+    ok: contextMatches && missingAssets.length === 0 && missingPages.length === 0,
+    contextMatches,
+    missingAssets,
+    missingPages,
+    version: APP_VERSION,
+  };
+}
+
 async function preparePages(userId, bandId, songs = [], onProgress) {
   if (!userId || !bandId) throw new Error('Usuário ou banda não identificados');
   songs = songs.map(song => (typeof song === 'object' && song !== null) ? song : { id: song, token: '' });
@@ -100,9 +145,9 @@ async function preparePages(userId, bandId, songs = [], onProgress) {
   const manifestKey = songManifestKey(userId, bandId);
   const previousManifest = await readMeta(manifestKey) || {};
   const nextManifest = {};
-  const basePages = [_BASE + '/index.php', _BASE + '/music.php', _BASE + '/roteiro.php', _BASE + '/select-banda.php'];
-  for (const path of basePages) {
-    if (await cache.match(pageKey(path))) {
+  for (const path of BASE_PAGES) {
+    const cached = await cache.match(pageKey(path));
+    if (cached && await validStagePage(cached)) {
       await onProgress?.('paginas', path);
       continue;
     }
@@ -110,6 +155,14 @@ async function preparePages(userId, bandId, songs = [], onProgress) {
     if (!(await validStagePage(response))) throw new Error('Página inválida: ' + path);
     await cache.put(pageKey(path), response);
     await onProgress?.('paginas', path);
+  }
+  if (typeof SW_HELP_ENABLED !== 'undefined' && SW_HELP_ENABLED) {
+    const cached = await cache.match(pageKey(HELP_PAGE));
+    if (!(cached && await validStagePage(cached))) {
+      const response = await fetch(HELP_PAGE, { cache: 'reload', credentials: 'same-origin' });
+      if (await validStagePage(response)) await cache.put(pageKey(HELP_PAGE), response);
+    }
+    await onProgress?.('paginas', HELP_PAGE);
   }
   for (const song of songs) {
     const id = String(song.id);
@@ -150,12 +203,13 @@ function startPreparation(data, port) {
   }
   const preparation = {
     ports: new Set(port ? [port] : []),
-    status: { type: 'progress', state: 'running', userId, bandId, contentRevision: revision, completed: 0, total: STATIC_ASSETS.length + 4 + songs.length }
+    status: { type: 'progress', state: 'running', userId, bandId, contentRevision: revision, completed: 0, total: STATIC_ASSETS.length + BASE_PAGES.length + ((typeof SW_HELP_ENABLED !== 'undefined' && SW_HELP_ENABLED) ? 1 : 0) + songs.length }
   };
   const stateKey = prepareKey(userId, bandId);
   preparation.promise = (async () => {
     const saved = await readMeta(stateKey);
-    if (saved?.state === 'completed' && Number(saved.contentRevision) === revision && saved.version === APP_VERSION) {
+    const verification = await verifyOfflinePackage(userId);
+    if (saved?.state === 'completed' && Number(saved.contentRevision) === revision && saved.version === APP_VERSION && verification.ok) {
       notifyPreparation(preparation, { ...saved, type: 'complete', ok: true });
       return saved;
     }
@@ -229,6 +283,9 @@ self.addEventListener('message', event => {
   if (event.data?.type === 'GET_PREPARE_STATUS') {
     event.waitUntil(readMeta(prepareKey(event.data.userId, event.data.bandId)).then(status => event.ports[0]?.postMessage(status || { state: 'idle' })));
   }
+  if (event.data?.type === 'VERIFY_OFFLINE') {
+    event.waitUntil(verifyOfflinePackage(event.data.userId).then(result => event.ports[0]?.postMessage(result)));
+  }
   if (event.data?.type === 'PREPARE_OFFLINE') {
     event.waitUntil(startPreparation(event.data, event.ports[0]).catch(() => {}));
   }
@@ -257,21 +314,34 @@ self.addEventListener('fetch', event => {
 
 async function stagePage(event, request, path) {
   const cache = await caches.open(PAGE_CACHE);
+  if (path === HELP_PAGE) return helpPageNetworkFirst(request, cache);
   const isMusicPage = path.startsWith(_BASE + '/music.php?');
-  const cached = await cache.match(pageKey(path)) || (isMusicPage ? await cache.match(pageKey(_BASE + '/music.php')) : null);
+  let cachedKey = pageKey(path);
+  let cached = await cache.match(cachedKey);
+  if (!cached && isMusicPage) {
+    cachedKey = pageKey(_BASE + '/music.php');
+    cached = await cache.match(cachedKey);
+  }
+  if (cached && !(await validStagePage(cached))) {
+    await cache.delete(cachedKey);
+    cached = null;
+  }
 
   if (cached) {
     if (isMusicPage) return cached;
-    event.waitUntil((async () => {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 3000);
-      try {
-        const response = await fetch(request, { signal: controller.signal, cache: 'no-store' });
-        clearTimeout(timeout);
-        if (await validStagePage(response)) await cache.put(pageKey(path), response);
-      } catch { clearTimeout(timeout); }
-    })());
-    return cached;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3000);
+    try {
+      const response = await fetch(request, { signal: controller.signal, cache: 'no-store' });
+      clearTimeout(timeout);
+      if (await validStagePage(response)) await cache.put(pageKey(path), response.clone());
+      else if (await getContext()) return cached;
+      else await cache.delete(cachedKey);
+      return response;
+    } catch {
+      clearTimeout(timeout);
+      return cached;
+    }
   }
 
   // Cache miss: try network with short timeout. On failure serve offline.php.
@@ -287,6 +357,21 @@ async function stagePage(event, request, path) {
   } catch {
     clearTimeout(timeout);
     return await caches.match(_BASE + '/offline.php') || new Response('Offline', { status: 503 });
+  }
+}
+
+async function helpPageNetworkFirst(request, cache) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 3000);
+  try {
+    const response = await fetch(request, { signal: controller.signal, cache: 'no-store' });
+    clearTimeout(timeout);
+    if (await validStagePage(response)) await cache.put(pageKey(HELP_PAGE), response.clone());
+    else await cache.delete(pageKey(HELP_PAGE));
+    return response;
+  } catch {
+    clearTimeout(timeout);
+    return await cache.match(pageKey(HELP_PAGE)) || await caches.match(_BASE + '/offline.php') || new Response('Offline', { status: 503 });
   }
 }
 

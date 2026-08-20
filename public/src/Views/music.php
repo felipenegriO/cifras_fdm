@@ -16,6 +16,7 @@
     <link href="/src/css/style2.css" rel="stylesheet">
     <link href="/src/css/rehearsal.css" rel="stylesheet">
     <link href="<?= asset_url('/src/css/music-view.css') ?>" rel="stylesheet">
+    <?php if (help_center_visible_for_user()): ?><link href="<?= asset_url('/src/css/help.css') ?>" rel="stylesheet"><?php endif; ?>
 
     <style>
         .music-page {
@@ -91,6 +92,7 @@
         <div class="music-bottom-bar__group music-bottom-bar__optional" role="group" aria-label="Leitura">
             <button type="button" id="quickAutoScroll" class="music-bottom-bar__btn" aria-label="Iniciar ou pausar rolagem automática" aria-pressed="false">Rolar</button>
             <button type="button" id="quickLyrics" class="music-bottom-bar__btn" aria-label="Alternar entre cifra e somente letra" aria-pressed="false" data-music-action="toggle-cifra-letra">Letra</button>
+            <button type="button" id="quickCapo" class="music-bottom-bar__btn" aria-label="Pôr ou tirar capotraste" aria-pressed="false">Capo</button>
         </div>
         <button type="button" class="music-bottom-bar__btn music-bottom-bar__btn--primary" aria-label="Abrir ajustes" data-music-action="menuButton">Ajustes</button>
     </div>
@@ -118,6 +120,19 @@
                         <button type="button" id="increase-tom" aria-label="Aumentar tom">+</button>
                     </div>
                 </div>
+
+                <div class="music-control-row">
+                    <div class="music-control-label">
+                        <strong id="capoLabel">Capotraste</strong>
+                        <span id="capoInfo" class="live-status"></span>
+                    </div>
+                    <div class="music-inline-stepper" role="group" aria-label="Capotraste">
+                        <button type="button" id="decrease-capo" aria-label="Diminuir capotraste">−</button>
+                        <span id="capoValor" aria-live="polite">0</span>
+                        <button type="button" id="increase-capo" aria-label="Aumentar capotraste">+</button>
+                    </div>
+                </div>
+                <button type="button" id="capoAutomatico" class="music-control-proxy">Capotraste automático</button>
 
                 <div class="music-control-row">
                     <div class="music-control-label"><strong>Tamanho</strong></div>
@@ -185,6 +200,7 @@
                     <span>Quer controlar a música para todos?</span>
                     <button type="button" class="music-secondary-action music-full-action" id="livePlay">Iniciar como líder</button>
                 </div>
+                <?php if (help_center_visible_for_user()): ?><div class="music-context-help-row"><button type="button" class="music-context-help" data-help-article="modo-live" data-help-source="music-live">Como funciona o Modo Live?</button></div><?php endif; ?>
             </section>
 
             <section class="music-settings-panel" id="settingsPanelTools" role="tabpanel" aria-labelledby="settingsTabTools" data-settings-panel="tools" hidden>
@@ -205,6 +221,7 @@
                     <div class="music-tool__content">
                         <a href="" id="linkYou" target="_blank" rel="noopener" class="music-secondary-action music-full-action">Pesquisar no YouTube</a>
                         <button type="button" id="btnAtivarEnsaio" class="music-primary-action music-full-action">Abrir painel de ensaio</button>
+                        <?php if (help_center_visible_for_user()): ?><div class="music-context-help-row"><button type="button" class="music-context-help" data-help-article="modo-ensaio" data-help-source="music-rehearsal">Como usar pitch e loop A/B?</button></div><?php endif; ?>
 
                         <div class="music-yt-inline-form">
                             <label for="youtubeVideoLinkInput" class="music-yt-inline-form__label">Colar link do vídeo</label>
@@ -253,9 +270,9 @@
     </div>
 
     <header class="music-header">
-        <button type="button" class="music-header__back" id="backLink" aria-label="Voltar" onclick="location.href='index.php'">
+        <a class="music-header__back" id="backLink" aria-label="Voltar" href="index.php">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
-        </button>
+        </a>
         <div class="music-header__identity">
             <h1 class="music-header__title" id="song-title">Carregando música…</h1>
             <div class="music-header__meta">
@@ -465,13 +482,18 @@
     </script>
 
     <script src="<?= asset_url('/src/js/chords.js') ?>"></script>
+    <script src="<?= asset_url('/src/js/cifro-capo-pessoal.js') ?>"></script>
     <script src="<?= asset_url('/src/js/script.js') ?>" defer></script>
     <script src="<?= asset_url('/src/js/rehearsal/rehearsal.youtube.js') ?>"></script>
     <script src="<?= asset_url('/src/js/music-youtube-panel-state.js') ?>"></script>
     <script src="<?= asset_url('/src/js/music-youtube-panel.js') ?>" defer></script>
     <script src="<?= asset_url('/src/js/music-view.js') ?>" defer></script>
     <script src="<?= asset_url('/src/js/cifro-presentation.js') ?>" defer></script>
-    <script>window.CIFRO_USER_ID = '<?= e($_SESSION['usuario']['id'] ?? '') ?>'; window.CIFRO_BAND_ID = '<?= e(current_band_id()) ?>'; window.CIFRO_CAN_HOST = <?= can_host_live() ? 'true' : 'false' ?>; window.CIFRO_BAND_PLANO = '<?= e($_SESSION['banda_atual']['plano'] ?? '') ?>';</script>
+    <script>window.CIFRO_USER_ID = '<?= e($_SESSION['usuario']['id'] ?? '') ?>'; window.CIFRO_BAND_ID = '<?= e(current_band_id()) ?>'; window.CIFRO_CAN_HOST = <?= can_host_live() ? 'true' : 'false' ?>; window.CIFRO_BAND_PLANO = '<?= e($_SESSION['banda_atual']['plano'] ?? '') ?>'; window.CIFRO_CONFIG = <?= json_encode(cifro_transposicao_config(), JSON_UNESCAPED_UNICODE) ?>;</script>
+    <?php if (help_center_visible_for_user()): ?>
+    <script>window.CIFRO_HELP_ENABLED = true; window.CIFRO_HELP_DISABLED = false;</script>
+    <script src="<?= asset_url('/src/js/cifro-help.js') ?>" defer></script>
+    <?php endif; ?>
     <script>
         (function () {
             var paidPlans = ['trial', 'mensal', 'semestral', 'anual', 'ativo'];
@@ -487,9 +509,21 @@
     <script src="<?= asset_url('/src/js/cifro-connectivity.js') ?>"></script>
     <script src="<?= asset_url('/src/js/cifro-sync.js') ?>"></script>
     <script>
-        window.__cifroInitialDataPromise = cifroSync.load(window.CIFRO_BAND_ID).then(function (loaded) {
+        window.__cifroInitialDataPromise = cifroSync.load(window.CIFRO_BAND_ID).then(async function (loaded) {
             const id = new URLSearchParams(window.location.search).get('id');
-            const song = (window.songs || []).find(item => String(item.id) === String(id));
+            const isEditorPreview = new URLSearchParams(window.location.search).get('editorPreview') === '1';
+            let song = (window.songs || []).find(item => String(item.id) === String(id))
+                || cifroSync.getRecentSong(window.CIFRO_BAND_ID, id);
+            if (!song && navigator.onLine && !isEditorPreview) {
+                for (let attempt = 0; attempt < 3 && !song; attempt += 1) {
+                    if (!window.CifroConnectivity?.isServerAvailable()) {
+                        await window.CifroConnectivity?.probe({ force: true, timeout: 1000 }).catch(function () {});
+                    }
+                    await cifroSync.sync(window.CIFRO_BAND_ID, { force: true }).catch(function () {});
+                    song = (window.songs || []).find(item => String(item.id) === String(id));
+                    if (!song && attempt < 2) await new Promise(resolve => setTimeout(resolve, 150));
+                }
+            }
             if (!song) return loaded;
             document.getElementById('song-title').textContent = song.nome || '';
             document.getElementById('artist-name').textContent = song.artista || '';
@@ -500,6 +534,7 @@
             return loaded;
         });
     </script>
+    <script src="<?= asset_url('/src/js/cifro-share.js') ?>" defer></script>
     <script src="<?= asset_url('/src/js/playlist-share.js') ?>" defer></script>
     <script src="<?= asset_url('/src/js/playlists.js') ?>" defer></script>
     <script src="<?= asset_url('/src/js/offline-tools.js') ?>"></script>
@@ -514,7 +549,7 @@
                 const backLink = document.getElementById('backLink');
                 if (backLink) {
                     const dest = 'roteiro.php?id=' + encodeURIComponent(roteiroId);
-                    backLink.setAttribute('onclick', "location.href='" + dest + "'");
+                    backLink.setAttribute('href', dest);
                 }
             }
         })();
@@ -686,17 +721,6 @@
         // ==========================
         let ultimoNumero = null;
 
-        document.addEventListener('cifro:sync', function (event) {
-            if (!event.detail?.changed || new URLSearchParams(window.location.search).get('editorPreview') === '1' || document.getElementById('cifroSongUpdate')) return;
-            const notice = document.createElement('button');
-            notice.id = 'cifroSongUpdate';
-            notice.type = 'button';
-            notice.textContent = 'Atualização disponível — toque para reabrir';
-            notice.style.cssText = 'position:fixed;top:56px;left:50%;transform:translateX(-50%);z-index:9998;border:0;border-radius:999px;padding:10px 16px;background:#f59e0b;color:#111;font-weight:700;box-shadow:0 6px 20px #0008';
-            notice.addEventListener('click', () => window.location.reload());
-            document.body.appendChild(notice);
-        });
-
         $(document).ready(async function () {
             await window.__cifroInitialDataPromise;
 
@@ -734,7 +758,9 @@
                     editorPreviewSong = null;
                 }
             }
-            const song = editorPreviewSong || songs.find(song => song.id == songId);
+            let song = editorPreviewSong
+                || (window.songs || []).find(song => song.id == songId)
+                || cifroSync.getRecentSong(window.CIFRO_BAND_ID, songId);
 
             let baseFontSize = null;
 
@@ -762,6 +788,109 @@
                 const original = (window.__cifraOriginalHtml || '').trim();
                 if (original) return original;
                 return cifraDiv.innerHTML || '';
+            }
+
+            // ---------------------------------------------------------------
+            // Capotraste / transpose de instrumento.
+            // A cifra soante é a verdade; o deslocamento só muda as formas
+            // mostradas. Por isso o indicador de Tom exibe SEMPRE o tom soante:
+            // é dele que o live, o repertório e a banda falam.
+            // ---------------------------------------------------------------
+            const capo = {
+                valor: 0,
+                automatico: true,   // vira false quando o músico mexe na mão
+                tomSoante: ''
+            };
+
+            function instrumentoDoUsuario() {
+                return (window.CIFRO_CONFIG && window.CIFRO_CONFIG.instrumento) || 'outro';
+            }
+
+            function preferenciaDeCapo() {
+                return (window.CIFRO_CONFIG && window.CIFRO_CONFIG.transposicaoPreferencia) || 'cadastrado';
+            }
+
+            function limitarCapo(valor) {
+                const faixa = window.CifroChords.faixaManual(instrumentoDoUsuario());
+                return Math.max(faixa.min, Math.min(faixa.max, Number(valor) || 0));
+            }
+
+            function capoInicial(cifraHtml) {
+                // A escolha pessoal vem primeiro — mas só quando não há conflito
+                // com o cadastro: pendente, vale o que a banda cadastrou.
+                const pessoal = window.CifroCapoPessoal?.escolhaValida(songId, song);
+                if (pessoal !== null && pessoal !== undefined) return limitarCapo(pessoal);
+
+                const cadastrado = Number(song.transposicao_instrumento) || 0;
+                const preferencia = preferenciaDeCapo();
+                if (preferencia === 'nunca') return 0;
+                if (preferencia === 'cadastrado') return limitarCapo(cadastrado);
+
+                const opcoes = {
+                    instrumento: instrumentoDoUsuario(),
+                    nivel: preferencia === 'basico' ? 'basico' : 'simplificar'
+                };
+                const calculado = window.CifroChords.sugerirDeslocamento(cifraHtml, opcoes);
+                if (!cadastrado) return limitarCapo(calculado);
+
+                // Desempate a favor do cadastro: se o valor que um humano
+                // registrou for tão bom quanto o calculado, ele vence.
+                const custoCadastrado = window.CifroChords.custoDeslocamento(cifraHtml, cadastrado, opcoes);
+                const custoCalculado = window.CifroChords.custoDeslocamento(cifraHtml, calculado, opcoes);
+                return limitarCapo(custoCadastrado <= custoCalculado ? cadastrado : calculado);
+            }
+
+            function renderizarCifraComCapo() {
+                const exibida = window.CifroChords.aplicarDeslocamento(window.__cifraSoanteHtml || '', capo.valor);
+                window.__cifraOriginalHtml = exibida;
+                setCifraHtml(window.__modoSomenteLetra ? stripChordLinesKeepTags(exibida) : exibida);
+                atualizarIndicadoresDeCapo();
+            }
+
+            function atualizarIndicadoresDeCapo() {
+                const rotulo = window.CifroChords.rotuloDeslocamento(instrumentoDoUsuario());
+                const labelEl = document.getElementById('capoLabel');
+                const valorEl = document.getElementById('capoValor');
+                const infoEl = document.getElementById('capoInfo');
+                const quickEl = document.getElementById('quickCapo');
+                if (labelEl) labelEl.textContent = rotulo;
+                if (valorEl) valorEl.textContent = String(capo.valor);
+                if (quickEl) quickEl.setAttribute('aria-pressed', capo.valor !== 0 ? 'true' : 'false');
+
+                $("#tom").text(window.__modoSomenteLetra ? '' : capo.tomSoante);
+                // O live lê daqui em vez do texto do #tom: dataset é explícito e
+                // não muda de significado quando a interface muda.
+                cifraDiv.dataset.tomSoante = capo.tomSoante || '';
+
+                const descricao = (capo.valor && capo.tomSoante)
+                    ? rotulo.toLowerCase() + ' ' + capo.valor + ' · formas em ' + window.CifroChords.tomDasFormas(capo.tomSoante, capo.valor)
+                    : '';
+                if (infoEl) infoEl.textContent = descricao;
+                const headerEl = document.getElementById('song-tom-display');
+                if (headerEl) {
+                    headerEl.textContent = [
+                        window.__modoSomenteLetra ? '' : capo.tomSoante,
+                        capo.valor ? rotulo.toLowerCase() + ' ' + capo.valor : ''
+                    ].filter(Boolean).join(' · ');
+                }
+            }
+
+            // O stepper dispara vários cliques seguidos; sem esperar, seria uma
+            // requisição por clique.
+            let salvarCapoAgendado = null;
+            function persistirCapoPessoal() {
+                if (!window.CifroCapoPessoal || editorPreviewSong) return;
+                clearTimeout(salvarCapoAgendado);
+                salvarCapoAgendado = setTimeout(function () {
+                    window.CifroCapoPessoal.salvar(songId, capo.valor, capo.tomSoante);
+                }, 800);
+            }
+
+            function definirCapo(valor, manual) {
+                capo.valor = limitarCapo(valor);
+                if (manual) capo.automatico = false;
+                renderizarCifraComCapo();
+                if (manual) persistirCapoPessoal();
             }
 
             function normalizarTomPlaylist(tom) {
@@ -1262,14 +1391,9 @@
                             && canStartNewColumn(block.maxWidth);
                         
                         if (shouldBreak) {
-                            console.log(`[DEBUG] Quebra coluna ${columns.length} -> ${columns.length + 1}: height=${currentColumn.height}px, isSpecial=${isSpecial}, wouldFit=${wouldFitVertically}`);
                             currentColumn = { lines: [], height: 0, maxWidth: 0 };
                             columns.push(currentColumn);
                             columnCountPacked += 1;
-                        }
-                        
-                        if (shouldKeepSpecialBlockTogether && currentColumn.lines.length > 0) {
-                            console.log(`[DEBUG] Mantendo bloco especial junto: height=${currentColumn.height + block.height}px <= ${availableHeight}px`);
                         }
 
                         const prevMax = currentColumn.maxWidth;
@@ -1514,28 +1638,12 @@
                 let minHeightInColumns = Math.min(...columns.map(col => col.height || 0));
                 let heightImbalance = maxHeightInColumns > 0 ? (maxHeightInColumns - minHeightInColumns) / maxHeightInColumns : 0;
                 
-                console.log('[renderColumnsFromRaw] DEBUG COLUNAS:', {
-                    columnCount: columns.length,
-                    maxHeight: maxHeightInColumns,
-                    minHeight: minHeightInColumns,
-                    heightImbalance: (heightImbalance * 100).toFixed(1) + '%',
-                    availableHeight,
-                    maxColumns,
-                    canExpandMore: maxHeightInColumns < availableHeight && columns.length < maxColumns
-                });
-                
                 // Se há muito desbalance (>30%), tentar balancear redistribuindo blocos
                 if (heightImbalance > 0.3 && columns.length > 1) {
-                    console.log('[renderColumnsFromRaw] Balanceando colunas...');
                     const balanced = balanceColumns(columns);
                     const balancedMaxHeight = Math.max(...balanced.map(col => col.height || 0));
                     const balancedMinHeight = Math.min(...balanced.map(col => col.height || 0));
                     const newImbalance = balancedMaxHeight > 0 ? (balancedMaxHeight - balancedMinHeight) / balancedMaxHeight : 0;
-                    
-                    console.log('[renderColumnsFromRaw] Após balanceamento:', {
-                        heightImbalance: (newImbalance * 100).toFixed(1) + '%',
-                        maxHeight: balancedMaxHeight
-                    });
                     
                     // Se balanceamento melhorou, usar
                     if (newImbalance < heightImbalance * 0.8) {
@@ -1556,28 +1664,17 @@
                         const newWidth = computeTotalWidth(newCols, resolvedColumnGap);
                         const newMaxHeight = Math.max(...newCols.map(col => col.height || 0));
                         
-                        console.log(`[renderColumnsFromRaw] Testando ${k} colunas:`, {
-                            newWidth,
-                            contentWidth: contentWidth - widthGuard,
-                            newMaxHeight,
-                            availableHeight,
-                            fits: newWidth <= (contentWidth - widthGuard)
-                        });
-                        
                         // Se a largura cabe
                         if (newWidth <= (contentWidth - widthGuard)) {
                             // Se reduz overflow OU mantém dentro da altura disponível, usar
                             if (newMaxHeight <= availableHeight || newMaxHeight < maxHeightInColumns) {
-                                console.log(`[renderColumnsFromRaw] ✅ Usando ${k} colunas (melhora altura)`);
                                 columns = newCols;
                                 totalWidth = newWidth;
                                 maxHeightInColumns = newMaxHeight;
                             } else {
-                                console.log(`[renderColumnsFromRaw] ⚠️ ${k} colunas piora altura (${newMaxHeight}px vs ${maxHeightInColumns}px)`);
                                 break;
                             }
                         } else {
-                            console.log(`[renderColumnsFromRaw] ❌ Não cabe ${k} colunas horizontalmente`);
                             break;
                         }
                     }
@@ -1689,13 +1786,20 @@
                 const isDesktop = viewportWidth >= 1280;
                 const maxColsByWidth = Math.max(1, Math.floor((availableWidth + columnGap) / (minColWidth + columnGap)));
                 const maxColsCap = isNarrowViewport ? 4 : 6;
-                const maxCols = Math.min(maxColsByWidth, maxColsCap);
+                let maxCols = Math.min(maxColsByWidth, maxColsCap);
                 const tabletPreferred = isTablet ? Math.min(3, maxColsByWidth) : 1;
                 let minColsPreferred = isShortLandscape
                     ? Math.min(2, maxColsByWidth)
                     : tabletPreferred;
                 if (isDesktop) {
                     minColsPreferred = Math.max(minColsPreferred, 2);
+                }
+                const requestedColumns = ['1', '2', '3'].includes(cifraDiv.dataset.columnMode)
+                    ? Number(cifraDiv.dataset.columnMode)
+                    : null;
+                if (requestedColumns) {
+                    minColsPreferred = requestedColumns;
+                    maxCols = requestedColumns;
                 }
                 const maxSize = Math.max(
                     240,
@@ -1732,6 +1836,9 @@
 
                 let currentSize = parseFloat(window.getComputedStyle(cifraDiv, null).getPropertyValue('font-size'));
                 currentSize = Math.max(minSize, currentSize);
+                const hasManualFontSize = cifraDiv.dataset.userFontSize !== undefined
+                    && cifraDiv.dataset.userFontSize !== ''
+                    && Number.isFinite(Number(cifraDiv.dataset.userFontSize));
 
                 // Passo A: prefere 2 colunas em telas largas, se couber.
                 let minForcedCols = minColsPreferred > 1 ? minColsPreferred : 1;
@@ -1780,7 +1887,7 @@
 
                 // Passo B: com colunas fixas, cresce fonte ate encostar no limite vertical.
                 let low = currentSize;
-                let high = Math.max(currentSize, Math.min(maxSize, maxSizeCap));
+                let high = hasManualFontSize ? currentSize : Math.max(currentSize, Math.min(maxSize, maxSizeCap));
                 let bestSize = currentSize;
                 let sizeIters = 0;
                 while (low <= high && sizeIters < 4) {
@@ -1802,7 +1909,7 @@
                 let finalState = tryRender(finalCols, finalSize, minForcedCols);
                 let safetyIters = 0;
 
-                while (finalState.overflowX > 1 && finalCols > 1 && safetyIters < 2) {
+                while (!requestedColumns && finalState.overflowX > 1 && finalCols > 1 && safetyIters < 2) {
                     finalCols -= 1;
                     finalState = tryRender(finalCols, finalSize, minForcedCols);
                     safetyIters += 1;
@@ -1821,7 +1928,7 @@
                 let needsScroll = finalState.overflowY > 1 || finalState.heightUsage > scrollTarget;
                 let fillIters = 0;
                 const fillTarget = finalCols === 1 ? 0.82 : 0.70;
-                while (!needsScroll && finalState.heightUsage < fillTarget && fillIters < 6) {
+                while (!hasManualFontSize && !needsScroll && finalState.heightUsage < fillTarget && fillIters < 6) {
                     const nextSize = Math.min(maxSizeCap, finalSize + step);
                     if (nextSize <= finalSize + 0.001) break;
                     finalSize = nextSize;
@@ -1846,8 +1953,8 @@
                 }
                 needsScroll = finalState.overflowY > 1 || finalState.heightUsage > scrollTarget;
 
-                cifraDiv.dataset.forceMaxColumns = '';
-                cifraDiv.dataset.forceMinColumns = '';
+                cifraDiv.dataset.forceMaxColumns = requestedColumns ? String(requestedColumns) : '';
+                cifraDiv.dataset.forceMinColumns = requestedColumns ? String(requestedColumns) : '';
                 cifraDiv.style.overflowX = 'hidden';
                 cifraDiv.style.overflowY = needsScroll ? 'auto' : 'hidden';
                 setBodyScrollLock(!needsScroll);
@@ -1928,7 +2035,7 @@
                 // Layout musica com overflow - monitored but not logged
             }
 
-            if (song) {
+            function renderSong() {
                 $('#song-title').text(song.nome);
                 $('#artist-name').text(song.artista);
                 cifraDiv.setAttribute('aria-busy', 'false');
@@ -1938,22 +2045,14 @@
                 const tomDetectadoOriginal = identificarTom(sanitizedCifra);
                 const cifraInicial = aplicarTomDaPlaylist(sanitizedCifra, tomPlaylist);
 
-                // Render inicial
-                setCifraHtml(cifraInicial);
-
-                // Guarda original
-                window.__cifraOriginalHtml = cifraInicial;
-                window.__modoSomenteLetra = false;
-
-                const savedMode = localStorage.getItem('modoSomenteLetra') === '1';
-                if (savedMode) {
-                    window.__modoSomenteLetra = true;
-                    const letraHtml = stripChordLinesKeepTags(window.__cifraOriginalHtml);
-                    setCifraHtml(letraHtml);
-                    $("#tom").text('');
-                } else {
-                    $("#tom").text(identificarTom(cifraInicial));
-                }
+                // A cifra soante é a base de tudo; o capotraste só muda as
+                // formas que aparecem na tela.
+                window.__cifraSoanteHtml = cifraInicial;
+                window.__modoSomenteLetra = localStorage.getItem('modoSomenteLetra') === '1';
+                capo.tomSoante = identificarTom(cifraInicial);
+                capo.valor = capoInicial(cifraInicial);
+                capo.automatico = true;
+                renderizarCifraComCapo();
 
                 if (tomPlaylist) {
                     if (indiceTomPlaylist(tomDetectadoOriginal) < 0) {
@@ -1976,7 +2075,10 @@
                 if (!window.CifroConnectivity?.isServerAvailable()) {
                     $("#mostrarbtnplay").hide();
                 }
+            }
 
+            if (song) {
+                renderSong();
             } else {
                 $('body').html(`
                     <main class="container not-found" style="min-height:100vh;display:grid;place-content:center;text-align:center;gap:1rem">
@@ -1988,6 +2090,20 @@
                 return;
             }
 
+            document.addEventListener('cifro:sync', function (event) {
+                if (!event.detail?.changed || editorPreviewSong) return;
+                const updated = (window.songs || []).find(item => String(item.id) === String(songId));
+                if (!updated) {
+                    location.replace((window.APP_BASE || '') + '/index.php');
+                    return;
+                }
+                song = updated;
+                renderSong();
+                adjustColumns();
+                setTimeout(validateLayout, 100);
+                if (window.cifroToast) cifroToast('Cifra atualizada automaticamente.', 'success');
+            });
+
             // ajuste colunas no load e resize
             adjustColumns();
             setTimeout(validateLayout, 100);
@@ -1997,62 +2113,105 @@
                     validateLayout();
                 });
             }
-            window.addEventListener('resize', adjustColumns);
-            window.addEventListener('resize', validateLayout);
+            // Recalcular colunas é caro: mede linha a linha e testa de 2 a 6
+            // colunas, forçando reflow a cada medição. E o visualViewport
+            // dispara 'resize' DURANTE a rolagem no celular (a barra de
+            // endereço some e volta), ou seja, exatamente quando o músico está
+            // rolando a cifra no meio da música. Sem agrupar os eventos, o
+            // aparelho recalcula tudo várias vezes por segundo à toa.
+            //
+            // Só reage quando a dimensão mudou de verdade: rolagem que apenas
+            // esconde a barra de endereço não muda a largura útil, e o
+            // recálculo seria puro desperdício.
+            let ultimaLargura = window.innerWidth;
+            let ultimaAltura = window.innerHeight;
+            let recalculoAgendado = null;
 
-            if (window.visualViewport) {
-                window.visualViewport.addEventListener('resize', () => {
+            function recalcularLayoutAgrupado() {
+                const largura = window.innerWidth;
+                const altura = window.innerHeight;
+                if (largura === ultimaLargura && altura === ultimaAltura) return;
+                ultimaLargura = largura;
+                ultimaAltura = altura;
+
+                clearTimeout(recalculoAgendado);
+                recalculoAgendado = setTimeout(() => {
                     adjustColumns();
                     validateLayout();
-                });
+                }, 120);
+            }
+
+            window.addEventListener('resize', recalcularLayoutAgrupado);
+            if (window.visualViewport) {
+                window.visualViewport.addEventListener('resize', recalcularLayoutAgrupado);
             }
 
             // Fonte A+ / A-
             increaseBtn.addEventListener('click', () => {
                 const currentSize = parseFloat(window.getComputedStyle(cifraDiv, null).getPropertyValue('font-size'));
-                cifraDiv.style.fontSize = (currentSize + 1) + 'px';
+                const nextSize = currentSize + 1;
+                cifraDiv.dataset.userFontSize = String(nextSize);
+                cifraDiv.style.fontSize = nextSize + 'px';
                 adjustColumns();
                 setTimeout(adjustColumns, 50);
             });
 
             decreaseBtn.addEventListener('click', () => {
                 const currentSize = parseFloat(window.getComputedStyle(cifraDiv, null).getPropertyValue('font-size'));
-                cifraDiv.style.fontSize = Math.max(10, currentSize - 1) + 'px';
+                const nextSize = Math.max(10, currentSize - 1);
+                cifraDiv.dataset.userFontSize = String(nextSize);
+                cifraDiv.style.fontSize = nextSize + 'px';
                 adjustColumns();
                 setTimeout(adjustColumns, 50);
             });
 
-            // Tom + / -
-            increaseBtnTom.addEventListener('click', () => {
+            // Tom + / - : muda o tom SOANTE. O capotraste é aplicado por cima,
+            // então mudar o tom não tira o capo do músico.
+            function transporTomSoante(passo) {
                 if (window.__modoSomenteLetra) return; // sem cifra, não transpõe
                 for (let tentativa = 0; tentativa < 12; tentativa += 1) {
-                    var cifraAtual = getRawCifraHtml();
-                    var tom = identificarTom(cifraAtual);
-                    var cifraTransposta = transporCifraHtml(cifraAtual, 1);
-                    var tomnovo = identificarTom(cifraTransposta);
-                    if (tom == tomnovo) continue;
-                    setCifraHtml(cifraTransposta);
-                    window.__cifraOriginalHtml = cifraTransposta;
-                    $("#tom").text(tomnovo);
-                    setTomInfo('Tom ajustado manualmente: ' + tomnovo + ' | não é salvo no repertório automaticamente', 'waiting');
+                    const atual = window.__cifraSoanteHtml;
+                    const tom = identificarTom(atual);
+                    const transposta = transporCifraHtml(atual, passo);
+                    const tomNovo = identificarTom(transposta);
+                    if (tom === tomNovo) continue;
+
+                    window.__cifraSoanteHtml = transposta;
+                    capo.tomSoante = tomNovo;
+                    // Em automático a casa é recalculada para o tom novo; posta
+                    // na mão, ela fica onde o músico deixou.
+                    if (capo.automatico) capo.valor = capoInicial(transposta);
+                    renderizarCifraComCapo();
+                    setTomInfo('Tom ajustado manualmente: ' + tomNovo + ' | não é salvo no repertório automaticamente', 'waiting');
+                    document.dispatchEvent(new CustomEvent('cifro:tom-changed', { detail: { tom: tomNovo } }));
                     break;
                 }
+            }
+
+            increaseBtnTom.addEventListener('click', () => transporTomSoante(1));
+            decreaseBtnTom.addEventListener('click', () => transporTomSoante(-1));
+
+            // Capotraste + / - / automático / pôr e tirar
+            document.getElementById('increase-capo').addEventListener('click', () => {
+                if (window.__modoSomenteLetra) return;
+                definirCapo(capo.valor + 1, true);
             });
 
-            decreaseBtnTom.addEventListener('click', () => {
-                if (window.__modoSomenteLetra) return; // sem cifra, não transpõe
-                for (let tentativa = 0; tentativa < 12; tentativa += 1) {
-                    var cifraAtual = getRawCifraHtml();
-                    var tom = identificarTom(cifraAtual);
-                    var cifraTransposta = transporCifraHtml(cifraAtual, -1);
-                    var tomnovo = identificarTom(cifraTransposta);
-                    if (tom == tomnovo) continue;
-                    setCifraHtml(cifraTransposta);
-                    window.__cifraOriginalHtml = cifraTransposta;
-                    $("#tom").text(tomnovo);
-                    setTomInfo('Tom ajustado manualmente: ' + tomnovo + ' | não é salvo no repertório automaticamente', 'waiting');
-                    break;
-                }
+            document.getElementById('decrease-capo').addEventListener('click', () => {
+                if (window.__modoSomenteLetra) return;
+                definirCapo(capo.valor - 1, true);
+            });
+
+            document.getElementById('capoAutomatico').addEventListener('click', () => {
+                if (window.__modoSomenteLetra) return;
+                capo.automatico = true;
+                definirCapo(capoInicial(window.__cifraSoanteHtml), false);
+            });
+
+            document.getElementById('quickCapo').addEventListener('click', () => {
+                if (window.__modoSomenteLetra) return;
+                // Põe e tira: alterna entre a casa sugerida e zero.
+                definirCapo(capo.valor !== 0 ? 0 : capoInicial(window.__cifraSoanteHtml), true);
             });
 
             // Toggle colunas automáticas
@@ -2110,17 +2269,9 @@
                 window.__modoSomenteLetra = !window.__modoSomenteLetra;
                 localStorage.setItem('modoSomenteLetra', window.__modoSomenteLetra ? '1' : '0');
 
-                if (window.__modoSomenteLetra) {
-                    const letraHtml = stripChordLinesKeepTags(window.__cifraOriginalHtml);
-                    setCifraHtml(letraHtml);
-
-
-
-                    $("#tom").text('');
-                } else {
-                    setCifraHtml(window.__cifraOriginalHtml);
-                    $("#tom").text(identificarTom(window.__cifraOriginalHtml));
-                }
+                // Um caminho só: renderizarCifraComCapo já sabe esconder os
+                // acordes e limpar o indicador de tom no modo somente letra.
+                renderizarCifraComCapo();
 
                 updateToggleLabel();
                 adjustColumns();

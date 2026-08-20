@@ -61,13 +61,13 @@ Cada teste possui limite global de 60 segundos, sem exceções locais. Qualquer 
 - O projeto `pwa` executa service worker e IndexedDB reais, inclusive modo avião, rede lenta, duas bandas, atualização interrompida e sessão expirada.
 - Stripe possui cobertura E2E de sandbox; compra/cancelamento real controlado e reconciliação em produção continuam sendo gates operacionais.
 - Download do YouTube depende de provedores externos e não é determinístico.
-- A suíte unitária atual possui 445 testes PHP e 967 asserções; quatro skips condicionais precisam permanecer explicados em cada evidência.
+- A suíte unitária atual possui 451 testes PHP e 974 asserções; seis skips condicionais precisam permanecer explicados em cada evidência.
 - O baseline de branches está em `docs/cobertura.md`; os comandos de cobertura falham abaixo de 80%.
 - Não há teste contratual automatizado que compare esta documentação com rotas e IDs de funcionalidades.
 
 ## Evidência local de 2026-08-10
 
-- PHPUnit: 445 testes, 967 asserções, 4 skips condicionais, 0 falhas.
+- PHPUnit: 451 testes, 974 asserções, 6 skips condicionais, 0 falhas.
 - JavaScript unitário: 16 testes, 0 falhas.
 - Smoke E2E: 6 testes, 0 falhas.
 - A regressão completa do lote atual ainda precisa ser reexecutada antes da liberação.
@@ -75,3 +75,45 @@ Cada teste possui limite global de 60 segundos, sem exceções locais. Qualquer 
 Os resultados medidos da execução mais recente estão em [cobertura.md](cobertura.md).
 
 O plano de evolução das métricas estruturais está em [plano para atingir 80% de cobertura de branches](plano-cobertura-branches-80.md).
+## Capotraste e transposição de instrumento
+
+| Arquivo | Cobre |
+|---|---|
+| `tests/php/TransposicaoInstrumentoTest.php` | faixa de −12 a 12, recusa de valor fracionário e não numérico, instrumentos e rótulos |
+| `tests/php/UserConfigValidatorTest.php` | as chaves `instrumento` e `transposicaoPreferencia` salvas em `usuarios.config` |
+| `tests/chords.test.js` | sugestão nos dois níveis e nos dois instrumentos, empate a favor do menor módulo, faixa do violão sem negativo, custo por deslocamento |
+| `tests/cifro/74-capotraste.spec.js` | vocabulário por instrumento nas configurações, capotraste proposto na tela, pôr e tirar sem alterar o tom soante, e o tom publicado no modo ao vivo |
+| `tests/php/CifraClubImportProviderTest.php` | capotraste declarado dentro e fora do `<pre>`, com a fixture `cifraclub-capo-fora-do-pre.html` |
+| `tests/cifro/75-import-capotraste.spec.js` | confirmação da importação com capotraste, recusa que não transpõe, e o aviso quando o tom da página não bate com o corpo |
+| `tests/php/UsuarioMusicaRepositoryTest.php` | isolamento da personalização entre músicos e entre bandas, atualização de base e cascata ao excluir a música |
+| `tests/cifro/76-capotraste-pessoal.spec.js` | proteção do endpoint (CSRF, banda, faixa), gravação, presença no snapshot e persistência entre visitas |
+| `tests/cifro/77-capotraste-conflito.spec.js` | detecção do conflito em três pontas, cadastro valendo enquanto pendente, e resolução nos dois sentidos |
+
+O teste `escolha feita em outro aparelho chega pelo sync incremental` cobre um bug real encontrado por instabilidade nos testes: a personalização vive fora da revisão da banda, então o caminho incremental do sync a carregava adiante do cache e uma escolha feita em outro aparelho nunca chegava. Hoje ela viaja em toda resposta de `version.php` e `changes.php`.
+
+`tests/setup/global.setup.js` grava instrumento e preferência para os usuários de teste. Sem isso o modal de primeiro acesso abre na home e bloqueia o clique na lista de músicas em qualquer teste que use esses usuários — só o `74-capotraste.spec.js` deve exercitar o primeiro acesso, e ele apaga a preferência de propósito.
+
+O spec de ponta a ponta altera a preferência do usuário compartilhado. Como o projeto roda com `workers: 1`, isso não colide com os demais specs, mas evite paralelizar este arquivo.
+
+## Central de Ajuda
+
+- `tests/php/HelpCenterServiceTest.php` valida a integridade do catálogo e glossário.
+- `tests/php/BootstrapHelpersTest.php` valida a flag global e a preferência da conta.
+- `tests/cifro/64-help-center.spec.js` exercita busca, todos os filtros e guias por toque no celular, drawer responsivo, APIs e persistência real em `usuarios.config`.
+- `tests/cifro/65-help-center-offline.spec.js` recarrega a Central sem rede a partir do cache real do service worker.
+
+## Google OAuth
+
+- `tests/cifro/35-google-auth.spec.js` valida redirecionamento e persistência real em `app_error_logs` para state inválido, código ausente, cancelamento e falha na autenticação, sem persistir `state`, código ou tokens.
+
+## Convite de banda por link
+
+| Arquivo | Cobre |
+|---|---|
+| `tests/php/BandaConvitePolicyTest.php` | validade (expiração, revogação), TTL de 24h e perfil `basico`, sem banco |
+| `tests/php/BandaConviteRepositoryTest.php` | geração, hash do token, revogação em lote, contagem de usos e isolamento entre bandas |
+| `tests/php/BandaConviteFlowTest.php` | aceite (novo membro, já membro, convite inválido, teto do plano) e `bandaAbertaParaConvite` usado pelo fluxo Google |
+| `tests/php/GoogleAuthServiceTest.php` | casos novos de entrada por convite durante o cadastro via Google |
+| `tests/cifro/78-convite-banda.spec.js` (27 testes) | geração e revogação do link, permissão por perfil, CSRF, a aba Membros (botão, estado, revogar), a página pública nos quatro estados (`invalido`, `visitante`, `entrar`, `ja-membro`), aceite por POST, cadastro por e-mail com convite pendente, quem já tem conta, e os limites de plano na geração e no aceite |
+
+O aceite do convite é a única porta que cria o vínculo — register, Google e login passam todos por `BandaConviteFlow::aceitar`, então um cenário de `78-convite-banda.spec.js` cobre os três caminhos de entrada sem triplicar a regra de negócio testada.

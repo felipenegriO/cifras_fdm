@@ -1,6 +1,6 @@
 /**
  * 20-planos.spec.js
- * Planos: página /plano.php, limites de músicas, webhook Stripe, topnav badge.
+ * Planos: aba de plano em Minha Banda, limites de músicas, webhook Stripe, topnav badge.
  */
 import { test, expect } from '../fixtures/coverage.js';
 import { createHmac } from 'node:crypto';
@@ -107,9 +107,11 @@ test.describe('Plano — página', () => {
   });
 
   test('exibe nome da banda', async ({ page }) => {
+    // O plano virou aba de Minha Banda: o h1 da página é "Minha Banda" e o
+    // nome da banda fica no subtítulo; o título do plano é o h2 da aba.
     await page.goto('/plano.php');
-    const h1 = page.locator('h1').first();
-    await expect(h1).toContainText('Plano');
+    await expect(page.locator('.mb-banda')).not.toBeEmpty();
+    await expect(page.locator('.mb-aba-titulo')).toContainText('Plano');
   });
 
   test('exibe badge do plano atual', async ({ page }) => {
@@ -195,7 +197,7 @@ test.describe('Plano — página', () => {
       await expect(page.locator('.plan-section-title')).toContainText('Fazer upgrade');
       return;
     }
-    await expect(page.locator('h1')).toContainText('Plano e pagamento');
+    await expect(page.locator('.mb-aba-titulo')).toContainText('Plano e pagamento');
     await expect(page.locator('.plan-section-title')).toContainText('Renovar ou trocar');
     await expect(page.locator('.plan-management__action')).toContainText('Solicitar cancelamento');
     if (plano !== 'ativo') {
@@ -207,7 +209,7 @@ test.describe('Plano — página', () => {
     for (const plano of ['mensal', 'semestral', 'anual']) {
       await withCurrentBandPlan(page, plano, async () => {
         await page.goto('/plano.php');
-        await expect(page.locator('h1')).toContainText('Plano e pagamento');
+        await expect(page.locator('.mb-aba-titulo')).toContainText('Plano e pagamento');
         await expect(page.locator('.plan-section-title')).toContainText('Renovar ou trocar');
         await expect(page.locator('.plan-management__action')).toContainText('Solicitar cancelamento');
         await expect(page.locator('.price-card--current')).toContainText('Plano atual');
@@ -249,12 +251,13 @@ test.describe('Plano — página', () => {
   });
 
   test('cards exibem botão "Assinar X" quando plano é gratuito e Stripe está configurado', async ({ page }) => {
-    // Stripe ativado via STRIPE_SECRET_KEY em .env.local — plano gratuito (padrão de teste)
-    await page.goto('/plano.php');
-    await expect(page.locator('button.js-stripe-checkout[data-plan="mensal"]')).toContainText('Assinar mensal');
-    await expect(page.locator('button.js-stripe-checkout[data-plan="semestral"]')).toContainText('Assinar semestral');
-    await expect(page.locator('button.js-stripe-checkout[data-plan="anual"]')).toContainText('Assinar anual');
-    await expect(page.locator('button.js-stripe-checkout')).toHaveCount(3);
+    await withCurrentBandPlan(page, 'gratuito', async () => {
+      await page.goto('/plano.php');
+      await expect(page.locator('button.js-stripe-checkout[data-plan="mensal"]')).toContainText('Assinar mensal');
+      await expect(page.locator('button.js-stripe-checkout[data-plan="semestral"]')).toContainText('Assinar semestral');
+      await expect(page.locator('button.js-stripe-checkout[data-plan="anual"]')).toContainText('Assinar anual');
+      await expect(page.locator('button.js-stripe-checkout')).toHaveCount(3);
+    });
   });
 
   test('link WhatsApp do PIX usa telefone PIX quando WhatsApp específico não está configurado', async ({ page }) => {
@@ -305,29 +308,32 @@ test.describe('Topnav — link de plano', () => {
     const planResponse = await page.request.get('/api/sync/data.php');
     const { plano } = await planResponse.json();
     await page.goto('/index.php');
-    const link = page.locator('a.topnav__upgrade[href^="/plano.php"]');
+    // O href é /minha-banda.php?aba=plano desde que Plano virou aba do "Minha
+    // Banda"; o seletor antigo apontava para /plano.php e não casava com nada.
+    // Isso passava despercebido porque a Banda E2E vivia num plano pago por
+    // resíduo de execução anterior, e aí o teste só exercitava o ramo
+    // `toHaveCount(0)` — que passa trivialmente quando o seletor está errado.
+    // Há duas ocorrências (barra e menu lateral), daí o .first().
+    const link = page.locator('a.topnav__upgrade[href^="/minha-banda.php"]');
     if (['mensal', 'semestral', 'anual', 'ativo'].includes(plano)) {
       await expect(link).toHaveCount(0);
     } else {
-      await expect(link).toBeVisible();
-      await expect(link).toContainText(/Fazer upgrade|Regularizar plano/);
+      await expect(link.first()).toBeVisible();
+      await expect(link.first()).toContainText(/Fazer upgrade|Regularizar plano/);
     }
   });
 
-  test('atalho de upgrade ou gestão leva para /plano.php', async ({ page }) => {
-    // Evita que o modal "Bem-vindo ao Cifrô — versão beta" (mostrado uma vez
-    // por localStorage) intercepte o clique no link do topnav.
-    await page.addInitScript(() => localStorage.setItem('cifroBetaWelcomeSeen', '1'));
-    await page.goto('/index.php');
-    const upgrade = page.locator('a.topnav__upgrade[href^="/plano.php"]');
-    if (await upgrade.count()) {
+  test('atalho de upgrade ou gestão leva para a aba de plano', async ({ page }) => {
+    await withCurrentBandPlan(page, 'gratuito', async () => {
+      await page.addInitScript(() => localStorage.setItem('cifroBetaWelcomeSeen', '1'));
+      await page.goto('/index.php');
+      // Aponta direto para a aba, sem passar pelo redirecionamento antigo.
+      const upgrade = page.locator('a.topnav__upgrade[href^="/minha-banda.php"]').first();
+      await expect(upgrade).toBeVisible();
       await upgrade.click();
-    } else {
-      await page.goto('/config.php');
-      await page.locator('a[href^="/plano.php"]').click();
-    }
-    await page.waitForURL(/\/plano\.php/);
-    expect(page.url()).toContain('plano.php');
+      await page.waitForURL(/minha-banda\.php\?aba=plano/);
+      await expect(page.locator('[data-aba-ativa]')).toHaveAttribute('data-aba-ativa', 'plano');
+    });
   });
 });
 
@@ -361,13 +367,14 @@ test.describe('Checkout Stripe — fluxo de clique', () => {
     await page.goto('/plano.php');
     const btn = page.locator('button.js-stripe-checkout[data-plan="semestral"]').first();
     await expect(btn).toBeVisible();
+    const originalText = await btn.textContent();
     await btn.click();
 
     // Toast de erro deve aparecer
     await expect(page.locator('.cifro-toast, [role="alert"], .toast')).toBeVisible({ timeout: 5000 });
     // Botão deve ser re-habilitado com texto original
     await expect(btn).toBeEnabled({ timeout: 5000 });
-    await expect(btn).toContainText('Assinar semestral');
+    await expect(btn).toHaveText(originalText.trim());
   });
 
   test('create-checkout-session.php retorna 405 para GET', async ({ page }) => {
@@ -528,8 +535,12 @@ test.describe('Stripe webhook', () => {
         data: { object: { subscription, metadata: { banda_id: bandId, price_id: 'price_test_mensal' } } },
       });
       expect(response.status(), await response.text()).toBe(200);
-      let band = dbQuery('SELECT plano, stripe_subscription_id FROM bandas WHERE id=?', [bandId]).rows[0];
+      let band = dbQuery('SELECT plano, stripe_subscription_id, plano_expira_em FROM bandas WHERE id=?', [bandId]).rows[0];
       expect(band).toMatchObject({ plano: 'mensal', stripe_subscription_id: subscription });
+      // O Stripe entrega invoice.paid ANTES do checkout, quando a banda ainda
+      // não tem stripe_subscription_id — então a expiração precisa ser gravada
+      // aqui também, senão fica nula até a primeira renovação.
+      expect(band.plano_expira_em, 'checkout deve gravar a expiração').not.toBeNull();
 
       response = await sendSignedWebhook(page, {
         type: 'checkout.session.completed',
@@ -625,4 +636,37 @@ test.describe('Landing page — preços corretos', () => {
     await page.goto('/landing.php');
     await expect(page.locator('.pricing-grid a.btn-plan[href="/register.php"]')).toHaveCount(1);
   });
+});
+
+test('pagamento na ordem real do Stripe grava a data de expiração', async ({ page }) => {
+  // Medido em produção: invoice.paid chega 1 a 2 segundos ANTES do
+  // checkout.session.completed. Nesse instante a banda ainda não tem
+  // stripe_subscription_id, então o invoice não encontra a banda e a expiração
+  // que ele traria se perde. O resultado era plano_expira_em nulo até a
+  // primeira renovação — um ano inteiro no plano anual.
+  const bandId = `stripe-ordem-${Date.now()}`;
+  const subscription = `sub_ordem_${Date.now()}`;
+  dbQuery('INSERT INTO bandas (id, nome, plano) VALUES (?, ?, ?)', [bandId, 'Ordem Stripe', 'gratuito']);
+
+  try {
+    // 1º: invoice.paid, com a banda ainda sem assinatura vinculada.
+    let response = await sendSignedWebhook(page, {
+      type: 'invoice.paid',
+      data: { object: { subscription, lines: { data: [{ price: { id: 'price_test_anual' }, period: { end: 1900000000 } }] } } },
+    });
+    expect(response.status()).toBe(200);
+
+    // 2º: o checkout, que é quem vincula a assinatura.
+    response = await sendSignedWebhook(page, {
+      type: 'checkout.session.completed',
+      data: { object: { subscription, metadata: { banda_id: bandId, price_id: 'price_test_anual' } } },
+    });
+    expect(response.status()).toBe(200);
+
+    const band = dbQuery('SELECT plano, plano_expira_em FROM bandas WHERE id=?', [bandId]).rows[0];
+    expect(band.plano).toBe('anual');
+    expect(band.plano_expira_em, 'a data precisa existir já no primeiro pagamento').not.toBeNull();
+  } finally {
+    dbQuery('DELETE FROM bandas WHERE id=?', [bandId]);
+  }
 });

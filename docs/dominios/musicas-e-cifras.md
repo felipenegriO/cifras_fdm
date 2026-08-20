@@ -22,7 +22,13 @@ A visualização oferece controles voltados ao palco, ajustes de layout e integr
 
 Gestor ou superior pode criar, renomear e excluir categorias em `/categorias.php`. O nome tem até 100 caracteres e é único por banda. Renomear uma categoria atualiza, na mesma transação, a classificação das músicas que a utilizam. Uma categoria em uso não pode ser excluída.
 
-As categorias são exibidas como filtros na home e como opções no editor de músicas. Fazem parte do payload de sincronização e possuem versão própria para invalidar o cache da banda.
+As categorias são exibidas como filtros na home — o chip filtra pelo campo de
+categoria da música, não pelo texto da busca — e como opções no campo Categoria
+do editor, onde gestor ou superior pode criar uma nova sem sair da música. Nome
+equivalente ignorando caixa e acento não cria categoria repetida. A aba
+Categorias mostra a contagem de músicas de cada uma e oferece conjuntos
+sugeridos quando a banda ainda não criou nenhuma. Fazem parte do payload de
+sincronização e possuem versão própria para invalidar o cache da banda.
 
 ## Dados
 

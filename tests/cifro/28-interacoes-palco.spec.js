@@ -1,6 +1,7 @@
 import { test, expect } from '../fixtures/coverage.js';
 import { fazerLogin } from '../helpers/auth.js';
 import { dbQuery } from '../helpers/db.js';
+import { comPlanoDaBandaAtual } from '../helpers/plano.js';
 
 const BAND_ID = '00000000-0000-4000-8000-000000000002';
 
@@ -15,8 +16,21 @@ test.use({ storageState: 'tests/.auth/user.json' });
 // session_regenerate_id() a cada teste, o que pode invalidar o cookie salvo
 // para quem rodar depois na suíte completa. fazerLogin() é um no-op se a
 // sessão ainda for válida e reloga se não for.
+// Vários testes deste arquivo precisam de plano pago — o Modo Ao Vivo não
+// aparece no gratuito — e alteram `bandas.plano` direto no banco. Nenhum
+// devolvia o valor no fim, e foi assim que a Banda E2E ficou permanentemente em
+// `anual`: paga para o resto da suíte e para todas as execuções seguintes na
+// mesma máquina. Snapshot aqui, restauração no afterEach, aconteça o que
+// acontecer com o teste.
+let planoAnterior = null;
+
 test.beforeEach(async ({ page }) => {
   await fazerLogin(page);
+  planoAnterior = dbQuery('SELECT plano FROM bandas WHERE id=?', [BAND_ID]).rows[0]?.plano ?? 'gratuito';
+});
+
+test.afterEach(() => {
+  if (planoAnterior) dbQuery('UPDATE bandas SET plano=? WHERE id=?', [planoAnterior, BAND_ID]);
 });
 
 async function csrf(page) {
@@ -51,7 +65,7 @@ async function openFirstSong(page, fromPlaylist = false) {
   await page.waitForFunction(() => Array.isArray(window.songs));
 
   if (fromPlaylist) {
-    await page.getByRole('button', { name: 'Abrir repertórios' }).click();
+    await page.getByRole('button', { name: 'Abrir repertórios' }).click({ timeout: 5000 });
     const playlistSong = page.locator('.liPlaylist-musica').first();
     if (await playlistSong.count()) {
       await playlistSong.click();
@@ -73,82 +87,69 @@ async function openLiveSettings(page) {
 }
 
 test('usa apresentação, rolagem, velocidade e navegação da setlist', async ({ page }) => {
-  const token = await csrf(page);
   const snapshot = await ensureMinMusicas(page, 2);
   expect(snapshot.musicas.length).toBeGreaterThan(1);
-  const originalPlaylists = snapshot.playlists.filter(item => !String(item.nome).startsWith('__PALCO_'));
-  const nome = `__PALCO_${Date.now()}__`;
-  const created = await page.request.post('/src/backend/editor/salvar_playlists.php', {
-    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': token },
-    data: JSON.stringify({ playlists: [...originalPlaylists, { nome, itens: snapshot.musicas.slice(0, 3).map((song, index) => ({ id: song.id, tom: index === 0 ? 'D' : '' })) }] }),
-  });
-  const playlist = await created.json();
-  expect(created.status(), JSON.stringify(playlist)).toBe(200);
+  const items = snapshot.musicas.slice(0, 3).map((song, index) => ({ id: song.id, tom: index === 0 ? 'D' : '' }));
+  await page.goto('/index.php', { waitUntil: 'domcontentloaded', timeout: 10000 });
+  await page.evaluate(setlistItems => {
+    sessionStorage.setItem('cifroSetlist', JSON.stringify({ items: setlistItems, currentIndex: 0 }));
+  }, items);
+  await page.goto(`/music.php?id=${items[0].id}`, { waitUntil: 'domcontentloaded', timeout: 10000 });
+  await expect(page.locator('#song-cifra')).toBeVisible();
+  await page.getByRole('button', { name: 'Abrir ajustes' }).click({ timeout: 5000 });
+  await page.getByRole('button', { name: 'Modo apresentação' }).click({ timeout: 5000 });
 
-  try {
-    await page.goto('/index.php');
-    await page.evaluate(async () => {
-      await cifroSync.sync(window.CIFRO_BAND_ID, { force: true });
-      renderPlaylistsMenu();
-    });
-    await page.getByRole('button', { name: 'Abrir repertórios' }).click();
-    const group = page.locator('.liPlaylist', { hasText: nome });
-    await group.locator(':scope > a').click();
-    await group.locator('.liPlaylist-musica').first().click();
-    await expect(page.locator('#song-cifra')).toBeVisible();
-    await page.getByRole('button', { name: 'Abrir ajustes' }).click();
-    await page.getByRole('button', { name: 'Modo apresentação' }).click();
-
-    await expect(page.locator('body')).toHaveClass(/cifro-presenting/);
-    await expect(page.getByText('Pronto para palco')).toBeVisible();
-    await page.getByRole('button', { name: 'Velocidade da rolagem' }).click();
-    await page.getByRole('button', { name: 'Velocidade da rolagem' }).click();
-    await page.getByRole('button', { name: 'Velocidade da rolagem' }).click();
-    await page.locator('#cifroAutoScrollToggle').click();
-    await page.waitForTimeout(50);
-    if (!await page.locator('body').evaluate(body => body.classList.contains('cifro-scroll-active'))) {
-      await page.evaluate(() => window.cifroPresentation.toggleScroll());
-    }
-    await expect(page.locator('body')).toHaveClass(/cifro-scroll-active/);
-    await page.keyboard.press('Space');
-    await expect(page.locator('body')).not.toHaveClass(/cifro-scroll-active/);
-
-    await page.getByRole('button', { name: 'Sair do modo apresentação' }).click();
-    await expect(page.locator('body')).not.toHaveClass(/cifro-presenting/);
-  } finally {
-    await page.request.post('/src/backend/editor/salvar_playlists.php', {
-      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': token },
-      data: JSON.stringify({ playlists: originalPlaylists }),
-    });
+  await expect(page.locator('body')).toHaveClass(/cifro-presenting/);
+  await expect(page.getByText('Pronto para palco')).toBeVisible();
+  await page.getByRole('button', { name: 'Velocidade da rolagem' }).click({ timeout: 5000 });
+  await page.getByRole('button', { name: 'Velocidade da rolagem' }).click({ timeout: 5000 });
+  await page.getByRole('button', { name: 'Velocidade da rolagem' }).click({ timeout: 5000 });
+  await page.locator('#cifroAutoScrollToggle').click({ timeout: 5000 });
+  await page.waitForTimeout(50);
+  if (!await page.locator('body').evaluate(body => body.classList.contains('cifro-scroll-active'))) {
+    await page.evaluate(() => window.cifroPresentation.toggleScroll());
   }
+  await expect(page.locator('body')).toHaveClass(/cifro-scroll-active/);
+  await page.keyboard.press('Space');
+  await expect(page.locator('body')).not.toHaveClass(/cifro-scroll-active/);
+
+  await page.getByRole('button', { name: 'Sair do modo apresentação' }).click({ timeout: 5000 });
+  await expect(page.locator('body')).not.toHaveClass(/cifro-presenting/);
 });
 
+// O Modo Ao Vivo só existe em plano pago: a aba #settingsTabLive fica oculta no
+// gratuito. Este teste dependia de a banda já estar em plano pago por resíduo de
+// uma execução anterior, então passava na segunda vez que a suíte rodava na
+// máquina e falhava em banco limpo. Agora ele arruma o plano de que precisa e
+// devolve o anterior no fim.
 test('inicia, segue e encerra uma sessão ao vivo pelos botões', async ({ page, context }) => {
-  await openFirstSong(page);
-  await page.getByRole('button', { name: 'Abrir ajustes' }).click();
-  await openLiveSettings(page);
-  await page.getByRole('button', { name: 'Iniciar como líder' }).click();
-  const hostResponse = page.waitForResponse(response => response.url().endsWith('/api/live/host.php'));
-  await page.getByRole('dialog').getByRole('button', { name: 'Virar Host' }).click();
-  const host = await hostResponse;
-  expect(host.status(), await host.text()).toBe(200);
-  await expect(page.locator('#liveStatus')).toHaveText('Voce e o host');
-  await expect(page.locator('#liveModeIndicator')).toBeVisible();
-
-  if (await page.locator('#menusideMenu').getAttribute('aria-hidden') === 'true') {
+  await comPlanoDaBandaAtual(page, 'anual', async () => {
+    await openFirstSong(page);
     await page.getByRole('button', { name: 'Abrir ajustes' }).click();
     await openLiveSettings(page);
-  }
-  await page.locator('#entrarlivePlay').click();
-  await expect(page.locator('#entrarlivePlay')).toHaveText('Sair da sessão');
-  await page.locator('#entrarlivePlay').click();
-  await expect(page.locator('#liveStatus')).toHaveText('Live desconectada');
+    await page.getByRole('button', { name: 'Iniciar como líder' }).click();
+    const hostResponse = page.waitForResponse(response => response.url().endsWith('/api/live/host.php'));
+    await page.getByRole('dialog').getByRole('button', { name: 'Virar Host' }).click();
+    const host = await hostResponse;
+    expect(host.status(), await host.text()).toBe(200);
+    await expect(page.locator('#liveStatus')).toHaveText('Voce e o host');
+    await expect(page.locator('#liveModeIndicator')).toBeVisible();
 
-  await context.setOffline(true);
-  await page.locator('#livePlay').click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Virar Host' }).click();
-  await expect(page.locator('#liveStatus')).toContainText('Live desconectada');
-  await context.setOffline(false);
+    if (await page.locator('#menusideMenu').getAttribute('aria-hidden') === 'true') {
+      await page.getByRole('button', { name: 'Abrir ajustes' }).click();
+      await openLiveSettings(page);
+    }
+    await page.locator('#entrarlivePlay').click();
+    await expect(page.locator('#entrarlivePlay')).toHaveText('Sair da sessão');
+    await page.locator('#entrarlivePlay').click();
+    await expect(page.locator('#liveStatus')).toHaveText('Live desconectada');
+
+    await context.setOffline(true);
+    await page.locator('#livePlay').click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Virar Host' }).click();
+    await expect(page.locator('#liveStatus')).toContainText('Live desconectada');
+    await context.setOffline(false);
+  });
 });
 
 test('seguidor acompanha navegação e rolagem publicadas pelo líder', async ({ page, browser }) => {
@@ -180,6 +181,13 @@ test('seguidor acompanha navegação e rolagem publicadas pelo líder', async ({
   const createdBody = await created.json();
   expect(created.status(), JSON.stringify(createdBody)).toBe(200);
   const songId = Number(createdBody.id);
+  const secondCreated = await page.request.post('/src/backend/editor/api.php', {
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': token },
+    data: JSON.stringify({ action: 'save', nome: `${nome}_B`, artista: 'Playwright', cifra: '<p><b>D A Bm G</b></p><p>Segunda música.</p>' }),
+  });
+  const secondBody = await secondCreated.json();
+  expect(secondCreated.status(), JSON.stringify(secondBody)).toBe(200);
+  const secondSongId = Number(secondBody.id);
   const hostPage = page;
   const followerContext = await browser.newContext({ storageState: 'tests/.auth/externo.json', viewport: { width: 390, height: 844 } });
   await followerContext.addInitScript(() => localStorage.setItem('cifroBetaWelcomeSeen', '1'));
@@ -187,6 +195,7 @@ test('seguidor acompanha navegação e rolagem publicadas pelo líder', async ({
 
   try {
     await hostPage.goto('/index.php');
+    await hostPage.evaluate(() => cifroSync.sync(window.CIFRO_BAND_ID, { force: true }));
     const hostSong = hostPage.locator(`#music-list a[href*="id=${songId}"]`);
     await expect(hostSong).toBeVisible({ timeout: 5000 });
     await hostSong.click();
@@ -200,7 +209,7 @@ test('seguidor acompanha navegação e rolagem publicadas pelo líder', async ({
     await expect(hostPage.locator('#liveStatus')).toHaveText('Voce e o host');
     const published = await (await page.request.get('/api/live/status.php')).json();
     expect(published.hasHost, JSON.stringify(published)).toBe(true);
-    expect(published.paginaAtual).toBe(`music.php?id=${songId}`);
+    expect(published.paginaAtual).toMatch(new RegExp(`^music\\.php\\?id=${songId}(?:&playlistTom=[A-G](?:%23|#|b)?m?)?$`));
 
     const followerToken = await csrf(followerPage);
     const followerSelected = await followerPage.request.post('/src/backend/bandas/selecionar.php', {
@@ -208,13 +217,11 @@ test('seguidor acompanha navegação e rolagem publicadas pelo líder', async ({
       data: JSON.stringify({ bandaId: BAND_ID }),
     });
     expect(followerSelected.status()).toBe(200);
-    await followerPage.goto('/index.php');
-    const followerSong = followerPage.locator(`#music-list a[href*="id=${songId}"]`);
-    await expect(followerSong).toBeVisible({ timeout: 10000 });
-    await followerSong.click();
+    await followerPage.goto(`/music.php?id=${songId}`);
+    await expect(followerPage.locator('#song-cifra')).toBeVisible({ timeout: 10000 });
     await followerPage.locator('#menuButton').click();
     await openLiveSettings(followerPage);
-    await followerPage.locator('#entrarlivePlay').click();
+    await followerPage.locator('#entrarlivePlay').dispatchEvent('click');
     await expect(followerPage.locator('#liveStatus')).toHaveText('Seguindo live');
     await expect(followerPage).toHaveURL(new RegExp(`music\\.php\\?id=${songId}`), { timeout: 10000 });
     await expect(followerPage.locator('#liveModeIndicator')).toBeVisible();
@@ -225,13 +232,31 @@ test('seguidor acompanha navegação e rolagem publicadas pelo líder', async ({
     });
     await expect.poll(() => followerPage.locator('#song-cifra').evaluate(element => element.scrollTop), { timeout: 10000 }).toBeGreaterThan(4);
 
-    await followerPage.locator('#entrarlivePlay').click();
+    await hostPage.goto(`/music.php?id=${secondSongId}`);
+    await expect(hostPage.locator('#liveStatus')).toHaveText('Voce e o host');
+    await expect(followerPage).toHaveURL(new RegExp(`music\\.php\\?id=${secondSongId}`), { timeout: 10000 });
+    await expect(followerPage.locator('#song-cifra')).toBeVisible();
+
+    const previousTom = (await hostPage.locator('#tom').textContent()).trim();
+    await hostPage.getByRole('button', { name: 'Abrir ajustes' }).click();
+    await hostPage.locator('#settingsTabReading').click();
+    await hostPage.locator('#increase-tom').click();
+    await expect.poll(async () => (await hostPage.locator('#tom').textContent()).trim()).not.toBe(previousTom);
+    const hostTom = (await hostPage.locator('#tom').textContent()).trim();
+    await expect(followerPage).toHaveURL(new RegExp(`music\\.php\\?id=${secondSongId}.*playlistTom=${encodeURIComponent(hostTom)}`), { timeout: 10000 });
+    await expect.poll(async () => (await followerPage.locator('#tom').textContent()).trim(), { timeout: 10000 }).toBe(hostTom);
+
+    await followerPage.locator('#entrarlivePlay').dispatchEvent('click');
     await expect(followerPage.locator('#liveStatus')).toHaveText('Live desconectada');
   } finally {
     await followerContext.close().catch(() => {});
     await page.request.post('/src/backend/editor/api.php', {
       headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': token },
       data: JSON.stringify({ action: 'delete', id: songId }),
+    }).catch(() => {});
+    await page.request.post('/src/backend/editor/api.php', {
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': token },
+      data: JSON.stringify({ action: 'delete', id: secondSongId }),
     }).catch(() => {});
     resetLiveState();
   }
@@ -257,7 +282,8 @@ test('abre roteiro real, sanitiza conteúdo e retorna da música', async ({ page
       renderPlaylistsMenu();
     });
     await page.getByRole('button', { name: 'Abrir repertórios' }).click();
-    await page.locator('.liRoteiro a', { hasText: titulo }).click();
+    const roteiroLink = page.locator('.liRoteiro a', { hasText: titulo });
+    await roteiroLink.click();
     await expect(page).toHaveURL(/roteiro\.php\?id=/);
     await expect(page.locator('#roteiro-title')).toHaveText(titulo);
     await expect(page.locator('#roteiro-body')).toBeVisible();
@@ -271,10 +297,7 @@ test('abre roteiro real, sanitiza conteúdo e retorna da música', async ({ page
     await expect(page).toHaveURL(/roteiro\.php\?id=/);
   } finally {
     if (roteiroData.id) {
-      await page.request.post('/src/backend/editor/salvar_roteiros.php', {
-        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': token },
-        data: JSON.stringify({ deleteId: roteiroData.id }),
-      });
+      dbQuery('DELETE FROM roteiros WHERE id=? AND banda_id=?', [roteiroData.id, BAND_ID]);
     }
   }
 });

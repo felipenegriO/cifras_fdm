@@ -1,6 +1,19 @@
 # Cifrô — Security & Routing
 
 RewriteEngine On
+
+# ===== Força HTTPS =====
+# O cookie de sessão e o de "lembrar-me" (1 ano) só ganham o atributo Secure
+# quando a requisição JÁ chega por HTTPS. Sem este redirect, quem digita o
+# domínio sem o https:// manda os dois em texto claro na primeira requisição.
+# A segunda condição cobre TLS terminado no proxy da hospedagem, onde %{HTTPS}
+# vem "off" mesmo o visitante estando em HTTPS — sem ela, laço de redirect.
+# localhost fica de fora para não quebrar desenvolvimento e testes.
+RewriteCond %{HTTP_HOST} !^(localhost|127\.0\.0\.1) [NC]
+RewriteCond %{HTTPS} !=on
+RewriteCond %{HTTP:X-Forwarded-Proto} !=https
+RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
 RewriteRule ^health/?$ health.php [L]
 RewriteRule ^ready/?$ ready.php [L]
 
@@ -11,6 +24,10 @@ RewriteRule ^ready/?$ ready.php [L]
 
 # ===== Security headers =====
 <IfModule mod_headers.c>
+    # HSTS: só faz sentido (e só é aceito) sobre HTTPS. Um ano, incluindo
+    # subdomínios. Sem preload de propósito — entrar na lista dos navegadores é
+    # difícil de desfazer e exige decisão consciente.
+    Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains" env=HTTPS
     Header always set X-Content-Type-Options "nosniff"
     Header always set X-Frame-Options "DENY"
     Header always set Referrer-Policy "strict-origin-when-cross-origin"

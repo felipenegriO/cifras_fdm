@@ -1,0 +1,215 @@
+@font-face { font-family: Inter; font-weight: 600; font-display: block;
+  src: url("../../../node_modules/@fontsource/inter/files/inter-latin-600-normal.woff2") format("woff2"); }
+@font-face { font-family: Inter; font-weight: 700; font-display: block;
+  src: url("../../../node_modules/@fontsource/inter/files/inter-latin-700-normal.woff2") format("woff2"); }
+@font-face { font-family: Inter; font-weight: 800; font-display: block;
+  src: url("../../../node_modules/@fontsource/inter/files/inter-latin-800-normal.woff2") format("woff2"); }
+
+:root {
+  --brand: #7c3aed;
+  --bg: #0e0e10;
+  --ink: #f4f4f5;
+  --muted: #a1a1aa;
+  /* Zonas seguras do Reels: nada essencial fora desta faixa. */
+  --safe-top: 220px;
+  --safe-bottom: 1500px;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body { background: #000; }
+
+#stage {
+  position: relative; width: 1080px; height: 1920px; overflow: hidden;
+  background: var(--bg); font-family: Inter, sans-serif; color: var(--ink);
+}
+
+/* Halo violeta atrás dos celulares — dá profundidade sem competir com o app. */
+.bg-glow {
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(900px 700px at 50% 42%, rgba(124,58,237,.28), transparent 70%),
+    radial-gradient(700px 900px at 15% 85%, rgba(124,58,237,.10), transparent 70%);
+}
+/* Grão sutil: mata o banding dos gradientes na compressão do Instagram. */
+.bg-grain {
+  position: absolute; inset: 0; opacity: .05; mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+#phone-layer {
+  /* top 250 + altura 874 termina em 1124, acima da coluna de icones do Reels,
+     que ocupa a direita a partir de ~1150. */
+  position: absolute; left: 0; right: 0; top: 250px;
+  display: flex; justify-content: center; align-items: flex-start; gap: 40px;
+}
+
+.phone { position: relative; opacity: 0; }
+
+.phone-bezel {
+  /* box-sizing: border-box — 2x400 + 40 de gap = 840, deixando os 120px de
+     margem que a coluna de icones do Reels exige. Tela interna: 376x826. */
+  width: 400px; height: 850px; padding: 12px; border-radius: 54px;
+  background: linear-gradient(160deg, #3a3a42, #131317 55%, #2a2a31);
+  box-shadow:
+    0 2px 0 rgba(255,255,255,.14) inset,
+    0 40px 90px rgba(0,0,0,.65),
+    0 8px 24px rgba(0,0,0,.5),
+    0 0 0 1px rgba(255,255,255,.06);
+}
+.phone-bezel .screen {
+  display: block; width: 100%; height: 100%; border-radius: 42px;
+  object-fit: cover; object-position: top center; background: var(--bg);
+}
+.phone-label {
+  /* -26px a partir do topo do celular (250) coloca o rotulo em y=224,
+     logo abaixo do --safe-top de 220. */
+  position: absolute; left: 0; right: 0; top: -26px; text-align: center;
+  font-size: 26px; font-weight: 600; letter-spacing: .18em; text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Anel violeta que pulsa no instante em que a tela da banda troca sozinha. */
+.phone.flash .phone-bezel {
+  box-shadow:
+    0 2px 0 rgba(255,255,255,.14) inset,
+    0 40px 90px rgba(0,0,0,.65),
+    0 0 0 6px rgba(124,58,237,.85),
+    0 0 90px 18px rgba(124,58,237,.55);
+}
+
+#mock-layer {
+  /* Alinhado exatamente com o par de celulares (x=120 a x=960), respeitando
+     os 120px de margem que a coluna de icones do Reels exige a direita. */
+  position: absolute; left: 120px; top: 250px; width: 840px; height: 880px;
+  display: none; border-radius: 32px; overflow: hidden;
+}
+
+#caption {
+  position: absolute; left: 90px; right: 120px; top: 1240px;
+  opacity: 0; text-align: center;
+}
+.caption-text {
+  display: inline-block; font-size: 68px; line-height: 1.16; font-weight: 800;
+  letter-spacing: -.02em; text-wrap: balance;
+  text-shadow: 0 4px 30px rgba(0,0,0,.75);
+}
+.caption-text em { font-style: normal; color: #a78bfa; }
+
+#logo-card {
+  position: absolute; inset: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 20px; opacity: 0;
+  background: var(--bg);
+}
+#logo-card img { width: 190px; height: 190px; border-radius: 44px;
+  box-shadow: 0 30px 70px rgba(124,58,237,.35); }
+.logo-word { font-size: 96px; font-weight: 800; letter-spacing: -.03em; }
+.logo-line { font-size: 60px; font-weight: 700; color: #a78bfa; }
+.logo-sub  { font-size: 34px; font-weight: 600; color: var(--muted); }
+
+/* === Mocks: cenas de dor (Task 3) === */
+@font-face { font-family: "JetBrains Mono"; font-weight: 400; font-display: block;
+  src: url("../../../node_modules/@fontsource/jetbrains-mono/files/jetbrains-mono-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "JetBrains Mono"; font-weight: 700; font-display: block;
+  src: url("../../../node_modules/@fontsource/jetbrains-mono/files/jetbrains-mono-latin-700-normal.woff2") format("woff2"); }
+
+.mock { display: none; width: 840px; height: 880px; overflow: hidden; }
+.mock.active { display: block; }
+
+/* Papel: folha impressa, levemente torta, riscada a caneta.
+   Inset de 24px + escala leve compensam o bounding box extra que a rotacao
+   introduz, para que nada vaze do contêiner de 900x880. */
+[data-mock="paper"] .paper-sheet {
+  width: calc(100% - 48px); height: calc(100% - 48px); margin: 24px;
+  background: #f6f3ea; color: #26262b;
+  border-radius: 10px; padding: 64px 60px; transform: rotate(-1.4deg) scale(.97);
+  box-shadow: 0 40px 90px rgba(0,0,0,.6);
+  font-size: 42px; position: relative;
+}
+.paper-title { font-weight: 800; font-size: 54px; margin-bottom: 40px; }
+.paper-list { padding-left: 60px; line-height: 1.9; }
+.paper-list .struck { text-decoration: line-through; text-decoration-thickness: 4px;
+  text-decoration-color: #1e40af; opacity: .55; }
+.paper-scribble {
+  position: absolute; right: 90px; bottom: 130px; transform: rotate(-9deg);
+  color: #1e40af; font-size: 62px; font-weight: 700;
+}
+
+/* Conversa: baloes genericos, sem cabecalho de aplicativo nenhum. */
+[data-mock="chat"] { display: none; flex-direction: column; gap: 30px; justify-content: center; padding: 60px; }
+[data-mock="chat"].active { display: flex; }
+.chat-bubble { max-width: 78%; padding: 30px 36px; border-radius: 30px; font-size: 40px; line-height: 1.35; }
+.chat-bubble.in  { align-self: flex-start; background: #26262b; color: var(--ink); border-bottom-left-radius: 8px; }
+/* Ardosia neutra de proposito: verde alinhado a direita e a assinatura visual
+   de um mensageiro especifico, e este material e publico. */
+.chat-bubble.out { align-self: flex-end;  background: #2b2f3a; color: #dcdfe8; border-bottom-right-radius: 8px; }
+.chat-shot { display: block; background: #0b0b0d; color: #d4d4d8; border-radius: 12px;
+  padding: 40px 30px; font-family: "JetBrains Mono", monospace; font-size: 38px; filter: blur(.4px); }
+
+/* App generico com propaganda cobrindo o refrao. Cifra densa (Intro/Verso/
+   Refrao com varias linhas de acorde) para que o card fique cheio de ponta a
+   ponta e a propaganda pareca interromper leitura real, no meio do refrao. */
+[data-mock="adapp"] .ad-page {
+  width: 100%; height: 100%; background: #15151a; border-radius: 32px;
+  padding: 56px 60px; display: flex; flex-direction: column; gap: 16px;
+}
+.ad-section {
+  font-family: "JetBrains Mono", monospace; font-size: 30px; font-weight: 700;
+  letter-spacing: .08em; text-transform: uppercase; color: #a78bfa; line-height: 1.2;
+}
+.ad-chords { font-family: "JetBrains Mono", monospace; font-size: 40px; font-weight: 700;
+  color: #e4e4e7; line-height: 1.2; }
+.dim { opacity: .25; }
+.ad-banner {
+  background: repeating-linear-gradient(45deg, #f59e0b, #f59e0b 22px, #d97706 22px, #d97706 44px);
+  color: #1c1917; font-weight: 800; font-size: 40px; text-align: center;
+  padding: 40px 0; border-radius: 14px; margin: 4px 0;
+  box-shadow: 0 20px 50px rgba(0,0,0,.6);
+}
+
+/* === Cartao de texto das viradas de discurso (layout `brand`) === */
+#caption.is-brand .caption-text { font-size: 84px; line-height: 1.1; }
+#caption.is-brand .caption-text em { color: #a78bfa; }
+
+/* === Mock: montar PDF na mao === */
+[data-mock="pdf"] { display: none; align-items: center; justify-content: center; height: 100%; }
+[data-mock="pdf"].active { display: flex; }
+.pdf-stack { position: relative; width: 620px; height: 720px; }
+.pdf-sheet {
+  position: absolute; inset: 0; background: #f6f3ea; border-radius: 8px;
+  box-shadow: 0 30px 70px rgba(0,0,0,.6);
+}
+.pdf-sheet--back { transform: rotate(-4deg) translate(-26px, 14px); background: #ddd9cf; }
+.pdf-sheet--mid  { transform: rotate(2.5deg) translate(18px, 6px);  background: #eae6dc; }
+.pdf-sheet--front { padding: 56px 48px; display: flex; flex-direction: column; gap: 34px; }
+.pdf-name {
+  display: flex; align-items: center; gap: 16px; color: #26262b;
+  font-size: 27px; font-weight: 700; white-space: nowrap;
+}
+.pdf-badge {
+  background: #b91c1c; color: #fff; font-size: 22px; font-weight: 800;
+  padding: 6px 12px; border-radius: 6px; letter-spacing: .04em; white-space: nowrap;
+}
+.pdf-lines { display: flex; flex-direction: column; gap: 26px; margin-top: 10px; }
+.pdf-lines span { height: 16px; background: #cfcabd; border-radius: 4px; }
+.pdf-foot { margin-top: auto; color: #7a766c; font-size: 26px; font-weight: 600; }
+
+/* === Mock: cifra no tom errado === */
+[data-mock="tom"] { display: none; align-items: center; justify-content: center; height: 100%; }
+[data-mock="tom"].active { display: flex; }
+.tom-sheet {
+  width: 100%; background: #15151a; border-radius: 32px;
+  padding: 70px 60px; display: flex; flex-direction: column; gap: 30px;
+}
+.tom-head { font-size: 52px; font-weight: 800; color: var(--ink); }
+.tom-tag { font-size: 34px; font-weight: 600; color: var(--muted); margin-bottom: 12px; }
+.tom-tag b { color: #e4e4e7; }
+.tom-chords {
+  font-family: "JetBrains Mono", monospace; font-size: 48px; font-weight: 700; color: #e4e4e7;
+}
+.tom-note {
+  margin-top: 26px; align-self: flex-start; transform: rotate(-3deg);
+  color: #f87171; font-size: 44px; font-weight: 800;
+  border: 4px solid #f87171; border-radius: 14px; padding: 18px 26px;
+}
+.tom-note b { font-size: 52px; }

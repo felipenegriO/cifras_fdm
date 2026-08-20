@@ -323,7 +323,7 @@ document.getElementById('bandaLogoInput').addEventListener('change', async funct
 async function selecionarBandaParaPagamento(id) {
   const res = await cifroFetch('/src/backend/bandas/selecionar.php', { bandaId: id });
   if (!res.sucesso) throw new Error(res.mensagem || 'Não foi possível selecionar a banda.');
-  window.location.href = '/plano.php#planos';
+  window.location.href = '/minha-banda.php?aba=plano#planos';
 }
 
 async function gerenciarPlano() {

@@ -33,12 +33,43 @@ npm install               # Playwright
 cp .env.example .env      # preencher DB_*, MAIL_*, STRIPE_*
 
 # 3. Banco de dados
-# criar o banco e executar public/create_tables.sql
-# (ou usar scripts/setup/setup_db.php — NUNCA deixar em public/ em produção)
+# criar o banco e executar create_tables.sql (raiz do projeto)
+# (ou usar scripts/setup/setup_db.php, que aplica o baseline e as migrations pendentes)
 
 # 4. Servidor de desenvolvimento
 npm run serve             # php -S localhost:8090 -t public
 ```
+
+### Como o schema chega a cada banco
+
+| Situação | Comando | O que roda |
+|---|---|---|
+| Subir base de teste | `npm run test:e2e:db:setup` | baseline + migrations |
+| Máquina nova, banco vazio | `scripts/setup/setup_db.php` | baseline + migrations |
+| Produção | `scripts/setup/migrate.php --allow-production` | **só migrations** |
+
+`create_tables.sql` é o retrato do banco zerado e a única declaração de tabelas
+do projeto. **Nunca rode o baseline contra banco com dados**: ele contém um
+`ALTER TABLE … ADD CONSTRAINT` que não é idempotente.
+
+`scripts/` não é enviado à Hostinger (ver "Deploy" abaixo), então o
+`migrate.php` roda **da máquina local apontando para o banco de produção** — o
+`DB_HOST` da Hostinger é alcançável de fora. Confira antes o que está
+pendente, e só então aplique:
+
+```bash
+php scripts/setup/migrate.php --status
+```
+
+Aplicar exige duas confirmações independentes, de propósito:
+`--allow-production` na linha de comando **e** `MIGRATIONS_ALLOW_PRODUCTION=true`
+no ambiente.
+
+Toda alteração de banco existente nasce em `migrations/`, com nome no formato
+`AAAAMMDD_descricao_curta.sql`. Como num banco novo as migrations rodam sobre um
+baseline que já as contém, elas precisam ser idempotentes: use
+`IF NOT EXISTS` e `MODIFY`. São extensões do MariaDB — o projeto não roda em
+MySQL.
 
 ## Testes
 
@@ -54,7 +85,9 @@ no projeto `setup`, salvando o estado em `tests/.auth/`.
 ## Estrutura
 
 ```
-public/               # document root
+create_tables.sql      # baseline: única declaração de tabelas do projeto
+migrations/            # alterações de banco existente, aplicadas sobre o baseline
+public/                 # document root
   api/                # endpoints JSON (live, stripe, sync, bandas, csrf)
   src/
     Controllers/      # roteamento das páginas
@@ -62,8 +95,7 @@ public/               # document root
     Services/         # Auth, Mail, Database, Validator, LiveState
     Views/            # templates PHP
     backend/          # endpoints legados + bootstrap (sessão, CSRF, headers)
-  create_tables.sql   # schema MySQL
-scripts/setup/        # scripts de migração/diagnóstico (NÃO fazer deploy destes)
+scripts/setup/        # setup/migração/diagnóstico (NÃO fazer deploy destes)
 tests/cifro/       # suíte E2E principal (23 specs)
 tests/php/            # testes unitários PHPUnit
 ```
@@ -110,22 +142,16 @@ Stripe: deixe em branco até configurar as chaves de produção (ver seção Str
 
 ### 3. Criar/migrar o banco de dados
 
-**Primeira vez (banco vazio):** suba temporariamente `scripts/setup/setup_db.php` para `public_html/setup_db.php`, acesse via browser e **remova o arquivo imediatamente** após executar:
+**Primeira vez (banco vazio):** execute `scripts/setup/setup_db.php` exclusivamente por CLI em ambiente não produtivo.
 
+**Banco já existente:** as migrations SQL ficam em `migrations/` e são registradas com checksum em `schema_migrations`.
+
+```powershell
+C:\xampp\php\php.exe scripts\setup\migrate.php --status
+C:\xampp\php\php.exe scripts\setup\migrate.php
 ```
-https://seudominio.com.br/setup_db.php
-```
 
-**Banco já existente (atualização de estrutura):** suba apenas a migration necessária da pasta `scripts/setup/`, acesse via browser e remova logo após:
-
-| Migration | Quando usar |
-|---|---|
-| `migrate_planos.php` | Alterações na tabela de planos/bandas |
-| `migrate_privacy.php` | Campos de aceite de termos/privacidade |
-| `migrate_stripe_events.php` | Tabelas de idempotência do webhook Stripe |
-| `migrate_performance_indexes.php` | Índices de performance (pode rodar a qualquer momento) |
-
-> **Nunca deixe scripts de setup/migração acessíveis em produção após executar.**
+Em produção, a execução exige simultaneamente `MIGRATIONS_ALLOW_PRODUCTION=true` e `--allow-production`. Faça backup antes e confira o status depois. Scripts de setup e migration nunca devem ficar acessíveis por HTTP.
 
 ### 4. Criar pasta do modo ensaio
 

@@ -239,8 +239,142 @@
     return mode === 'minor' ? MINOR_KEYS.slice() : MAJOR_KEYS.slice();
   }
 
+  // ---------------------------------------------------------------------
+  // Deslocamento de instrumento: capotraste no violão, transpose no teclado.
+  // O valor diz quanto o INSTRUMENTO sobe em relação às formas mostradas na
+  // tela. O som que sai nunca muda — só a forma que o dedo faz.
+  // ---------------------------------------------------------------------
+  const INSTRUMENTOS = ['violao', 'teclado', 'outro'];
+  const FAIXA_MANUAL = {
+    violao: { min: 0, max: 12 },
+    teclado: { min: -12, max: 12 },
+    outro: { min: -12, max: 12 }
+  };
+  // A janela do automático é menor que a faixa manual de propósito: fora dela o
+  // resultado só se repete (deslocamento 8 dá as mesmas formas que -4), então
+  // buscar mais longe produziria posição apertada sem ganho nenhum. Chegar lá é
+  // decisão de quem toca, pelo controle manual.
+  const JANELA_AUTOMATICA = {
+    violao: { min: 0, max: 7 },
+    teclado: { min: -6, max: 6 },
+    outro: { min: -6, max: 6 }
+  };
+  const ROTULO = { violao: 'Capotraste', teclado: 'Transpose', outro: 'Transposição' };
+  // Formas abertas do violão. Pestana é o que o nível básico evita.
+  const RAIZES_ABERTAS_MAIOR = ['C', 'A', 'G', 'E', 'D'];
+  const RAIZES_ABERTAS_MENOR = ['A', 'E', 'D'];
+  // Tons de menos teclas pretas, para quem toca teclado.
+  const RAIZES_POUCAS_TECLAS_PRETAS = ['C', 'G', 'F', 'D'];
+  const RAIZES_POUCAS_TECLAS_PRETAS_MENOR = ['A', 'E', 'D'];
+
+  function instrumentoValido(instrumento) {
+    return INSTRUMENTOS.indexOf(String(instrumento)) !== -1 ? String(instrumento) : 'outro';
+  }
+
+  function faixaManual(instrumento) {
+    const faixa = FAIXA_MANUAL[instrumentoValido(instrumento)];
+    return { min: faixa.min, max: faixa.max };
+  }
+
+  function janelaAutomatica(instrumento) {
+    const faixa = JANELA_AUTOMATICA[instrumentoValido(instrumento)];
+    return { min: faixa.min, max: faixa.max };
+  }
+
+  function rotuloDeslocamento(instrumento) {
+    return ROTULO[instrumentoValido(instrumento)];
+  }
+
+  // Deslocamento positivo = instrumento sobe, então as formas descem.
+  function aplicarDeslocamento(html, deslocamento) {
+    const valor = Number(deslocamento) || 0;
+    return valor === 0 ? String(html || '') : transposeHtml(html, -valor);
+  }
+
+  function tomDasFormas(tomSoante, deslocamento) {
+    const normalizado = normalizeKey(tomSoante);
+    if (!normalizado) return '';
+    const indice = noteIndex(tonicOf(normalizado));
+    if (indice === undefined) return '';
+    const valor = Number(deslocamento) || 0;
+    return NOTES[(indice - valor + 1200) % 12] + (normalizado.endsWith('m') ? 'm' : '');
+  }
+
+  // Um acorde "atrapalha" quando o critério do instrumento diz que ele é difícil
+  // de tocar. Só a raiz conta: D/F# é trivial e seria punido injustamente pelo
+  // sustenido do baixo.
+  function atrapalha(chord, instrumento, nivel) {
+    const raiz = NOTES[chord.pitch];
+
+    if (nivel !== 'basico') return raiz.length > 1;
+
+    if (chord.quality === 'diminished' || chord.quality === 'augmented') return true;
+
+    if (instrumentoValido(instrumento) === 'violao') {
+      const abertas = chord.quality === 'minor' ? RAIZES_ABERTAS_MENOR : RAIZES_ABERTAS_MAIOR;
+      return abertas.indexOf(raiz) === -1;
+    }
+
+    const faceis = chord.quality === 'minor' ? RAIZES_POUCAS_TECLAS_PRETAS_MENOR : RAIZES_POUCAS_TECLAS_PRETAS;
+    return faceis.indexOf(raiz) === -1;
+  }
+
+  function deslocarAcorde(chord, deslocamento) {
+    return { pitch: (chord.pitch - deslocamento + 1200) % 12, quality: chord.quality };
+  }
+
+  function nivelValido(nivel) {
+    return nivel === 'basico' ? 'basico' : 'simplificar';
+  }
+
+  function custoDeslocamento(html, deslocamento, opcoes) {
+    const config = opcoes || {};
+    const instrumento = instrumentoValido(config.instrumento);
+    const nivel = nivelValido(config.nivel);
+    const valor = Number(deslocamento) || 0;
+    return extractChords(html).reduce(function (total, chord) {
+      return total + (atrapalha(deslocarAcorde(chord, valor), instrumento, nivel) ? 1 : 0);
+    }, 0);
+  }
+
+  function sugerirDeslocamento(html, opcoes) {
+    const config = opcoes || {};
+    const instrumento = instrumentoValido(config.instrumento);
+    const nivel = nivelValido(config.nivel);
+    const chords = extractChords(html);
+    if (!chords.length) return 0;
+
+    const janela = janelaAutomatica(instrumento);
+    let melhor = 0;
+    let melhorCusto = Infinity;
+
+    for (let valor = janela.min; valor <= janela.max; valor += 1) {
+      let custo = 0;
+      chords.forEach(chord => {
+        if (atrapalha(deslocarAcorde(chord, valor), instrumento, nivel)) custo += 1;
+      });
+      // Empate favorece o menor módulo, e o zero vence qualquer empate: assim o
+      // sistema nunca propõe deslocamento sem ganho real.
+      const venceNoEmpate = custo === melhorCusto && Math.abs(valor) < Math.abs(melhor);
+      if (custo < melhorCusto || venceNoEmpate) {
+        melhorCusto = custo;
+        melhor = valor;
+      }
+    }
+
+    return melhor;
+  }
+
   root.CifroChords = {
     NOTES: NOTES.slice(),
+    INSTRUMENTOS: INSTRUMENTOS.slice(),
+    aplicarDeslocamento,
+    custoDeslocamento,
+    faixaManual,
+    janelaAutomatica,
+    rotuloDeslocamento,
+    sugerirDeslocamento,
+    tomDasFormas,
     MAJOR_KEYS: MAJOR_KEYS.slice(),
     MINOR_KEYS: MINOR_KEYS.slice(),
     extractChords,

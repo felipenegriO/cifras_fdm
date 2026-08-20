@@ -54,6 +54,12 @@
         if (status) status.setAttribute('aria-busy', busy ? 'true' : 'false');
     }
 
+    function showAutomaticFailure(message) {
+        if (failureToastShownThisSession) return;
+        failureToastShownThisSession = true;
+        if (window.cifroToast) cifroToast(message, 'warning');
+    }
+
     function songToken(song) {
         const source = JSON.stringify([song.id, song.nome, song.artista, song.classificacao, song.bit, song.cifra, song.source_url]);
         let hash = 2166136261;
@@ -104,13 +110,16 @@
         if (!bandaId) return Promise.resolve(false);
         const existing = inFlight.get(bandaId);
         if (existing) {
+            if (force && !existing.syncData) {
+                return existing.promise.then(() => runFullPreparation(bandaId, { force, showProgress }));
+            }
             // Uma preparação silenciosa (automática) já está em andamento
             // para esta banda. Não duplica o trabalho de rede — só espera
             // ela terminar — mas ainda assim aplica o feedback visual que
             // o clique manual pediu (barra de progresso/toast), já que a
             // tarefa em andamento pode ter sido disparada com showProgress
             // desligado e por isso nunca notificaria o usuário sozinha.
-            return existing.then(ok => {
+            return existing.promise.then(ok => {
                 if (showProgress) {
                     if (ok) {
                         setProgress(100);
@@ -125,7 +134,7 @@
             });
         }
         const task = performPreparation(bandaId, { syncData: true, force, showProgress, forceProbe: true }).finally(() => inFlight.delete(bandaId));
-        inFlight.set(bandaId, task);
+        inFlight.set(bandaId, { promise: task, syncData: true });
         return task;
     }
 
@@ -141,18 +150,34 @@
     // uma segunda checagem de revisão redundante a cada abertura. Sem forçar,
     // probe() reaproveita o resultado recente (janela de 10s) sem novo fetch
     // nem novo evento.
-    function runShellOnlyPreparation(bandaId) {
+    function runShellOnlyPreparation(bandaId, targetRevision = null) {
         if (!bandaId) return Promise.resolve(false);
-        if (inFlight.has(bandaId)) return inFlight.get(bandaId);
-        const task = performPreparation(bandaId, { syncData: false, force: false, showProgress: false, forceProbe: false }).finally(() => inFlight.delete(bandaId));
-        inFlight.set(bandaId, task);
+        if (inFlight.has(bandaId)) {
+            const existing = inFlight.get(bandaId);
+            if (!existing.syncData && targetRevision !== null && Number(existing.revision) !== Number(targetRevision)) {
+                return existing.promise.then(() => runShellOnlyPreparation(bandaId, targetRevision));
+            }
+            return existing.promise;
+        }
+        const task = (async () => {
+            const revision = targetRevision ?? await cifroSync.getRevision(bandaId);
+            const verification = await cifroSync.verifyOfflinePackage(bandaId);
+            if (verification.ok) {
+                await cifroSync.markShellPrepared(bandaId, revision, verification.version);
+                await renderStatus();
+                return true;
+            }
+            return performPreparation(bandaId, { syncData: false, force: false, showProgress: false, forceProbe: false, revision });
+        })().finally(() => inFlight.delete(bandaId));
+        inFlight.set(bandaId, { promise: task, syncData: false, revision: targetRevision });
         return task;
     }
 
-    async function performPreparation(bandaId, { syncData, force, showProgress, forceProbe }) {
+    async function performPreparation(bandaId, { syncData, force, showProgress, forceProbe, revision: knownRevision }) {
         const button = document.getElementById('prepareOfflineBtn');
         if (!(await window.CifroConnectivity?.probe({ force: forceProbe }))) {
             if (showProgress) setStatus('Servidor indisponível — a versão salva continua disponível. Tente sincronizar novamente quando a conexão voltar.', 'offline');
+            else showAutomaticFailure('O armazenamento offline está incompleto e não pôde ser recuperado sem conexão.');
             return false;
         }
         setBusy(true);
@@ -169,13 +194,15 @@
             }
             setProgress(15);
             setStatus('Preparando páginas e músicas para uso offline…', 'syncing');
-            const revision = await cifroSync.getRevision(bandaId);
+            const revision = knownRevision ?? await cifroSync.getRevision(bandaId);
             const preparedShell = await prepareShell(revision, progress => {
                 const percent = 15 + Math.round((Number(progress.completed) / Math.max(1, Number(progress.total))) * 75);
                 setProgress(percent);
                 const phase = progress.phase === 'musicas' ? 'músicas' : progress.phase === 'assets' ? 'arquivos do aplicativo' : 'páginas';
                 setStatus(`Sincronizando ${phase}… ${progress.completed} de ${progress.total}`, 'syncing');
             });
+            const verification = await cifroSync.verifyOfflinePackage(bandaId);
+            if (!verification.ok) throw new Error('O pacote continuou incompleto após a recuperação');
             setProgress(95);
             setStatus('Finalizando sincronização offline…', 'syncing');
             if (navigator.storage?.persist) await navigator.storage.persist();
@@ -188,10 +215,7 @@
         } catch (error) {
             setProgress(0);
             setStatus(`Não foi possível atualizar o pacote — a versão salva foi mantida. ${error.message || 'Tente novamente mais tarde.'}`, 'offline');
-            if (!showProgress && !failureToastShownThisSession) {
-                failureToastShownThisSession = true;
-                if (window.cifroToast) cifroToast('Não foi possível atualizar o pacote offline automaticamente. Toque em Sincronizar para tentar de novo.', 'warning');
-            }
+            if (!showProgress) showAutomaticFailure('Não foi possível recuperar o pacote offline automaticamente. Toque em Sincronizar para tentar de novo.');
             return false;
         } finally {
             setBusy(false);
@@ -209,9 +233,7 @@
     async function handleSyncChecked(event) {
         const { bandaId, contentRevision } = event.detail || {};
         if (!bandaId || !window.cifroSync) return;
-        const status = await cifroSync.getOfflineStatus(bandaId);
-        if (status.shellReady && status.shellPreparedRevision === Number(contentRevision)) return;
-        runShellOnlyPreparation(bandaId).catch(() => {});
+        runShellOnlyPreparation(bandaId, contentRevision).catch(() => {});
     }
 
     // Só monta o painel (botão + barra de progresso + status) em páginas que
@@ -221,11 +243,15 @@
     // 'cifro:sync-checked' continua ativo sem criar nenhum elemento na tela.
     function bind() {
         const panel = ensurePanel();
-        if (!panel) return;
-        renderStatus();
-        document.getElementById('prepareOfflineBtn').addEventListener('click', function () {
-            runFullPreparation(window.CIFRO_BAND_ID, { force: true, showProgress: true });
-        });
+        if (panel) {
+            renderStatus();
+            document.getElementById('prepareOfflineBtn').addEventListener('click', function () {
+                runFullPreparation(window.CIFRO_BAND_ID, { force: true, showProgress: true });
+            });
+        }
+        const editorPreview = new URLSearchParams(location.search).get('editorPreview') === '1';
+        const manualSyncPage = Boolean(document.getElementById('btnSyncDados'));
+        if (window.CIFRO_BAND_ID && !editorPreview && !manualSyncPage) runShellOnlyPreparation(window.CIFRO_BAND_ID).catch(() => {});
         if (localStorage.getItem('cifroAppUpdatePending') === '1' && window.CIFRO_BAND_ID) {
             setStatus('Nova versão encontrada. Atualizando dados e músicas…', 'syncing');
             runFullPreparation(window.CIFRO_BAND_ID, { force: true, showProgress: false }).then(ok => {
@@ -233,6 +259,18 @@
             });
         }
     }
+
+    // O cifro-sync avisa que o armazenamento local está danificado e não deu
+    // para reparar. Ele já garante que isto chega uma única vez por sessão
+    // (marca em sessionStorage, a mesma que limita a tentativa de reparo),
+    // então aqui não há contagem própria: quem sabe se já avisou é quem sabe
+    // se já tentou.
+    document.addEventListener('cifro:integridade-falhou', function () {
+        if (window.cifroToast) {
+            cifroToast('O repertório salvo neste aparelho está incompleto e não pôde ser recuperado.', 'warning');
+        }
+        renderStatus();
+    });
 
     window.addEventListener('online', renderStatus);
     window.addEventListener('offline', renderStatus);

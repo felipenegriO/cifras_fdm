@@ -9,6 +9,7 @@
  *   - UI da página select-banda (modal "Nova banda")
  */
 import { test, expect } from '../fixtures/coverage.js';
+import { dbQuery } from '../helpers/db.js';
 
 test.use({ storageState: 'tests/.auth/user.json' });
 
@@ -199,6 +200,27 @@ test.describe('Página select-banda — UI', () => {
     await expect(page.locator('#modalNovaBanda')).toHaveClass(/open/);
   });
 
+  // Caminho real do usuário comum: digitar só o nome no modal e salvar.
+  // Os demais testes cobrem o endpoint direto (page.request) ou só abrem/fecham
+  // o modal — nenhum exercitava o submit de verdade pela tela.
+  test('criar banda pelo modal só com o nome salva e entra na banda nova', async ({ page }) => {
+    const nome = `__BANDA_MODAL_${Date.now()}__`;
+    await page.goto('/select-banda.php');
+    await page.click('#btnNovaBanda');
+    await page.fill('#inputNomeBanda', nome);
+    await page.click('#btnCriarBanda');
+
+    await page.waitForURL(/index\.php/i, { timeout: 10000 });
+
+    const { rows } = dbQuery('SELECT id, plano FROM bandas WHERE nome = ?', [nome]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].plano).toBe('gratuito');
+    await expect(page.locator('.topnav__band-chip')).toContainText(nome);
+
+    dbQuery('DELETE FROM usuario_banda WHERE banda_id = ?', [rows[0].id]);
+    dbQuery('DELETE FROM bandas WHERE id = ?', [rows[0].id]);
+  });
+
   test('link de logout está visível', async ({ page }) => {
     await page.goto('/select-banda.php');
     const logout = page.locator('a.sb-logout, a[href="/logout.php"]');
@@ -262,12 +284,12 @@ test.describe('Cadastrar membros na banda', () => {
     await ctx.close();
   });
 
-  test('página de usuários carrega para administrador', async ({ page }) => {
+  test('lista de membros carrega para administrador', async ({ page }) => {
+    // Os membros viraram a aba "membros" de Minha Banda; /users.php redireciona.
     await page.goto('/users.php');
-    // Pode redirecionar por acesso, ou carregar a página
     const url = page.url();
-    if (url.includes('users.php')) {
-      await expect(page.locator('body')).toBeVisible();
+    if (url.includes('minha-banda.php')) {
+      await expect(page.locator('[data-aba-ativa]')).toHaveAttribute('data-aba-ativa', 'membros');
     } else {
       // Redirecionou — não é administrador desta banda ou requer seleção
       expect(url).toMatch(/login|select-banda|index/i);

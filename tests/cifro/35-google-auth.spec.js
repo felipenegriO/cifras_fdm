@@ -9,6 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test, expect } from '../fixtures/coverage.js';
+import { dbQuery } from '../helpers/db.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -46,6 +47,22 @@ function isGoogleOauthConfiguredInEnv() {
 }
 
 const envLocalPath = path.resolve(__dirname, '../../.env.local');
+const GOOGLE_LOG_REFERENCE = 'api/auth/google/callback.php';
+
+function googleLogCheckpoint() {
+  return Number(dbQuery('SELECT COALESCE(MAX(id), 0) AS id FROM app_error_logs').rows[0].id);
+}
+
+function googleLogAfter(id) {
+  return dbQuery(
+    'SELECT id, nivel, descricao, detalhes FROM app_error_logs WHERE referencia = ? AND id > ? ORDER BY id DESC LIMIT 1',
+    [GOOGLE_LOG_REFERENCE, id],
+  ).rows[0];
+}
+
+function removeGoogleLog(id) {
+  if (id) dbQuery('DELETE FROM app_error_logs WHERE id = ?', [id]);
+}
 
 /**
  * Temporarily appends extra vars to the real .env.local (also used for
@@ -127,6 +144,7 @@ test.describe('Login com Google — visibilidade do botão', () => {
 
 test.describe('Login com Google — callback.php', () => {
   test('sem state na sessão retorna erro e redireciona para login', async ({ page }) => {
+    const checkpoint = googleLogCheckpoint();
     const res = await page.request.get('/api/auth/google/callback.php?code=abc&state=qualquer', {
       maxRedirects: 0,
     }).catch(err => err.response ?? null);
@@ -136,18 +154,36 @@ test.describe('Login com Google — callback.php', () => {
     const location = res.headers()['location'];
     expect(location).toContain('/login.php');
     expect(location).toContain('erro=google');
+    const log = googleLogAfter(checkpoint);
+    expect(log).toBeTruthy();
+    expect(log.nivel).toBe('warning');
+    const details = JSON.parse(log.detalhes);
+    expect(details.exception).toBe('GoogleOAuthStateMismatch');
+    expect(details.message).toContain('State OAuth');
+    expect(details.reason).toBe('state_mismatch');
+    expect(details.has_code).toBe(true);
+    expect(details).not.toHaveProperty('code');
+    expect(details).not.toHaveProperty('state');
+    removeGoogleLog(log.id);
   });
 
   test('sem code retorna erro e redireciona para login', async ({ page }) => {
-    // Primeiro visita start.php para obter um state válido na sessão...
-    await page.goto('/api/auth/google/start.php').catch(() => {});
-    // then hits callback without a code but (if start.php redirected to
-    // Google) the session cookie already carries google_oauth_state.
-    const res = await page.request.get('/api/auth/google/callback.php?state=missing-code-check', {
-      maxRedirects: 0,
-    }).catch(err => err.response ?? null);
-    const status = res ? res.status() : null;
-    expect([302, 303]).toContain(status);
+    await withExtraEnv(fakeGoogleEnv, async () => {
+      const checkpoint = googleLogCheckpoint();
+      const state = await goToStartAndCaptureState(page);
+      expect(state).not.toBeNull();
+      const res = await page.request.get(`/api/auth/google/callback.php?state=${encodeURIComponent(state)}`, {
+        maxRedirects: 0,
+      }).catch(err => err.response ?? null);
+      const status = res ? res.status() : null;
+      expect([302, 303]).toContain(status);
+      const log = googleLogAfter(checkpoint);
+      const details = JSON.parse(log.detalhes);
+      expect(log.nivel).toBe('warning');
+      expect(details.exception).toBe('GoogleOAuthMissingCode');
+      expect(details.reason).toBe('missing_code');
+      removeGoogleLog(log.id);
+    });
   });
 
   async function goToStartAndCaptureState(page) {
@@ -174,6 +210,7 @@ test.describe('Login com Google — callback.php', () => {
 
   test('usuário cancela o consentimento (error=access_denied) retorna erro e redireciona', async ({ page }) => {
     await withExtraEnv(fakeGoogleEnv, async () => {
+      const checkpoint = googleLogCheckpoint();
       const state = await goToStartAndCaptureState(page);
       expect(state).not.toBeNull();
       const res = await page.request.get(`/api/auth/google/callback.php?state=${encodeURIComponent(state)}&error=access_denied`, {
@@ -182,11 +219,18 @@ test.describe('Login com Google — callback.php', () => {
       const status = res ? res.status() : null;
       expect([302, 303]).toContain(status);
       expect(res.headers()['location']).toContain('erro=google');
+      const log = googleLogAfter(checkpoint);
+      const details = JSON.parse(log.detalhes);
+      expect(log.nivel).toBe('warning');
+      expect(details.exception).toBe('GoogleOAuthUserCancelled');
+      expect(details.provider_error).toBe('access_denied');
+      removeGoogleLog(log.id);
     });
   });
 
   test('code e state válidos, mas troca real do código com o Google falha, retorna erro', async ({ page }) => {
     await withExtraEnv(fakeGoogleEnv, async () => {
+      const checkpoint = googleLogCheckpoint();
       const state = await goToStartAndCaptureState(page);
       expect(state).not.toBeNull();
       const res = await page.request.get(`/api/auth/google/callback.php?state=${encodeURIComponent(state)}&code=algum-codigo-de-teste`, {
@@ -199,6 +243,14 @@ test.describe('Login com Google — callback.php', () => {
       // o código com o Google real — exercitando o catch(Throwable) e o
       // redirecionamento de erro, sem nunca completar um login real.
       expect(res.headers()['location']).toContain('erro=google');
+      const log = googleLogAfter(checkpoint);
+      const details = JSON.parse(log.detalhes);
+      expect(log.nivel).toBe('error');
+      expect(details.reason).toBe('authentication_failure');
+      expect(details.exception).toBeTruthy();
+      expect(details.message).toBeTruthy();
+      expect(details.request_id).toMatch(/^[a-f0-9]{16}$/);
+      removeGoogleLog(log.id);
     });
   });
 });

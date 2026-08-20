@@ -8,11 +8,13 @@ class GoogleAuthService
 {
     private UserRepository $users;
     private BandaRepository $bandas;
+    private BandaConviteRepository $convites;
 
-    public function __construct(UserRepository $users, BandaRepository $bandas)
+    public function __construct(UserRepository $users, BandaRepository $bandas, ?BandaConviteRepository $convites = null)
     {
         $this->users = $users;
         $this->bandas = $bandas;
+        $this->convites = $convites ?? new BandaConviteRepository();
     }
 
     /**
@@ -36,10 +38,13 @@ class GoogleAuthService
     }
 
     /**
-     * @param array $googlePayload verified GoogleJwtVerifier payload (sub, email, email_verified, name).
+     * @param array $googlePayload payload já verificado por GoogleJwtVerifier (sub, email, email_verified, name).
+     * @param array{token: string, banda_id: string}|null $convite convite pendente já validado
+     *        (BandaConviteFlow::bandaAbertaParaConvite) por quem chama; quando presente, um
+     *        usuário novo entra NELA em vez de ganhar uma banda própria.
      * @return array user row shaped like UserRepository::findByEmail()'s return.
      */
-    public function resolveOrCreateUser(array $googlePayload): array
+    public function resolveOrCreateUser(array $googlePayload, ?array $convite = null): array
     {
         if (($googlePayload['email_verified'] ?? false) !== true) {
             throw new \RuntimeException('E-mail do Google não verificado.');
@@ -66,46 +71,60 @@ class GoogleAuthService
             return $byEmail;
         }
 
-        return $this->createUserAndBanda($sub, $email, $name);
+        return $this->createUserAndBanda($sub, $email, $name, $convite);
     }
 
-    private function createUserAndBanda(string $sub, string $email, string $name): array
+    private function createUserAndBanda(string $sub, string $email, string $name, ?array $convite = null): array
     {
         $userId = bin2hex(random_bytes(16));
-        $bandaId = bin2hex(random_bytes(16));
-        $bandaNome = $name !== '' ? $name . "'s Band" : 'Minha Banda';
+        $nome = $name !== '' ? $name : $email;
+        $conviteBandaId = $convite['banda_id'] ?? null;
 
-        // Band must exist before the user is linked to it via usuario_banda's FK.
-        $this->bandas->save([
-            'id' => $bandaId,
-            'nome' => $bandaNome,
-            'ativo' => 1,
-            'plano' => 'gratuito',
-            'trial_expira_em' => null,
-        ]);
+        // Convite: entra na banda que convidou, como básico. Sem convite:
+        // ganha a própria banda e é administrador dela.
+        if ($conviteBandaId !== null && $conviteBandaId !== '') {
+            $bandas = [['id' => $conviteBandaId, 'perfil' => BandaConvitePolicy::PERFIL]];
+        } else {
+            $bandaId = bin2hex(random_bytes(16));
+            $bandaNome = $name !== '' ? $name . "'s Band" : 'Minha Banda';
+
+            // A banda precisa existir antes do vínculo por causa da FK de usuario_banda.
+            $this->bandas->save([
+                'id' => $bandaId,
+                'nome' => $bandaNome,
+                'ativo' => 1,
+                'plano' => 'gratuito',
+                'trial_expira_em' => null,
+            ]);
+            $bandas = [['id' => $bandaId, 'perfil' => 'administrador']];
+        }
 
         $this->users->save([
             'id' => $userId,
-            'nome' => $name !== '' ? $name : $email,
+            'nome' => $nome,
             'email' => $email,
             'senha_hash' => null,
             'perfil' => 'usuario',
             'ativo' => 1,
             'validade' => null,
             'google_sub' => $sub,
-            'bandas' => [['id' => $bandaId, 'perfil' => 'administrador']],
+            'bandas' => $bandas,
         ]);
 
-        $this->bandas->definirCriador($bandaId, $userId);
+        if ($conviteBandaId === null || $conviteBandaId === '') {
+            $this->bandas->definirCriador($bandas[0]['id'], $userId);
+        } else {
+            $this->convites->registrarUso((string) $convite['token']);
+        }
 
         return [
             'id' => $userId,
-            'nome' => $name !== '' ? $name : $email,
+            'nome' => $nome,
             'email' => $email,
             'perfil' => 'usuario',
             'validade' => '',
             'config' => [],
-            'bandas' => [['id' => $bandaId, 'perfil' => 'administrador']],
+            'bandas' => $bandas,
         ];
     }
 

@@ -12,7 +12,10 @@ test('E2E: Fluxo Completo do Modo Ensaio', async ({ page }) => {
 
   // 2. Navegar para música
   console.log('\n2. ✓ Navegando para música...');
-  await page.goto('/music.php?id=1');
+  const snapshot = await (await page.request.get('/api/sync/data.php')).json();
+  const songId = snapshot.musicas[0]?.id;
+  expect(songId).toBeTruthy();
+  await page.goto(`/music.php?id=${songId}`);
   await page.waitForLoadState('domcontentloaded');
   console.log(`   URL: ${page.url()}`);
 
@@ -41,6 +44,9 @@ test('E2E: Fluxo Completo do Modo Ensaio', async ({ page }) => {
 
   // 3. Procurar botão Ensaio
   console.log('\n3. ✓ Procurando botão "Modo Ensaio"...');
+  await page.getByRole('button', { name: 'Abrir ajustes' }).click();
+  await page.locator('#settingsTabTools').click();
+  await page.getByText('Ensaio com YouTube e áudio', { exact: true }).click();
   const btnEnsaio = page.locator('#btnAtivarEnsaio');
   await expect(btnEnsaio).toBeVisible();
   const btnText = await btnEnsaio.getAttribute('title');
@@ -69,6 +75,14 @@ test('E2E: Fluxo Completo do Modo Ensaio', async ({ page }) => {
   await expect(btnPlayPause).toBeVisible();
   await expect(btnPitchUp).toBeVisible();
   console.log('   Todos elementos encontrados ✓');
+  await page.evaluate(() => {
+    window.Rehearsal.pitch.createPitchPlayer = () => window.mockPlayer;
+  });
+  await page.locator('#inputAudio').setInputFiles({
+    name: 'ensaio.wav',
+    mimeType: 'audio/wav',
+    buffer: Buffer.from([82, 73, 70, 70]),
+  });
 
   // 6. Habilitar botões para teste
   console.log('\n6. ✓ Habilitando botões de controle...');
@@ -107,9 +121,7 @@ test('E2E: Fluxo Completo do Modo Ensaio', async ({ page }) => {
 
   // 10. Verificar localStorage
   console.log('\n10. ✓ Verificando localStorage...');
-  const stored = await page.evaluate(() => {
-    return localStorage.getItem('rehearsal:1');
-  });
+  const stored = await page.evaluate(id => localStorage.getItem('rehearsal:' + id), songId);
   expect(stored).toBeTruthy();
   const state = JSON.parse(stored);
   console.log(`   Estado salvo: pitchSemitones = ${state.pitchSemitones}`);
@@ -139,7 +151,7 @@ test('E2E: Fluxo Completo do Modo Ensaio', async ({ page }) => {
 
   // 13. Fechar painel
   console.log('\n13. ✓ Fechando painel Ensaio...');
-  await btnEnsaio.click();
+  await page.locator('#btnFecharEnsaio').click();
   await page.waitForTimeout(300);
   const isClosed = await painel.getAttribute('aria-hidden');
   console.log(`   Painel fechado: ${isClosed === 'true'}`);
@@ -147,6 +159,11 @@ test('E2E: Fluxo Completo do Modo Ensaio', async ({ page }) => {
 
   // 14. Reabrir e verificar estado restaurado
   console.log('\n14. ✓ Reabrindo painel e verificando estado restaurado...');
+  await page.getByRole('button', { name: 'Abrir ajustes' }).click();
+  await page.locator('#settingsTabTools').click();
+  await page.locator('#settingsPanelTools details').filter({ has: btnEnsaio }).evaluate((details) => {
+    details.open = true;
+  });
   await btnEnsaio.click();
   await page.waitForTimeout(300);
   

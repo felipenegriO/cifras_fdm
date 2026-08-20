@@ -104,10 +104,17 @@ if ($sourceUrl && empty($data['confirm_overwrite'])) {
     }
 }
 
+$transposicao = TransposicaoInstrumento::normalizar($data['transposicao_instrumento'] ?? 0);
+if ($transposicao === null) {
+    http_response_code(422);
+    echo json_encode(['ok' => false, 'error' => 'Deslocamento de instrumento inválido.']);
+    exit;
+}
+
 $payload = [
     'id' => $data['id'] ?? null, 'nome' => $nome, 'cifra' => $data['cifra'],
     'bit' => $data['bit'] ?? '', 'artista' => $data['artista'] ?? '', 'classificacao' => $classificacao,
-    'source_url' => $sourceUrl,
+    'source_url' => $sourceUrl, 'transposicao_instrumento' => $transposicao,
 ];
 try {
     $mutation = $revisionRepo->mutate($bandaId, $baseRevision, fn() => $repo->save($payload, $bandaId), fn($id) => [['type' => 'musica', 'id' => $id, 'operation' => 'upsert']]);

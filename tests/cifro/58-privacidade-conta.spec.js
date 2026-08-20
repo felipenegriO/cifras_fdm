@@ -56,7 +56,7 @@ function usuarioExiste(userId) {
 test.describe('Configurações — exportar meus dados', () => {
   test('o botão "Exportar meus dados" existe e devolve os dados reais da conta', async ({ browser }) => {
     const { userId, bandId, email, senha } = criarUsuarioDescartavel();
-    const ctx = await browser.newContext();
+    const ctx = await browser.newContext({ storageState: { cookies: [], origins: [] } });
     const page = await ctx.newPage();
     try {
       await loginComo(page, email, senha);
@@ -94,7 +94,7 @@ test.describe('Configurações — exportar meus dados', () => {
 test.describe('Configurações — excluir conta', () => {
   test('excluir a conta apaga o usuário de verdade e a sessão morre', async ({ browser }) => {
     const { userId, bandId, email, senha } = criarUsuarioDescartavel();
-    const ctx = await browser.newContext();
+    const ctx = await browser.newContext({ storageState: { cookies: [], origins: [] } });
     const page = await ctx.newPage();
     try {
       await loginComo(page, email, senha);
@@ -125,7 +125,7 @@ test.describe('Configurações — excluir conta', () => {
 
   test('excluir sem confirmar o e-mail correto é recusado e nada é apagado', async ({ browser }) => {
     const { userId, bandId, email, senha } = criarUsuarioDescartavel();
-    const ctx = await browser.newContext();
+    const ctx = await browser.newContext({ storageState: { cookies: [], origins: [] } });
     const page = await ctx.newPage();
     try {
       await loginComo(page, email, senha);
@@ -155,7 +155,7 @@ test.describe('Configurações — excluir conta', () => {
 
   test('excluir o único membro de uma banda remove a banda órfã junto', async ({ browser }) => {
     const { userId, bandId, email, senha } = criarUsuarioDescartavel();
-    const ctx = await browser.newContext();
+    const ctx = await browser.newContext({ storageState: { cookies: [], origins: [] } });
     const page = await ctx.newPage();
     try {
       await loginComo(page, email, senha);

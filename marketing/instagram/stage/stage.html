@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Cifrô — palco de gravação</title>
+  <link rel="stylesheet" href="stage.css">
+</head>
+<body>
+  <div id="stage">
+    <div class="bg-glow"></div>
+    <div class="bg-grain"></div>
+
+    <div id="phone-layer">
+      <div class="phone" id="phone-left">
+        <div class="phone-bezel"><img class="screen" alt=""></div>
+        <span class="phone-label">host</span>
+      </div>
+      <div class="phone" id="phone-right">
+        <div class="phone-bezel"><img class="screen" alt=""></div>
+        <span class="phone-label">banda</span>
+      </div>
+    </div>
+
+    <div id="mock-layer">
+      <div class="mock" data-mock="pdf">
+        <div class="pdf-stack">
+          <div class="pdf-sheet pdf-sheet--back"></div>
+          <div class="pdf-sheet pdf-sheet--mid"></div>
+          <div class="pdf-sheet pdf-sheet--front">
+            <div class="pdf-name"><span class="pdf-badge">PDF</span> repertorio-v4-FINAL.pdf</div>
+            <div class="pdf-lines">
+              <span style="width:82%"></span><span style="width:64%"></span>
+              <span style="width:74%"></span><span style="width:48%"></span>
+              <span style="width:70%"></span><span style="width:58%"></span>
+            </div>
+            <div class="pdf-foot">página 1 de 14</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="mock" data-mock="tom">
+        <div class="tom-sheet">
+          <div class="tom-head">Casa Cheia</div>
+          <div class="tom-tag">tom da cifra: <b>C</b></div>
+          <div class="tom-chords">C&nbsp;&nbsp;G&nbsp;&nbsp;Am&nbsp;&nbsp;F</div>
+          <div class="tom-chords">C&nbsp;&nbsp;G&nbsp;&nbsp;Am&nbsp;&nbsp;F</div>
+          <div class="tom-chords">F&nbsp;&nbsp;C&nbsp;&nbsp;G&nbsp;&nbsp;Am</div>
+          <div class="tom-note">mas o vocal canta em <b>E</b></div>
+        </div>
+      </div>
+
+      <div class="mock" data-mock="paper">
+        <div class="paper-sheet">
+          <div class="paper-title">Culto de Domingo</div>
+          <ol class="paper-list">
+            <li>Amanhecer</li>
+            <li class="struck">Estrada Velha</li>
+            <li>Casa Cheia</li>
+            <li class="struck">Passo Firme</li>
+            <li>Luz da Manhã</li>
+          </ol>
+          <div class="paper-scribble">mudou!</div>
+        </div>
+      </div>
+
+      <div class="mock" data-mock="chat">
+        <div class="chat-bubble in">alguem tem a cifra de Casa Cheia?</div>
+        <div class="chat-bubble out"><span class="chat-shot">C&nbsp;&nbsp;G&nbsp;&nbsp;Am&nbsp;&nbsp;F</span></div>
+        <div class="chat-bubble in">esse print ta em C, eu toco em E</div>
+      </div>
+
+      <div class="mock" data-mock="adapp">
+        <div class="ad-page">
+          <div class="ad-section">[Intro]</div>
+          <div class="ad-chords">E&nbsp;&nbsp;B&nbsp;&nbsp;C#m&nbsp;&nbsp;A</div>
+          <div class="ad-section">[Verso]</div>
+          <div class="ad-chords">E&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;B</div>
+          <div class="ad-chords">C#m&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;A</div>
+          <div class="ad-section">[Refrão]</div>
+          <div class="ad-chords">E&nbsp;&nbsp;B&nbsp;&nbsp;C#m&nbsp;&nbsp;A</div>
+          <div class="ad-banner">Publicidade</div>
+          <div class="ad-chords dim">A&nbsp;&nbsp;E&nbsp;&nbsp;B&nbsp;&nbsp;C#m</div>
+          <div class="ad-section dim">[Refrão]</div>
+          <div class="ad-chords dim">E&nbsp;&nbsp;B&nbsp;&nbsp;C#m&nbsp;&nbsp;A</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="logo-card">
+      <img src="../../../public/src/images/android-icon-512x512.png" alt="">
+      <div class="logo-word">Cifrô</div>
+      <div class="logo-line">Em breve.</div>
+      <div class="logo-sub">segue aqui pra acompanhar</div>
+    </div>
+
+    <div id="caption"><span class="caption-text"></span></div>
+  </div>
+  <script src="timeline.js"></script>
+</body>
+</html>

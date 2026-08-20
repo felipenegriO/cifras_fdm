@@ -64,20 +64,18 @@ test.describe('Configurações', () => {
     await expect(page.locator('a[href="/logout.php"]')).toBeVisible();
   });
 
-  test('plano pago mostra gestão de pagamento nas configurações', async ({ page }) => {
-    const response = await page.request.get('/api/sync/data.php');
-    const { plano } = await response.json();
-    const section = page.locator('#sec-pagamento');
-    if (['mensal', 'semestral', 'anual', 'ativo'].includes(plano)) {
-      await expect(section).toBeVisible();
-      await expect(page.locator('a[href="/plano.php#planos"]')).toContainText('Gerenciar');
-    } else {
-      await expect(section).toHaveCount(0);
-    }
+  test('gestão de pagamento fica centralizada na tela de planos', async ({ page }) => {
+    await expect(page.locator('#sec-pagamento')).toHaveCount(0);
+    await page.goto('/plano.php');
+    await expect(page.locator('#planos')).toBeVisible();
   });
 
   test('seletor de velocidade de rolagem está disponível nas configurações', async ({ page }) => {
     await expect(page.locator('#cfgScrollSpeed')).toBeVisible();
+  });
+
+  test('controle da Central de Ajuda está disponível nas configurações', async ({ page }) => {
+    await expect(page.locator('#cfgHelpEnabled')).toBeVisible();
   });
 
   test('troca de tema aplica o atributo data-theme no documento', async ({ page }) => {

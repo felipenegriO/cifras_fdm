@@ -344,6 +344,7 @@
   <script src="<?= asset_url('/src/js/cifro-connectivity.js') ?>"></script>
   <script src="<?= asset_url('/src/js/cifro-sync.js') ?>"></script>
   <script src="<?= asset_url('/src/js/chords.js') ?>"></script>
+  <script src="<?= asset_url('/src/js/cifro-share.js') ?>"></script>
   <script src="<?= asset_url('/src/js/playlist-share.js') ?>"></script>
 </head>
 <body>
@@ -877,11 +878,22 @@ async function salvarPlaylist() {
     toast(data.mensagem, data.sucesso ? 'success' : 'error');
     if (data.sucesso) {
       await cifroSync.sync(window.CIFRO_BAND_ID);
+      // A sincronizacao troca `window.playlistsSalvas` por um array novo vindo
+      // do servidor. Sem reapontar, `playlistAtual` ficaria preso ao objeto do
+      // array antigo: a tela mostraria as musicas adicionadas depois deste
+      // salvamento, mas o POST seguinte enviaria a lista nova — sem elas — e a
+      // musica "salva" sumiria no F5.
+      const index = Number(playlistAtualIndex);
+      if (playlistsSalvas[index]) {
+        playlistAtual = playlistsSalvas[index];
+        normalizarItensPlaylist(playlistAtual);
+      }
       const select = document.getElementById('playlistSelecionada');
-      const option = select.options[Number(playlistAtualIndex)];
+      const option = select.options[index];
       if (option) option.textContent = playlistAtual.nome;
       playlistSnapshot = JSON.stringify(playlistAtual);
       setPlaylistAlterada(false);
+      montarListas();
     }
   } catch {
     toast('Erro na comunicação com o servidor.', 'error');

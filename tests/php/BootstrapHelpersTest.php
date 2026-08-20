@@ -151,6 +151,24 @@ final class BootstrapHelpersTest extends TestCase
 
     }
 
+    public function testCentralDeAjudaRespeitaAmbienteEPreferenciaDoUsuario(): void
+    {
+        $original = getenv('HELP_CENTER_ENABLED');
+        try {
+            putenv('HELP_CENTER_ENABLED=true');
+            self::assertTrue(help_center_enabled());
+            self::assertTrue(help_center_visible_for_user(['config' => []]));
+            self::assertFalse(help_center_visible_for_user(['config' => ['ajudaDesativada' => 'true']]));
+            self::assertTrue(help_center_disabled_for_user(['config' => ['ajudaDesativada' => true]]));
+
+            putenv('HELP_CENTER_ENABLED=false');
+            self::assertFalse(help_center_enabled());
+            self::assertFalse(help_center_visible_for_user(['config' => ['ajudaDesativada' => 'false']]));
+        } finally {
+            $original === false ? putenv('HELP_CENTER_ENABLED') : putenv('HELP_CENTER_ENABLED=' . $original);
+        }
+    }
+
     public function testPlanosRotulosELimites(): void
     {
         self::assertSame(10, cifro_plan_limits('gratuito')['musicas']);

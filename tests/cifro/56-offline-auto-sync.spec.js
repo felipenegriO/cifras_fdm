@@ -31,8 +31,10 @@ test.beforeEach(async ({ page }) => {
 // controle) e correria com o evento sintético que o teste dispara,
 // tornando a contagem de chamadas não-determinística.
 async function blockRealSyncTraffic(page) {
+  await page.route('**/health.php**', route => route.abort());
   await page.route('**/api/sync/version.php', route => route.abort());
   await page.route('**/api/sync/data.php', route => route.abort());
+  await page.route('**/api/sync/changes.php**', route => route.abort());
 }
 
 async function openPreview(page) {
@@ -86,6 +88,7 @@ test('cifro:sync-checked — revisão diferente completa só o shell, sem re-sin
       getOfflineStatus: async () => ({ shellReady: false, shellPreparedRevision: 3 }),
       sync: async () => { syncCalls += 1; return true; },
       getRevision: async () => 7,
+      verifyOfflinePackage: async () => ({ ok: true, version: 'test-shell' }),
       markShellPrepared: async (bandaId, revision) => { markShellCalls += 1; return revision === 7; },
     });
     document.dispatchEvent(new CustomEvent('cifro:sync-checked', { detail: { bandaId: window.CIFRO_BAND_ID, contentRevision: 7 } }));
@@ -109,10 +112,11 @@ test('duas notificações concorrentes disparam apenas uma preparação real (de
     Object.assign(window.cifroSync, {
       getOfflineStatus: async () => ({ shellReady: false, shellPreparedRevision: -1 }),
       sync: async () => true,
-      getRevision: async () => {
+      getRevision: async () => 9,
+      verifyOfflinePackage: async () => {
         preparationStarts += 1;
         await new Promise(resolve => setTimeout(resolve, 150));
-        return 9;
+        return { ok: true, version: 'test-shell' };
       },
       markShellPrepared: async () => true,
     });
@@ -137,14 +141,17 @@ test('falha na preparação automática mostra aviso uma única vez por sessão'
       value: { ready: Promise.resolve({ active: null, waiting: null }) },
     });
     const originalSync = { ...window.cifroSync };
+    const originalProbe = window.CifroConnectivity?.probe;
     const originalToast = window.cifroToast;
     let toastCalls = 0;
     window.cifroToast = () => { toastCalls += 1; };
     Object.assign(window.cifroSync, {
       getOfflineStatus: async () => ({ shellReady: false, shellPreparedRevision: -1 }),
       getRevision: async () => 11,
+      verifyOfflinePackage: async () => ({ ok: false }),
       markShellPrepared: async () => true,
     });
+    if (window.CifroConnectivity) window.CifroConnectivity.probe = async () => true;
     // Duas rodadas de falha em sequência (revisões diferentes para não
     // colidir com o dedupe da rodada anterior).
     document.dispatchEvent(new CustomEvent('cifro:sync-checked', { detail: { bandaId: window.CIFRO_BAND_ID, contentRevision: 11 } }));
@@ -152,6 +159,7 @@ test('falha na preparação automática mostra aviso uma única vez por sessão'
     document.dispatchEvent(new CustomEvent('cifro:sync-checked', { detail: { bandaId: window.CIFRO_BAND_ID, contentRevision: 12 } }));
     await new Promise(resolve => setTimeout(resolve, 200));
     Object.assign(window.cifroSync, originalSync);
+    if (window.CifroConnectivity && originalProbe) window.CifroConnectivity.probe = originalProbe;
     window.cifroToast = originalToast;
     return { toastCalls };
   });
@@ -169,17 +177,21 @@ test('botão "Sincronizar" de config.php reaproveita a rotina completa sem criar
       value: { ready: Promise.resolve({ active: { postMessage(m, p) { p[0].postMessage({ ok: true }); } }, waiting: null }) },
     });
     const originalSync = { ...window.cifroSync };
+    const originalProbe = window.CifroConnectivity?.probe;
     let syncCalls = 0;
     Object.assign(window.cifroSync, {
       sync: async () => { syncCalls += 1; return true; },
       getRevision: async () => 1,
+      verifyOfflinePackage: async () => ({ ok: true, version: 'test-shell' }),
       markShellPrepared: async () => true,
       getSyncStatus: async () => null,
     });
+    if (window.CifroConnectivity) window.CifroConnectivity.probe = async () => true;
     const hasForceSync = typeof window.OfflineTools?.forceSync === 'function';
     const ok = await window.OfflineTools.forceSync(window.CIFRO_BAND_ID);
     const strayPanel = Boolean(document.getElementById('offlineToolsPanel'));
     Object.assign(window.cifroSync, originalSync);
+    if (window.CifroConnectivity && originalProbe) window.CifroConnectivity.probe = originalProbe;
     return { hasForceSync, ok, syncCalls, strayPanel };
   });
 

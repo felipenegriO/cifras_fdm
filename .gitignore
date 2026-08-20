@@ -45,3 +45,7 @@ tests/.auth/
 # Composer binário local
 composer.phar
 docs/evidencias-auditoria/
+marketing/instagram/out/
+
+# Rascunho dos fluxos Superpowers (briefs, mockups, pacotes de revisao)
+.superpowers/
