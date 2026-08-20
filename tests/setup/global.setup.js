@@ -111,29 +111,32 @@ async function provisionarUsuarioPerfil(adminPage, { email, nome, bandaPerfil, a
     console.warn(`[setup] Aviso ao provisionar ${email}:`, saveBody.mensagem ?? saveRes.status());
   }
 
-  // 3. Fazer login com esse usuário e salvar estado
-  const ctx = await browser.newContext();
-  const p = await ctx.newPage();
+  let lastError;
 
-  try {
-    await p.goto('/login.php');
-    await p.fill('#email', email);
-    await p.fill('#senha', PROFILE_PASSWORD);
-    await p.click('button[type="submit"]');
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const ctx = await browser.newContext();
+    const p = await ctx.newPage();
 
-    await expect(p.locator('nav.topnav, .select-banda-container, .index-container').first()).toBeVisible({ timeout: 10000 });
+    try {
+      await p.goto('/login.php');
+      await p.fill('#email', email);
+      await p.fill('#senha', PROFILE_PASSWORD);
+      await p.click('button[type="submit"]');
 
-    await selectDefaultBand(p);
-    await definirPreferenciaDeCapotraste(p);
+      await expect(p.locator('nav.topnav, .select-banda-container, .index-container').first()).toBeVisible({ timeout: 10000 });
 
-    await writeStorageState(ctx, authFile);
-  } catch (e) {
-    console.warn(`[setup] Falha ao logar como ${email}:`, e.message);
-    // Salva estado vazio para que os testes possam detectar e pular
-    await writeStorageState(ctx, authFile);
-  } finally {
-    await ctx.close();
+      await selectDefaultBand(p);
+      await definirPreferenciaDeCapotraste(p);
+      await writeStorageState(ctx, authFile);
+      return;
+    } catch (error) {
+      lastError = error;
+    } finally {
+      await ctx.close();
+    }
   }
+
+  throw new Error(`Falha ao autenticar ${email} após 3 tentativas: ${lastError?.message || 'erro desconhecido'}`);
 }
 
 /**

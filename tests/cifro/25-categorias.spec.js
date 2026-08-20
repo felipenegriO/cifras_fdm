@@ -1,4 +1,5 @@
 import { test, expect } from '../fixtures/coverage.js';
+import { dbQuery } from '../helpers/db.js';
 
 test.use({ storageState: 'tests/.auth/user.json' });
 
@@ -496,11 +497,22 @@ test('banda sem categorias explica o que fazer no editor', async ({ page }) => {
 });
 
 test('checklist da banda aponta para a aba de categorias quando não há nenhuma', async ({ page }) => {
-  await page.goto('/minha-banda.php?aba=categorias');
-  const checklist = page.locator('.mb-checklist');
-  if (await checklist.count() === 0) test.skip(true, 'banda de teste já está configurada');
-  await expect(checklist.getByText('Configure sua banda')).toBeVisible();
-  await expect(checklist.locator('li[data-passo="categorias"]')).toBeVisible();
+  const sync = await (await page.request.get('/api/sync/data.php')).json();
+  const bandId = sync.banda_id;
+  const categorias = dbQuery('SELECT id, banda_id, nome FROM categorias WHERE banda_id = ? ORDER BY id', [bandId]).rows;
+  dbQuery('DELETE FROM categorias WHERE banda_id = ?', [bandId]);
+  try {
+    await page.goto('/minha-banda.php?aba=categorias');
+    const checklist = page.locator('.mb-checklist');
+    await expect(checklist.getByText('Configure sua banda')).toBeVisible();
+    const passo = checklist.locator('li[data-passo="categorias"]');
+    await expect(passo).toBeVisible();
+    await expect(passo.getByRole('link')).toHaveAttribute('href', /aba=categorias/);
+  } finally {
+    for (const categoria of categorias) {
+      dbQuery('INSERT INTO categorias (id, banda_id, nome) VALUES (?, ?, ?)', [categoria.id, categoria.banda_id, categoria.nome]);
+    }
+  }
 });
 
 test('criar categoria pelo editor marca a música como pendente de salvar', async ({ page }) => {

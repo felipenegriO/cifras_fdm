@@ -627,14 +627,9 @@ test.describe('Aba "Ao vivo" oculta para bandas gratuitas (music.php)', () => {
   });
 
   test('aba "Ao vivo" visível para banda paga (plano != gratuito)', async ({ page }) => {
+    await ensureSession(page);
     await page.goto(`/music.php?id=${encodeURIComponent(id)}`, { waitUntil: 'domcontentloaded' });
-    const plano = await page.evaluate(() => window.CIFRO_BAND_PLANO || '');
-    // Só verifica se o plano atual for pago
-    const pagos = ['trial', 'mensal', 'ativo'];
-    if (!pagos.includes(plano)) {
-      test.skip();
-      return;
-    }
+    await expect.poll(() => page.evaluate(() => window.CIFRO_BAND_PLANO)).toBe('anual');
     await expect(page.locator('#settingsTabLive')).toBeVisible();
   });
 

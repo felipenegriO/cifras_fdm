@@ -113,7 +113,10 @@ test('sincronização usa snapshot offline preparado e reconciliação real de b
     const userId = String(window.CIFRO_USER_ID || 'anonymous');
     const key = `${userId}:${bandId}`;
     const db = await new Promise((resolve, reject) => {
-      const req = indexedDB.open('cifro', 6);
+      // Sem fixar versão: o app já abriu o banco na versão dele ao carregar a
+      // página, e pedir uma versão menor lança VersionError. O onupgradeneeded
+      // abaixo continua valendo para o caso do banco ainda não existir.
+      const req = indexedDB.open('cifro');
       req.onupgradeneeded = event => {
         const db = event.target.result;
         ['cifro_musicas', 'cifro_playlists', 'cifro_roteiros', 'cifro_categorias', 'cifro_sync_meta', 'cifro_bandas'].forEach(name => {
@@ -233,7 +236,10 @@ test('banner de plano expirado não aparece sem trial_expira_em, com plano pago 
       const userId = String(window.CIFRO_USER_ID || 'anonymous');
       const key = `${userId}:${bandId}`;
       const db = await new Promise((resolve, reject) => {
-        const req = indexedDB.open('cifro', 6);
+        // Sem fixar versão: o app já abriu o banco na versão dele ao carregar a
+        // página, e pedir uma versão menor lança VersionError. O onupgradeneeded
+        // abaixo continua valendo para o caso do banco ainda não existir.
+        const req = indexedDB.open('cifro');
         req.onupgradeneeded = event => {
           const upgradeDb = event.target.result;
           ['cifro_musicas', 'cifro_playlists', 'cifro_roteiros', 'cifro_categorias', 'cifro_sync_meta', 'cifro_bandas'].forEach(name => {
@@ -787,7 +793,9 @@ test('scripts compartilhados permanecem idempotentes com controles opcionais aus
     optionalIds.forEach(id => document.getElementById(id)?.remove());
     document.dispatchEvent(new Event('DOMContentLoaded'));
     openSideMenu();
-    mostrarToast('Sem elemento');
+    // O antigo mostrarToast() de script.js foi substituído por window.cifroToast.
+    // O caso que aquela chamada cobria — emitir toast depois que os elementos
+    // opcionais foram removidos — é o mesmo da linha abaixo, que roda aqui.
     if (window.cifroToast) window.cifroToast('Toast sem tipo explícito');
 
     const originalFetch = window.fetch;

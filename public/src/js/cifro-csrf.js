@@ -77,15 +77,16 @@
         }
         var response = await originalFetch(input, init);
 
-        // Token velho numa aba antiga: renova e repete UMA vez. Sem isso o
-        // usuário só descobre o problema recarregando a página na mão.
-        if (response.status === 403 && method !== 'GET' && method !== 'HEAD' && await ehFalhaDeCsrf(response)) {
-            if (await renovarToken()) {
-                var headersRetry = new Headers(init.headers || {});
-                headersRetry.set('X-CSRF-Token', token);
-                init.headers = headersRetry;
-                response = await originalFetch(input, init);
-            }
+        // Uma requisição concorrente pode recriar a sessão entre a renovação
+        // e o primeiro retry. Duas tentativas cobrem essa corrida sem abrir
+        // espaço para loop infinito em um 403 persistente.
+        for (var tentativa = 0; tentativa < 2; tentativa++) {
+            if (response.status !== 403 || method === 'GET' || method === 'HEAD' || !await ehFalhaDeCsrf(response)) break;
+            if (!await renovarToken()) break;
+            var headersRetry = new Headers(init.headers || {});
+            headersRetry.set('X-CSRF-Token', token);
+            init.headers = headersRetry;
+            response = await originalFetch(input, init);
         }
 
         if (response.ok && payload && window.cifroSync?.applyMutation) {

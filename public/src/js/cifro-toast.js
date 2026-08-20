@@ -44,7 +44,12 @@
 
         var stack = ensureStack();
         var el = document.createElement('div');
-        el.className = 'cifro-toast cifro-toast toast cifro-toast--' + type;
+        // Nunca usar a classe `toast` aqui: é do Bootstrap 4, que traz
+        // background branco, opacity:0 e flex-basis:350px. Como este <style> é
+        // injetado antes do <link> do bootstrap, o Bootstrap vence no desempate
+        // por ordem — o toast virava um retângulo branco gigante que sumia
+        // assim que a animação de entrada terminava.
+        el.className = 'cifro-toast cifro-toast--' + type;
         el.setAttribute('role', type === 'error' ? 'alert' : 'status');
 
         var icon = document.createElement('span');

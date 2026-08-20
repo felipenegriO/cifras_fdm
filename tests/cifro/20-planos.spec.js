@@ -261,13 +261,15 @@ test.describe('Plano — página', () => {
   });
 
   test('link WhatsApp do PIX usa telefone PIX quando WhatsApp específico não está configurado', async ({ page }) => {
-    await withExtraEnv({ PAYMENT_WHATSAPP_PHONE: '' }, async () => {
+    await withExtraEnv({
+      PAYMENT_PIX_PHONE: '5511999999999',
+      PAYMENT_PIX_RECIPIENT: 'Cifro E2E',
+      PAYMENT_WHATSAPP_PHONE: '',
+      STRIPE_SECRET_KEY: '',
+    }, async () => {
       await page.goto('/plano.php');
       const button = page.locator('.js-pix-payment').first();
-      if (await button.count() === 0) {
-        test.skip();
-        return;
-      }
+      await expect(button).toBeVisible();
       await button.click();
       const modal = page.locator('#pix-payment-modal');
       await expect(modal).toBeVisible();

@@ -47,48 +47,41 @@ test('music-view cobre storage bloqueado e elementos opcionais ausentes', async 
       quick: document.getElementById('musicQuickBar').classList.contains('is-hidden'),
     };
   });
-  expect(result.speed).toBe('2');
-  expect(result.label).toBe('2/5');
+  // Storage bloqueado: music-view.js cai no padrão de safeStorageGet, que hoje é
+  // '5' numa escala de 1 a 10 (antes era '2' em 1 a 5). O que o caso verifica
+  // continua sendo o fallback sobrepor o valor que veio no HTML.
+  expect(result.speed).toBe('5');
+  expect(result.label).toBe('5/10');
   expect(result.quick).toBe(false);
 });
 
-test('script fecha menus por clique externo e executa fallbacks globais', async ({ page }) => {
+// O toast e o aviso de conexão saíram do script.js: viraram window.cifroToast
+// (cifro-toast.js) e CifroConnectivity (cifro-connectivity.js), cada um com
+// cobertura própria. O que restou aqui é o que o script.js ainda faz.
+test('script fecha menus por clique externo e cai nos fallbacks de cifra', async ({ page }) => {
   await page.goto('/offline.php');
   await page.evaluate(() => {
     document.body.innerHTML = `
       <button id="playlistButton"></button><button id="menuButton"></button>
       <aside id="sideMenu" style="right:0"></aside>
-      <aside id="menusideMenu" style="right:0"></aside>
-      <div id="toast"></div>`;
+      <aside id="menusideMenu" style="right:0"></aside>`;
   });
   await load(page, '/src/js/script.js');
   const result = await page.evaluate(async () => {
     document.dispatchEvent(new Event('DOMContentLoaded'));
     document.body.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    mostrarToast('Teste', '');
-    const toastVisible = document.getElementById('toast').style.display;
-    window.CifroConnectivity = { isServerAvailable: () => true };
-    mostrarToast('Servidor indisponível — usando a versão local ⚠️', '#e74c3c');
-    checarStatusConexao();
-    const availableToast = document.getElementById('toast').style.display;
-    window.CifroConnectivity = { isServerAvailable: () => false };
-    checarStatusConexao();
-    const unavailableToast = document.getElementById('toast').textContent;
     const menu = document.getElementById('menusideMenu').style.right;
     const side = document.getElementById('sideMenu').style.right;
-    document.getElementById('toast').remove();
-    mostrarToast('Sem elemento');
     const old = window.CifroChords;
     window.CifroChords = { transposeHtml: () => 'ok', identifyKey: () => null };
     const transposed = transporCifraHtml('', 1);
     const key = identificarTom('');
     window.CifroChords = old;
-    return { toastVisible, availableToast, unavailableToast, menu, side, transposed, key };
+    return { menu, side, transposed, key };
   });
   expect(result).toMatchObject({
-    toastVisible: 'block', availableToast: 'none', menu: '-100%', side: '-100%', transposed: 'ok', key: 'Tom não identificado',
+    menu: '-100%', side: '-100%', transposed: 'ok', key: 'Tom não identificado',
   });
-  expect(result.unavailableToast).toContain('Servidor indisponível');
 });
 
 test('offline-tools cobre falhas de sincronização, validação e service worker', async ({ page }) => {

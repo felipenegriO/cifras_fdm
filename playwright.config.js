@@ -47,7 +47,7 @@ process.env.STRIPE_WEBHOOK_SECRET = 'whsec_playwright';
 process.env.STRIPE_PRICE_MENSAL = 'price_test_mensal';
 process.env.STRIPE_PRICE_SEMESTRAL = 'price_test_semestral';
 process.env.STRIPE_PRICE_ANUAL = 'price_test_anual';
-const coverageOnlyTests = /(?:31-browser-branch-matrix|36-music-view-branches|37-rehearsal-audio-youtube-branches|38-offline-tools-branches|39-script-branches|40-php-under80-coverage|41-php-under80-endpoints|42-php-endpoint-residual-branches|43-js-residual-branches|44-js-ui-fallbacks|45-cifro-sync-validation|46-editor-residual-branches|47-live-residual-branches|48-rehearsal-audio-pitch-residual)\.spec\.js/;
+const coverageOnlyTests = /(?:31-browser-branch-matrix|36-music-view-branches|37-rehearsal-audio-youtube-branches|38-offline-tools-branches|39-script-branches|41-php-under80-endpoints|42-php-endpoint-residual-branches|43-js-residual-branches|44-js-ui-fallbacks|45-cifro-sync-validation|46-editor-residual-branches|47-live-residual-branches|48-rehearsal-audio-pitch-residual)\.spec\.js/;
 
 const reporters = collectJsCoverage
   ? [

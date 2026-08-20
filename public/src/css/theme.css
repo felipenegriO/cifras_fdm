@@ -158,6 +158,9 @@ html, body { max-width: 100%; overflow-x: clip; }
         --text-3: #a1a1aa;
         --border-1: #e4e4e7;
         --border-2: #d4d4d8;
+        --bg-elevated: #ffffff;
+        --bg-overlay: rgba(0, 0, 0, .35);
+        --text-inverse: #fafafa;
     }
 }
 
@@ -552,8 +555,63 @@ input[type="range"]:not(.unstyled) {
 .empty-state__title { font-size: var(--text-lg); color: var(--text-1); margin: 0 0 var(--space-2); font-weight: var(--fw-semibold); }
 .empty-state__desc { margin: 0 0 var(--space-4); font-size: var(--text-sm); }
 
-/* ===== Bootstrap modals: fundo sempre branco, então força texto escuro ===== */
-#betaWelcomeModal .modal-content { color: var(--text-inverse); }
+/* ===== Bootstrap modals: seguem os tokens do tema (claro ou escuro) ===== */
+.modal-content {
+    background-color: var(--bg-elevated);
+    color: var(--text-1);
+    border: 1px solid var(--border-1);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-3);
+}
+.modal-header,
+.modal-footer { border-color: var(--border-1); }
+.modal-title { color: var(--text-1); }
+.modal hr { border-top-color: var(--border-1); }
+
+/* Utilitários do Bootstrap usam !important; precisamos vencer dentro do modal */
+.modal .text-muted { color: var(--text-2) !important; }
+
+.modal .close {
+    color: var(--text-1);
+    text-shadow: none;
+    opacity: .7;
+}
+.modal .close:hover,
+.modal .close:focus {
+    color: var(--text-1);
+    opacity: 1;
+}
+
+/* Botões dentro de modais podem quebrar linha: a largura é apertada no celular
+   e o .btn do tema é nowrap, o que estourava o modal. */
+.modal .btn {
+    white-space: normal;
+    overflow-wrap: break-word;
+    height: auto;
+}
+
+/* Botões outline do Bootstrap: azul padrão → cor de marca */
+.modal .btn-outline-primary {
+    background-color: transparent;
+    color: var(--text-1);
+    border-color: var(--border-2);
+    text-align: left;
+    white-space: normal;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-1);
+    padding-top: var(--space-3);
+    padding-bottom: var(--space-3);
+    line-height: 1.3;
+}
+.modal .btn-outline-primary:hover,
+.modal .btn-outline-primary:focus,
+.modal .btn-outline-primary.active {
+    background-color: var(--brand-soft);
+    border-color: var(--brand);
+    color: var(--text-1);
+}
+.modal .btn-outline-primary .text-muted { color: var(--text-2) !important; }
 
 /* ===== Foco acessível ===== */
 :focus-visible {

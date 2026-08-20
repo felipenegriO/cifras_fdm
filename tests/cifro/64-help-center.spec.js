@@ -2,7 +2,10 @@ import { test, expect } from '../fixtures/coverage.js';
 import { dbQuery } from '../helpers/db.js';
 import { fazerLogin, TEST_EMAIL } from '../helpers/auth.js';
 
+test.use({ video: 'off' });
+
 const CONFIG_API = '/src/backend/users/salvar_config.php';
+const DEFAULT_BAND_ID = '00000000-0000-4000-8000-000000000002';
 
 async function setHelpPreference(page, disabled) {
   await fazerLogin(page);
@@ -58,49 +61,32 @@ test.describe.serial('Central de Ajuda', () => {
   // interações de UI mais o teardown do vídeo não cabiam nos 90s quando a
   // bateria inteira roda. Separado em dois, cada metade cabe com folga e a
   // cobertura continua a mesma.
-  async function contextoCelular(browser) {
-    const context = await browser.newContext({
-      storageState: 'tests/.auth/user.json',
-      serviceWorkers: 'block',
-      viewport: { width: 390, height: 844 },
-    });
-    return { context, page: await context.newPage() };
-  }
-
-  test('os filtros por categoria respondem ao toque no celular', async ({ browser }) => {
-    const { context, page } = await contextoCelular(browser);
-    try {
-      await page.goto('/ajuda.php');
-      const expected = new Map([
-        ['Todos', 11], ['Começando', 2], ['Repertórios', 1], ['Offline', 2],
-        ['Apresentação', 1], ['Ensaio', 1], ['Conta e banda', 3], ['Cifras', 1],
-      ]);
-      for (const [category, count] of expected) {
-        const button = page.getByRole('button', { name: category, exact: true });
-        await button.click();
-        await expect(button).toHaveAttribute('aria-pressed', 'true');
-        await expect(page.locator('.help-article-card:visible')).toHaveCount(count);
-      }
-    } finally {
-      await context.close();
+  test('os filtros por categoria respondem ao toque no celular', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/ajuda.php');
+    const expected = new Map([
+      ['Todos', 11], ['Começando', 2], ['Repertórios', 1], ['Offline', 2],
+      ['Apresentação', 1], ['Ensaio', 1], ['Conta e banda', 3], ['Cifras', 1],
+    ]);
+    for (const [category, count] of expected) {
+      const button = page.getByRole('button', { name: category, exact: true });
+      await button.click();
+      await expect(button).toHaveAttribute('aria-pressed', 'true');
+      await expect(page.locator('.help-article-card:visible')).toHaveCount(count);
     }
   });
 
-  test('todos os guias abrem e fecham ao toque no celular', async ({ browser }) => {
-    const { context, page } = await contextoCelular(browser);
-    try {
-      await page.goto('/ajuda.php');
-      await page.getByRole('button', { name: 'Todos', exact: true }).click();
-      const guides = page.locator('.help-article-details');
-      for (let index = 0; index < await guides.count(); index++) {
-        const guide = guides.nth(index);
-        await guide.locator('summary').click();
-        await expect(guide).toHaveAttribute('open', '');
-        await expect(guide.locator('.help-article-body')).toBeVisible();
-        await guide.locator('summary').click();
-      }
-    } finally {
-      await context.close();
+  test('todos os guias abrem e fecham ao toque no celular', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/ajuda.php');
+    await page.getByRole('button', { name: 'Todos', exact: true }).click();
+    const guides = page.locator('.help-article-details');
+    for (let index = 0; index < await guides.count(); index++) {
+      const guide = guides.nth(index);
+      await guide.locator('summary').click();
+      await expect(guide).toHaveAttribute('open', '');
+      await expect(guide.locator('.help-article-body')).toBeVisible();
+      await guide.locator('summary').click();
     }
   });
 
@@ -127,17 +113,20 @@ test.describe.serial('Central de Ajuda', () => {
     await anonymous.close();
   });
 
-  test('ajuda contextual do Modo Live segue o layout móvel e abre o guia', async ({ browser }) => {
-    const context = await browser.newContext({
-      storageState: 'tests/.auth/user.json',
-      serviceWorkers: 'block',
-      viewport: { width: 390, height: 844 },
-    });
-    await context.addInitScript(() => localStorage.setItem('cifroBetaWelcomeSeen', '1'));
-    const page = await context.newPage();
+  test('ajuda contextual do Modo Live segue o layout móvel e abre o guia', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.addInitScript(() => localStorage.setItem('cifroBetaWelcomeSeen', '1'));
+    const originalPlan = dbQuery('SELECT plano FROM bandas WHERE id = ? LIMIT 1', [DEFAULT_BAND_ID]).rows[0].plano;
+    dbQuery("UPDATE bandas SET plano = 'anual' WHERE id = ?", [DEFAULT_BAND_ID]);
     try {
-      await page.goto('/index.php');
-      await page.locator('#music-list a[href*="music.php?id="]').first().click();
+      const csrfResponse = await page.request.get('/api/csrf.php');
+      const { csrf_token: csrf } = await csrfResponse.json();
+      const selectResponse = await page.request.post('/src/backend/bandas/selecionar.php', {
+        data: JSON.stringify({ bandaId: DEFAULT_BAND_ID }),
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+      });
+      expect(selectResponse.ok(), await selectResponse.text()).toBe(true);
+      await page.goto('/music.php?id=1');
       await page.locator('#menuButton').click();
       await page.getByRole('tab', { name: 'Ao vivo' }).click();
       const help = page.getByRole('button', { name: 'Como funciona o Modo Live?' });
@@ -158,7 +147,7 @@ test.describe.serial('Central de Ajuda', () => {
       await expect(page.locator('#helpDrawerTitle')).toHaveText('Usar o Modo Live');
       await expect(page.locator('#helpDrawerBody')).toContainText('Entrar na sessão');
     } finally {
-      await context.close();
+      dbQuery('UPDATE bandas SET plano = ? WHERE id = ?', [originalPlan, DEFAULT_BAND_ID]);
     }
   });
 

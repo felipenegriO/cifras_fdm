@@ -688,21 +688,49 @@ test.describe('Editor de Músicas — Tela', () => {
   });
 
   test('descartar alterações: cancelar a confirmação mantém edição atual ao trocar de música', async ({ page }) => {
-    await page.goto('/src/backend/editor/editor.php');
-    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
-    const buttons = page.locator('#musicas li button');
-    const count = await buttons.count();
-    test.skip(count < 2, 'precisa de pelo menos duas músicas cadastradas');
+    const createdIds = [];
 
-    await buttons.first().click();
-    const firstTitle = await page.locator('#titulo').inputValue();
-    await page.locator('#titulo').fill(firstTitle + ' __DIRTY__');
-    await expect(page.locator('#dirtyIndicator')).toBeVisible();
+    try {
+      await page.goto('/src/backend/editor/editor.php');
+      await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+      let count = await page.locator('#musicas li button').count();
 
-    await buttons.nth(1).click();
-    await expect(page.locator('.cifro-confirm-overlay')).toBeVisible({ timeout: 3000 });
-    await page.locator('.cifro-confirm-btn--cancel').click();
-    await expect(page.locator('#titulo')).toHaveValue(firstTitle + ' __DIRTY__');
+      while (count < 2) {
+        const csrf = await getCsrf(page);
+        const response = await page.request.post(API, {
+          data: JSON.stringify({ nome: `__TESTE_DESCARTE_${Date.now()}_${count}__`, cifra: 'C G' }),
+          headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+        });
+        const body = await response.json();
+        expect(body.ok ?? body.sucesso).toBeTruthy();
+        createdIds.push(body.id);
+        count++;
+      }
+
+      if (createdIds.length) {
+        await page.reload();
+        await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+      }
+
+      const buttons = page.locator('#musicas li button');
+      await buttons.first().click();
+      const firstTitle = await page.locator('#titulo').inputValue();
+      await page.locator('#titulo').fill(firstTitle + ' __DIRTY__');
+      await expect(page.locator('#dirtyIndicator')).toBeVisible();
+
+      await buttons.nth(1).click();
+      await expect(page.locator('.cifro-confirm-overlay')).toBeVisible({ timeout: 3000 });
+      await page.locator('.cifro-confirm-btn--cancel').click();
+      await expect(page.locator('#titulo')).toHaveValue(firstTitle + ' __DIRTY__');
+    } finally {
+      for (const id of createdIds) {
+        const csrf = await getCsrf(page);
+        await page.request.post(API, {
+          data: JSON.stringify({ action: 'delete', id }),
+          headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+        });
+      }
+    }
   });
 
   test('nova música com alterações pendentes pede confirmação de descarte', async ({ page }) => {

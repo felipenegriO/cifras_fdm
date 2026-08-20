@@ -474,10 +474,10 @@ pre {
 
 .btn-secondary {
     background: transparent;
-    color: #fff;
-    border-color: #666;
+    color: var(--text-1);
+    border-color: var(--border-2);
 }
-.btn-secondary:hover { background: #222; }
+.btn-secondary:hover { background: var(--bg-3); }
 
 /* Texto auxiliar com contraste WCAG */
 .text-muted-accessible {
