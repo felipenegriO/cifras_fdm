@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../fixtures/diagnostics.js';
 import { dbQuery } from '../helpers/db.js';
 import { TEST_EMAIL, TEST_PASSWORD } from '../helpers/auth.js';
 

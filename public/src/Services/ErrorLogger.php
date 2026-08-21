@@ -15,6 +15,10 @@ class ErrorLogger {
         ?array $detalhes = null
     ): void {
         try {
+            try {
+                self::limparAntigos(max(1, (int) env('ERROR_LOG_RETENTION_DAYS', '30')));
+            } catch (Throwable) {
+            }
             $pdo  = Database::getConnection();
             $stmt = $pdo->prepare(
                 'INSERT INTO app_error_logs (nivel, referencia, descricao, detalhes)
@@ -44,5 +48,15 @@ class ErrorLogger {
             'file'      => $e->getFile(),
             'line'      => $e->getLine(),
         ]);
+    }
+
+    public static function limparAntigos(int $dias = 30): int
+    {
+        $dias = max(1, min(3650, $dias));
+        $stmt = Database::getConnection()->prepare(
+            "DELETE FROM app_error_logs WHERE criado_em < DATE_SUB(UTC_TIMESTAMP(), INTERVAL {$dias} DAY)"
+        );
+        $stmt->execute();
+        return $stmt->rowCount();
     }
 }

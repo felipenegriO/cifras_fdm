@@ -86,12 +86,26 @@ test('script fecha menus por clique externo e cai nos fallbacks de cifra', async
 
 test('offline-tools cobre falhas de sincronização, validação e service worker', async ({ page }) => {
   await page.goto('/offline.php');
+  await page.evaluate(() => {
+    const mount = document.createElement('div');
+    mount.id = 'offlineToolsMount';
+    document.body.appendChild(mount);
+  });
   await load(page, '/src/js/offline-tools.js');
   const messages = await page.evaluate(async () => {
     const button = document.getElementById('prepareOfflineBtn');
     const output = [];
+    const originalSync = window.cifroSync;
+    const originalBand = window.CIFRO_BAND_ID;
+    const originalUser = window.CIFRO_USER_ID;
+    const originalConnectivity = window.CifroConnectivity;
+    const syncAdapter = {};
+    window.cifroSync = syncAdapter;
+    window.CIFRO_BAND_ID = 'coverage';
+    window.CIFRO_USER_ID = 'coverage';
+    window.CifroConnectivity = { probe: async () => true, isServerAvailable: () => true };
     const run = async sync => {
-      window.cifroSync = sync;
+      Object.assign(syncAdapter, sync);
       await window.OfflineTools.prepareOffline();
       output.push(document.getElementById('offlineToolsStatus').textContent);
       if (button.disabled) throw new Error('botão permaneceu desabilitado');
@@ -108,14 +122,24 @@ test('offline-tools cobre falhas de sincronização, validação e service worke
     });
     await run({
       sync: async () => true,
-      markPrepared: async () => false,
+      getRevision: async () => 1,
+      verifyOfflinePackage: async () => ({ ok: false }),
+      markShellPrepared: async () => true,
       getSyncStatus: async () => null,
     });
     Object.defineProperty(navigator, 'serviceWorker', {
       configurable: true,
       value: { ready: Promise.resolve({ active: null, waiting: null }) },
     });
-    await run({ sync: async () => true });
+    await run({
+      sync: async () => true,
+      getRevision: async () => 1,
+      verifyOfflinePackage: async () => ({ ok: false }),
+    });
+    window.cifroSync = originalSync;
+    window.CIFRO_BAND_ID = originalBand;
+    window.CIFRO_USER_ID = originalUser;
+    window.CifroConnectivity = originalConnectivity;
     return output;
   });
   expect(messages[0]).toContain('Falha ao atualizar os dados');

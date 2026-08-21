@@ -1,5 +1,7 @@
 <?php
 require_once __DIR__ . '/guard.php';
+require_once __DIR__ . '/../../public/src/Services/Database.php';
+require_once __DIR__ . '/../../public/src/Services/ErrorLogger.php';
 
 $pdo = Database::getConnection();
 $stmt = $pdo->prepare(
@@ -9,3 +11,6 @@ $stmt = $pdo->prepare(
 );
 $stmt->execute();
 echo 'Tokens removidos: ' . $stmt->rowCount() . "\n";
+
+$retencaoLogs = max(1, (int) env('ERROR_LOG_RETENTION_DAYS', '30'));
+echo 'Logs técnicos removidos: ' . ErrorLogger::limparAntigos($retencaoLogs) . "\n";

@@ -394,7 +394,7 @@ test.describe('Landing page — fluxo completo do visitante', () => {
 // ── Promessas do produto batem com o que o sistema faz ────────────────────────
 test.describe('Landing page — honestidade das promessas', () => {
   test('a página avisa que o modo ao vivo depende de internet', async ({ page }) => {
-    await page.goto('/landing.php');
+    await page.goto('/landing.php', { waitUntil: 'domcontentloaded' });
     // O modo ao vivo faz polling em /api/live/status.php — sem rede ele não funciona.
     // Prometer "ao vivo offline" seria propaganda enganosa.
     await expect(page.locator('main')).toContainText(/precisa de internet/i);

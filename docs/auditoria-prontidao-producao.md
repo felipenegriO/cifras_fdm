@@ -171,7 +171,7 @@ O isolamento entre tenants possui testes e filtros documentados, mas não foi va
 
 ### P2-05 — Senha de ativação aceita apenas seis caracteres
 
-- Evidência: UI de definição/reset informa “Mínimo 6 caracteres”; testes usam credencial padrão fraca no ambiente local.
+- Evidência histórica: a UI de definição/reset informava “Mínimo 6 caracteres”. O mínimo foi elevado para 8 caracteres em 2026-08-20.
 - Impacto: contas mais vulneráveis a adivinhação/reuso.
 - Recomendação/aceite: mínimo moderno, bloqueio de senhas comprometidas e casos automatizados.
 

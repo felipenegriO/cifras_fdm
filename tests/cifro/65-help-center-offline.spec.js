@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../fixtures/diagnostics.js';
 
 test('Central de Ajuda permanece disponível sem conexão após preparação real', async ({ page, context }) => {
   await page.goto('/config.php');

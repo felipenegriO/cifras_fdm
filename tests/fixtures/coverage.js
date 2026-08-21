@@ -1,5 +1,6 @@
-import { test as base, expect } from '@playwright/test';
+import { test as base, expect } from './diagnostics.js';
 import { addCoverageReport } from 'monocart-reporter';
+import { fazerLogin } from '../helpers/auth.js';
 
 const test = base.extend({
   coverageConnectivity: [async ({ context }, use, testInfo) => {
@@ -14,22 +15,15 @@ const test = base.extend({
     }
     await use();
   }, { auto: true }],
-  isolatedSession: [async ({ context }, use) => {
-    await context.request.post('/api/testing/clone-session.php').catch(() => null);
-    await use();
-  }, { auto: true }],
-  diagnostics: [async ({ page }, use, testInfo) => {
-    const messages = [];
-    page.on('console', message => messages.push(`[console:${message.type()}] ${message.text()}`));
-    page.on('pageerror', error => messages.push(`[pageerror] ${error.stack || error.message}`));
-    page.on('requestfailed', request => messages.push(`[requestfailed] ${request.method()} ${request.url()} ${request.failure()?.errorText || ''}`));
-    await use();
-    if (testInfo.status !== testInfo.expectedStatus && messages.length) {
-      await testInfo.attach('browser.log', {
-        body: Buffer.from(messages.join('\n'), 'utf8'),
-        contentType: 'text/plain',
-      });
+  isolatedSession: [async ({ context, page }, use) => {
+    const seeded = (await context.cookies()).some(cookie => cookie.name === 'PHPSESSID' || cookie.name === 'cifro_lembrar');
+    const cloned = await context.request.post('/api/testing/clone-session.php', { maxRedirects: 0 })
+      .then(async response => response.status() === 200 && (await response.json().catch(() => null))?.ok === true)
+      .catch(() => false);
+    if (seeded && !cloned) {
+      await fazerLogin(page);
     }
+    await use();
   }, { auto: true }],
   collectCoverage: [async ({ page }, use, testInfo) => {
     const enabled = process.env.JS_COVERAGE === '1' && testInfo.project.name !== 'setup';

@@ -58,6 +58,11 @@ test.describe('Topnav — Menus que exigem servidor', () => {
   for (const menu of ['Minha Banda', 'Músicas', 'Bandas']) {
     test(`${menu} mostra modal e não navega quando o servidor está indisponível`, async ({ page }) => {
       await page.addInitScript(() => localStorage.setItem('cifroBetaWelcomeSeen', '1'));
+      // O onboarding de capotraste abre sozinho para quem ainda não escolheu
+      // instrumento, e o backdrop dele cobre a topnav inteira — o clique abaixo
+      // expirava sem nunca ser despachado. Este teste é sobre o menu offline,
+      // não sobre o onboarding, então a pergunta é marcada como já feita.
+      await page.addInitScript(() => sessionStorage.setItem('cifroCapoSetupPerguntado', '1'));
       await page.route('**/health.php?probe=*', route => route.abort('connectionrefused'));
       await page.goto('/index.php');
       await expect.poll(() => page.evaluate(() => window.CifroConnectivity?.current())).toBe('servidor_indisponivel');

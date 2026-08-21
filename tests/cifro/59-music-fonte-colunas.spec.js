@@ -92,6 +92,7 @@ async function deletarMusica(page, id) {
 
 /** Abre a gaveta de ajustes e aguarda os controles estarem no DOM. */
 async function abrirAjustes(page) {
+  await page.waitForFunction(() => window.__cifroMusicReady);
   const menuBtn = page.locator('[data-music-action="menuButton"]').first();
   if (await menuBtn.count()) {
     await menuBtn.evaluate(el => el.click());

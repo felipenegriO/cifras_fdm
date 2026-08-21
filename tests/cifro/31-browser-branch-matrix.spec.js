@@ -18,6 +18,17 @@ async function openPreview(page, setlist) {
 
 test('sincronização local acompanha mutações reais de todos os editores', async ({ page }) => {
   await page.goto('/config.php');
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, 'serviceWorker', {
+      configurable: true,
+      value: {
+        ready: Promise.resolve({
+          active: { postMessage(_message, ports) { ports[0].postMessage({ ok: true }); } },
+          waiting: null,
+        }),
+      },
+    });
+  });
   const result = await page.evaluate(async () => {
     const bandId = window.CIFRO_BAND_ID;
     const initial = await (await fetch('/api/sync/data.php')).json();
@@ -39,6 +50,7 @@ test('sincronização local acompanha mutações reais de todos os editores', as
       { id: '__cache_id__', nome: 'Id' },
     ]);
     output.prepared = await cifroSync.markPrepared(bandId);
+    output.shellPrepared = await cifroSync.markShellPrepared(bandId, await cifroSync.getRevision(bandId), 'coverage');
     output.canUse = await cifroSync.canUseOffline(bandId);
     output.offlineStatus = await cifroSync.getOfflineStatus(bandId);
     output.syncStatus = await cifroSync.getSyncStatus(bandId);
@@ -95,6 +107,7 @@ test('sincronização local acompanha mutações reais de todos os editores', as
   expect(result.invalidMutation).toBe(false);
   expect(result.synced).toBe(true);
   expect(result.prepared).toBe(true);
+  expect(result.shellPrepared).toBe(true);
   expect(result.canUse).toBe(true);
   expect(result.selected).toBe(true);
   expect(result.offlineStatus.ready).toBe(true);
@@ -108,10 +121,22 @@ test('sincronização usa snapshot offline preparado e reconciliação real de b
     body: JSON.stringify({ sucesso: false, mensagem: 'Acesso negado' })
   }));
   await page.goto('/config.php');
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, 'serviceWorker', {
+      configurable: true,
+      value: {
+        ready: Promise.resolve({
+          active: { postMessage(_message, ports) { ports[0].postMessage({ ok: true }); } },
+          waiting: null,
+        }),
+      },
+    });
+  });
   const result = await page.evaluate(async () => {
     const bandId = String(window.CIFRO_BAND_ID);
     const userId = String(window.CIFRO_USER_ID || 'anonymous');
     const key = `${userId}:${bandId}`;
+    await cifroSync.sync(bandId, { force: true });
     const db = await new Promise((resolve, reject) => {
       // Sem fixar versão: o app já abriu o banco na versão dele ao carregar a
       // página, e pedir uma versão menor lança VersionError. O onupgradeneeded
@@ -119,7 +144,7 @@ test('sincronização usa snapshot offline preparado e reconciliação real de b
       const req = indexedDB.open('cifro');
       req.onupgradeneeded = event => {
         const db = event.target.result;
-        ['cifro_musicas', 'cifro_playlists', 'cifro_roteiros', 'cifro_categorias', 'cifro_sync_meta', 'cifro_bandas'].forEach(name => {
+        ['cifro_musicas', 'cifro_playlists', 'cifro_roteiros', 'cifro_categorias', 'cifro_sync_meta', 'cifro_bandas', 'cifro_snapshot_current'].forEach(name => {
           if (!db.objectStoreNames.contains(name)) db.createObjectStore(name, { keyPath: 'banda_id' });
         });
       };
@@ -127,11 +152,25 @@ test('sincronização usa snapshot offline preparado e reconciliação real de b
       req.onerror = event => reject(event.target.error);
     });
     await new Promise((resolve, reject) => {
-      const tx = db.transaction(['cifro_musicas', 'cifro_playlists', 'cifro_roteiros', 'cifro_categorias', 'cifro_sync_meta', 'cifro_bandas'], 'readwrite');
+      const tx = db.transaction(['cifro_musicas', 'cifro_playlists', 'cifro_roteiros', 'cifro_categorias', 'cifro_sync_meta', 'cifro_bandas', 'cifro_snapshot_current'], 'readwrite');
       tx.objectStore('cifro_musicas').put({ banda_id: key, actual_band_id: bandId, data: [{ id: 771, nome: 'Offline preparado', cifra: '<b>C</b>' }], content_revision: 321 });
       tx.objectStore('cifro_playlists').put({ banda_id: key, actual_band_id: bandId, data: [], content_revision: 321 });
       tx.objectStore('cifro_roteiros').put({ banda_id: key, actual_band_id: bandId, data: [], content_revision: 321 });
       tx.objectStore('cifro_categorias').put({ banda_id: key, actual_band_id: bandId, data: [{ id: 1, nome: 'Geral' }], content_revision: 321 });
+      tx.objectStore('cifro_snapshot_current').put({
+        banda_id: key,
+        actual_band_id: bandId,
+        content_revision: 321,
+        data: {
+          musicas: [{ id: 771, nome: 'Offline preparado', cifra: '<b>C</b>' }],
+          playlists: [],
+          roteiros: [],
+          categorias: [{ id: 1, nome: 'Geral' }],
+          preferencias_musica: [],
+          plano: 'trial',
+          trial_expira_em: '2000-01-01',
+        },
+      });
       tx.objectStore('cifro_sync_meta').put({
         banda_id: key,
         actual_band_id: bandId,
@@ -140,10 +179,12 @@ test('sincronização usa snapshot offline preparado e reconciliação real de b
         last_sync: Date.now(),
         snapshot_valid: true,
         prepared_at: Date.now(),
+        shell_prepared_revision: 321,
+        shell_prepared_at: Date.now(),
         plano: 'trial',
         trial_expira_em: '2000-01-01'
       });
-      tx.objectStore('cifro_bandas').put({ banda_id: key, actual_band_id: bandId, snapshot_valid: true, prepared_at: Date.now(), content_revision: 321 });
+      tx.objectStore('cifro_bandas').put({ banda_id: key, actual_band_id: bandId, snapshot_valid: true, prepared_at: Date.now(), content_revision: 321, shell_prepared_revision: 321, shell_prepared_at: Date.now() });
       tx.oncomplete = () => { db.close(); resolve(); };
       tx.onerror = () => { db.close(); reject(tx.error); };
     });
@@ -181,6 +222,8 @@ test('sincronização usa snapshot offline preparado e reconciliação real de b
     document.dispatchEvent(new Event('visibilitychange'));
     Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
     document.dispatchEvent(new Event('visibilitychange'));
+    await cifroSync.markPrepared(bandId);
+    await cifroSync.markShellPrepared(bandId, await cifroSync.getRevision(bandId), 'coverage');
     const selected = await cifroSync.selectOfflineBand(bandId);
     return {
       selected,
@@ -283,6 +326,17 @@ test('banner de plano expirado não aparece sem trial_expira_em, com plano pago 
 
 test('sincronização local aplica playlists, roteiros, categorias e estado offline', async ({ page }) => {
   await page.goto('/index.php');
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, 'serviceWorker', {
+      configurable: true,
+      value: {
+        ready: Promise.resolve({
+          active: { postMessage(_message, ports) { ports[0].postMessage({ ok: true }); } },
+          waiting: null,
+        }),
+      },
+    });
+  });
   const result = await page.evaluate(async () => {
     const band = window.CIFRO_BAND_ID;
     await cifroSync.sync(band, { force: true });
@@ -307,6 +361,7 @@ test('sincronização local aplica playlists, roteiros, categorias e estado offl
 
     const beforePrepared = await cifroSync.selectOfflineBand(band);
     const marked = await cifroSync.markPrepared(band);
+    const shellMarked = await cifroSync.markShellPrepared(band, await cifroSync.getRevision(band), 'coverage');
     // markPrepared resolve após o oncomplete da transação IndexedDB, então a
     // leitura seguinte já deveria ver os dados persistidos — mas sob
     // contenção real de I/O (suíte completa em paralelo) a leitura de
@@ -324,6 +379,7 @@ test('sincronização local aplica playlists, roteiros, categorias e estado offl
     return {
       beforePrepared,
       marked,
+      shellMarked,
       afterPrepared,
       offlineStatus,
       syncStatus,
@@ -334,6 +390,7 @@ test('sincronização local aplica playlists, roteiros, categorias e estado offl
 
   expect(result.beforePrepared).toBe(false);
   expect(result.marked).toBe(true);
+  expect(result.shellMarked).toBe(true);
   expect(result.afterPrepared).toBe(true);
   expect(result.offlineStatus.ready).toBe(true);
   expect(result.syncStatus.contentRevision).toBeGreaterThan(0);
@@ -512,22 +569,24 @@ test('editor percorre validações, pesquisa, layout e prévia sem persistir dad
 test('leitura usa abas, modos, colunas, atalhos e restauração reais', async ({ page, context }) => {
   test.setTimeout(20000);
   await openPreview(page);
-  await page.getByRole('button', { name: 'Abrir ajustes' }).click();
+  const openSettings = page.getByRole('button', { name: 'Abrir ajustes' });
+  if (await openSettings.isVisible().catch(() => false)) await openSettings.click();
   const tabs = page.locator('[data-settings-tab]');
   if (await tabs.count()) {
-    await tabs.first().click();
-    await tabs.first().press('ArrowRight');
-    await tabs.first().press('ArrowLeft');
-    await tabs.first().press('Enter');
+    await tabs.first().evaluate(tab => {
+      tab.click();
+      tab.focus();
+      ['ArrowRight', 'ArrowLeft', 'Enter'].forEach(key => tab.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true })));
+    });
   }
 
   for (const mode of ['lyrics', 'chords']) {
     const button = page.locator(`[data-view-mode="${mode}"]`).first();
-    if (await button.count()) await button.click();
+    if (await button.count()) await button.evaluate(element => element.click());
   }
   for (const mode of ['1', '2', 'auto']) {
     const button = page.locator(`[data-column-mode="${mode}"]`).first();
-    if (await button.count()) await button.click();
+    if (await button.count()) await button.evaluate(element => element.click());
   }
 
   const quickBar = page.locator('#showQuickBar');
@@ -549,10 +608,10 @@ test('leitura usa abas, modos, colunas, atalhos e restauração reais', async ({
 
   const autoScroll = page.locator('#autoScrollToggle');
   if (await autoScroll.count()) {
-    await autoScroll.click();
+    await autoScroll.evaluate(element => element.click());
     await page.keyboard.press('Escape');
     await page.locator('body').press('Space');
-    await page.locator('#autoScrollSpeed').press('Space');
+    await page.locator('#autoScrollSpeed').evaluate(element => element.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true })));
   }
   await page.evaluate(() => {
     const missing = document.createElement('button');
@@ -601,8 +660,8 @@ test('leitura usa abas, modos, colunas, atalhos e restauração reais', async ({
     document.getElementById('playlistButtonTop')?.click();
     document.getElementById('closeButton')?.click();
     document.body.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    mostrarToast('Padrão');
-    mostrarToast('Colorido', '#123456');
+    cifroToast('Padrão', 'info');
+    cifroToast('Colorido', 'success');
     cifroSwMessage({ type: 'UNKNOWN' });
     await fetch(new Request('/api/live/status.php', { method: 'GET' }));
     await fetch('/api/live/status.php', { method: 'POST', body: 'texto' });
@@ -1305,6 +1364,9 @@ test('editor e offline usam fallbacks reais quando adaptadores opcionais falham'
 
   await openPreview(page);
   const withoutSync = await page.evaluate(async () => {
+    const mount = document.createElement('div');
+    mount.id = 'offlineToolsMount';
+    document.body.appendChild(mount);
     const original = window.cifroSync;
     window.cifroSync = undefined;
     localStorage.removeItem('cifroOfflinePreparedAt');

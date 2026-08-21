@@ -52,6 +52,7 @@ function getPlaylistItemTom(item, song) {
 }
 
 function addListItem(content, idLista, musicasArray) {
+  var playlistItems = Array.isArray(musicasArray) ? musicasArray : [];
   var list = document.getElementById(idLista);
   var newItem = document.createElement('li');
   newItem.className = 'liPlaylist';
@@ -73,7 +74,7 @@ function addListItem(content, idLista, musicasArray) {
     event.preventDefault();
     event.stopPropagation();
     try {
-      var result = await window.CifroPlaylistShare.share({ nome: content, itens: musicasArray }, typeof songs !== 'undefined' ? songs : []);
+      var result = await window.CifroPlaylistShare.share({ nome: content, itens: playlistItems }, typeof songs !== 'undefined' ? songs : []);
       if (result === 'copied' && window.cifroToast) cifroToast('Repertório copiado para a área de transferência.', 'success');
     } catch (error) {
       if (window.cifroToast) cifroToast('Não foi possível compartilhar o repertório.', 'error');
@@ -83,7 +84,7 @@ function addListItem(content, idLista, musicasArray) {
   ul.appendChild(shareItem);
 
   // Serializa a setlist completa para uso no modo apresentação
-  var setlistItems = musicasArray.map(function (item) {
+  var setlistItems = playlistItems.map(function (item) {
     var id = getPlaylistItemId(item);
     var song = (typeof songs !== 'undefined' ? songs : []).find(function (s) { return s.id == id; });
     var tom = getPlaylistItemTom(item, song);
@@ -94,7 +95,7 @@ function addListItem(content, idLista, musicasArray) {
     };
   });
 
-  musicasArray.forEach(function (item, index) {
+  playlistItems.forEach(function (item, index) {
     var element = getPlaylistItemId(item);
     var song = (typeof songs !== 'undefined' ? songs : []).find(function (s) { return s.id == element; });
     var tom = getPlaylistItemTom(item, song);

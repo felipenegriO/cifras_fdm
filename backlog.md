@@ -2,6 +2,40 @@
 
 Data-base: 2026-08-10
 
+## Estado da estabilizacao em 2026-08-20
+
+**Resultado confirmado:** as suites funcionais e unitarias estao 100% verdes. A certificacao final dos gates de cobertura ficou pendente porque a execucao longa foi interrompida a pedido do responsavel para economizar creditos; a interrupcao nao foi falha de teste.
+
+- E2E completo: **1.072 passaram, 0 falharam, 0 retries e 3 skips condicionais** (checkout Stripe real sem credenciais externas).
+- Unitarios: **621 passaram** — PHPUnit: 579 testes/1.482 assertions; Node: 42 testes.
+- Diagnosticos ocultos passaram a registrar `console`, `pageerror`, `requestfailed` e HTTP 5xx por projeto em `logs/e2e/browser-*.jsonl`.
+- Gate PHP final interrompido: PHPUnit passou 579/579 e o primeiro lote Cifro passou 18/18; faltam os demais lotes e o calculo do percentual de branches.
+- Gate JS de cobertura: ainda precisa da execucao final apos as correcoes.
+- Portanto, **nao declarar cobertura 100% ainda**. O comportamento funcional testado esta verde; falta somente concluir a certificacao dos gates de cobertura e revisar os poucos diagnosticos residuais nao classificados.
+
+Comandos para retomar:
+
+```powershell
+npm run test:coverage:php
+npm run test:coverage:all
+```
+
+Principais estabilizacoes feitas:
+
+- execucao E2E completa em processos isolados, sem retries;
+- captura centralizada de erros silenciosos do navegador e logs JSONL;
+- isolamento de autenticacao e esperas explicitas de prontidao nas telas de musica/editor;
+- correcoes de flakes em sessao expirada, palco/Live, roteiro e layout visual;
+- lotes menores para cobertura PHP, porta dinamica e supervisor do servidor PHP/Xdebug para evitar `ERR_CONNECTION_REFUSED`;
+- envio real de e-mail bloqueado durante cobertura;
+- caminhos e limpeza de memoria do runner PHPUnit/Xdebug corrigidos.
+
+Comando de auditoria funcional ja aprovado:
+
+```powershell
+npx cross-env E2E_AUDIT_DIAGNOSTICS=1 npm run test:e2e:full
+```
+
 ## Objetivo
 
 Este backlog descreve as próximas evoluções de produto. A prioridade favorece melhorias no fluxo principal do Cifrô: preparar a banda, organizar o repertório, ensaiar e executar uma apresentação com segurança.
@@ -1590,333 +1624,12 @@ Cada item só pode ser concluído quando:
 
 # Dívida técnica
 
-Data-base: 2026-08-13.
+Data-base: 2026-08-20.
 
 Diferente das funcionalidades acima, estes itens não entregam valor novo ao músico — eles evitam que o valor já entregue se perca. A ordem reflete risco de incidente, não esforço.
 
 ## Ordem recomendada
 
-| Ordem | ID | Item | Prioridade | Complexidade | Por que importa |
-|---:|---|---|---|---|---|
-| 1 | DEBT-002 | Migrations no fluxo de deploy | P1 | M | Sem isso, o desvio de schema se repete |
-| 2 | DEBT-003 | Estabilidade da suíte E2E | P1 | L | Esconde regressões reais |
-| 3 | DEBT-004 | Rodar todos os projetos de teste | P2 | XS | 11 arquivos ficavam fora |
-| 4 | DEBT-005 | Retenção de `app_error_logs` | P2 | S | Cresce sem limite |
-| 5 | DEBT-006 | `session.save_path` próprio | P2 | XS | Vizinho de hospedagem derruba sessões |
-| 6 | DEBT-007 | Limpeza do banco de testes | P2 | S | 265 bandas órfãs acumuladas |
-| 7 | DEBT-008 | Recálculo de colunas no palco | P2 | M | CPU do celular durante o culto |
-| 8 | DEBT-009 | Testes JS desatualizados | P3 | XS | 3 falhas permanentes |
-| 9 | DEBT-010 | Política de senha | P3 | XS | Mínimo de 6 caracteres |
-| 10 | DEBT-012 | Ambiente local envia pelo SMTP de produção | P2 | S | Mesma conta que já foi suspensa |
-| 11 | DEBT-013 | Migration sem teste de idempotência | P2 | S | Já quebrou o provisionamento uma vez, dois dias depois |
-| 12 | DEBT-014 | Troca de banda offline não atualiza o topnav | P1 | S | O músico acha que está na banda errada, no palco |
+Nenhum item aberto.
 
-## DEBT-002 — Migrations no fluxo de deploy
-
-`migrations/` existe, mas não há execução automática no deploy. As duas migrations de 13/08 foram aplicadas manualmente por conexão remota ao banco de produção.
-
-Alvo: o deploy aplica migrations pendentes, é idempotente e falha visivelmente se não conseguir. Hoje uma migration esquecida se manifesta como funcionalidade quebrada em silêncio, sem erro visível para o usuário nem alerta para a equipe.
-
-## DEBT-003 — Estabilidade da suíte E2E
-
-A suíte tem dependência de ordem crônica: testes que passam isolados falham quando a bateria inteira roda. Casos conhecidos: `64-help-center:57`, `71-csrf-renovacao:28`, `07-bandas:321`, `26-offline-sync:487`, `62-playlist-persistence:6`.
-
-Causas já identificadas ao longo das investigações:
-- `tests/.auth/*.json` é compartilhado e `session_regenerate_id()` roda a cada teste, invalidando o cookie salvo para quem rodar depois (remédio adotado: `fazerLogin()` no `beforeEach`);
-- páginas logadas disparam sync e conectividade em segundo plano, e essas requisições competem com o que o teste está medindo;
-- consumo de CPU de um teste derruba outro por timeout.
-
-Custo real: horas de diagnóstico falso, e o risco maior — uma regressão verdadeira se esconder no meio do ruído.
-
-### Corridas contra o carregamento da página (investigação de 13/08)
-
-Três causas concretas foram encontradas e corrigidas no projeto `pwa`. Todas
-tinham o mesmo formato: o teste agia antes de a página terminar de se
-estabelecer.
-
-1. **`cifroSync.sync()` devolvendo `false` em silêncio.** A guarda
-   `!isOnline()` bloqueia o sync enquanto `CifroConnectivity` não confirmou o
-   servidor — correto no produto. Só que `page.goto()` resolve no evento
-   `load` e a sondagem de `/health.php` dispara depois, num
-   `requestAnimationFrame` + `setTimeout`. Remédio:
-   `tests/helpers/conectividade.js`.
-2. **`OfflineTools is not defined`.** `toHaveURL` garante o endereço, não que
-   os `<script>` da página nova executaram.
-3. **"Execution context was destroyed".** `reload({waitUntil:'domcontentloaded'})`
-   libera o teste antes de a página parar de navegar.
-
-**A armadilha de diagnóstico, que custou caro:** o sintoma é sempre mudo — sem
-erro, sem requisição, sem console. E qualquer instrumentação adicionada para
-investigar (um `page.on`, um `fetch` extra) atrasa a chamada o suficiente para
-a corrida desaparecer, e o teste passa. Isso leva à conclusão errada de que é
-flake aleatório. **A pergunta certa não é "por que falha às vezes", é "o que o
-teste está fazendo antes de a página estar pronta".**
-
-Situação atual: o projeto `pwa` ainda fica vermelho em torno de uma rodada a
-cada três, com a identidade da falha mudando (`30-service-worker-coverage:61`,
-`63-critical:227`). Restam corridas do mesmo tipo não mapeadas.
-
-### Resolvido em 2026-08-18 — o cluster capotraste (28 testes)
-
-Não era corrida de carregamento: era **sessão**. Os quatro arquivos
-(`74-capotraste`, `75-import-capotraste`, `76-capotraste-pessoal`,
-`77-capotraste-conflito`) eram os únicos arquivos de app sem `storageState`
-explícito **nem** `fazerLogin` — dependiam de a sessão gravada em
-`tests/.auth/user.json` sobreviver 700+ testes, sem nada garantir isso. A prova
-saiu do `error-context.md` que a Playwright grava na falha: o teste pediu
-`/config.php` e recebeu a **landing page** renderizada, ou seja, o servidor
-respondeu "não autenticado". Remédio: `fazerLogin` no `beforeEach`, o mesmo que
-os outros arquivos já usavam.
-
-Efeito: 30 falhas → 3, e a suíte caiu de 34,7 para ~18 minutos, porque cada um
-dos 28 testes quebrados queimava 90s de timeout.
-
-Duas hipóteses foram testadas e **descartadas** — registradas para ninguém
-gastar tempo nelas de novo:
-
-- *o resíduo de bandas deixa toda requisição pesada* — o admin E2E acumulou 65
-  bandas, mas `estadoDeAcesso()` custa 0,5 ms. Não é gargalo (continua sendo
-  sujeira, ver DEBT-007);
-- *`fazerLogin` de um arquivo anterior invalida a sessão dos seguintes* — ele
-  **retorna cedo** quando a sessão ainda vale, então não invalida nada.
-
-### Conjunto flaky conhecido (base para `retries: 1`)
-
-Desde 2026-08-18 o `playwright.config.js` usa `retries: 1` também localmente.
-A causa dessas falhas é o `php -S` single-thread engasgando sob a bateria
-inteira; a assinatura no navegador é `[cifroSync] sync failed: TypeError:
-Failed to fetch`, e a vítima **muda a cada execução**. Todas passam isoladas.
-
-Observados até agora: `64-help-center` (nas três execuções),
-`71-csrf-renovacao:28` (em duas), `04-editor-musicas:708` (em uma).
-
-**Um teste flaky fora desta lista é novidade e merece investigação, não mais
-uma retentativa.** Retry esconde bug intermitente de produto tão bem quanto
-esconde engasgo de servidor — esta lista é o que separa os dois.
-
-Acrescentado em 2026-08-19: `77-capotraste-conflito` (o arquivo inteiro, a
-vítima muda). Investigado por A/B contra o STAGE-001, três execuções isoladas
-de cada lado: **1 em 3 nos dois**, e na linha de base a vítima foi outro teste
-do mesmo arquivo. A execução que falha leva 1,9 min contra 17–23 s das que
-passam — a assinatura do engasgo, não de defeito de produto.
-
-### Uma falha real escondida atrás de um flaky (2026-08-19)
-
-`64-help-center:130` ("ajuda contextual do Modo Live segue o layout móvel")
-falha **determinsticamente**, nas duas tentativas, em `#helpDrawerBody` não
-conter "Entrar na sessão" (`64-help-center.spec.js:159`). Na bateria completa
-ela **nunca roda**: o `:70`, flaky conhecido, derruba o describe antes ("5 did
-not run"). Confirmado pré-existente por A/B — falha idêntica com o STAGE-001
-neutralizado.
-
-Isto é o custo do DEBT-003 deixando de ser abstrato: **um flaky conhecido está
-escondendo um defeito real**, e a bateria verde não é prova de que ele não
-existe. Vale varrer se há outros describes onde a mesma coisa acontece.
-
-### Dependência de ordem nova (2026-08-19)
-
-`26-offline-sync:203` ("snapshot válido sem informações de plano é aceito pelo
-sistema") **passa isolado e falha no arquivo completo** — não é aleatório, é
-ordem. Pela lição já registrada acima, a pergunta certa não é "por que falha às
-vezes", é o que o teste encontra montado por quem rodou antes dele.
-
-A cura de verdade continua sendo trocar o servidor de teste (ver "Decisões
-conscientes"): PHP 8.0 no Windows não tem `PHP_CLI_SERVER_WORKERS`, que depende
-de `fork`, então não há como tornar o `php -S` concorrente.
-
-## DEBT-004 — Rodar todos os projetos de teste
-
-`npm run test:e2e` roda apenas `--project=cifro`. Existem sete projetos, e 11 arquivos ficam de fora, incluindo `66-offline-persistent-login`, `63-critical-real-user-journeys` e toda a bateria offline/PWA.
-
-Isso não é teórico: ao rodar o projeto `pwa` pela primeira vez em 13/08, apareceu um defeito que a bateria `cifro` não pegava — uma flag de sessão inválida que ligava e nunca desligava, matando a sincronização da página até um reload manual.
-
-Alvo: um script que rode `cifro`, `pwa` e `serial`, e clareza sobre quando rodar os demais.
-
-## DEBT-005 — Retenção de `app_error_logs`
-
-A tabela recebe uma linha por erro e nada nunca a limpa. Foi justamente ela que permitiu diagnosticar o incidente de produção, então o valor é claro — o que falta é a política de retenção.
-
-Alvo: purga por idade, no mesmo espírito de `AuthTokenRepository::limparVencidos()`, que já resolve esse problema para os tokens e serve de modelo.
-
-## DEBT-006 — `session.save_path` próprio
-
-O caminho é o padrão compartilhado do PHP. Em hospedagem compartilhada, o coletor de lixo de outra aplicação varre o diretório inteiro e pode apagar as sessões do Cifrô — que não tem como se defender disso.
-
-## DEBT-007 — Limpeza do banco de testes
-
-`cifro_e2e_test` acumulou 198 bandas de execuções antigas, incluindo nomes com `<script>` e cadeias longas vindas de testes de limite e de XSS. Vários testes criam e não removem.
-
-Alvo: limpeza no `afterAll` de quem cria, mais uma rotina de reset entre execuções completas.
-
-### Resolvido em 2026-08-18
-
-`tests/setup/limpar-residuo.js`, chamado no início do `global.setup.js`, devolve o
-banco ao estado do seed antes de cada execução. Varre por exclusão (tudo que não
-é o seed) em vez de caçar cada teste culpado: os nomes mostraram sujeira de pelo
-menos seis arquivos (`__BANDA_MSG_*__`, `__MB_CRIAR_FLOW__`, `__PERM_GESTOR__`,
-`Test`, `<script>…`), e corrigir um a um deixaria o próximo teste novo
-reintroduzir o problema.
-
-No **setup** e não no teardown de propósito: uma execução interrompida no meio
-não deixa lixo para a seguinte, e o estado logo após uma falha continua
-disponível para inspeção.
-
-Medido: 127 bandas → 1, 16 usuários → 1, 31 músicas → 2. Depois da correção, o
-vazamento caiu para **1 registro por execução**.
-
-**Havia uma segunda camada, dentro da própria banda-semente.** O cascata de
-banda não alcança conteúdo da Banda E2E, que continua existindo: 31 músicas onde
-o seed cria 2. Um teste que conte músicas ou pegue "a primeira da lista"
-dependia de quantas vezes a suíte já tinha rodado na máquina.
-
-**O que a limpeza expôs — mais valioso que a limpeza:**
-
-1. **Um teste passava vacuamente.** `20-planos:307` procurava
-   `a.topnav__upgrade[href^="/plano.php"]`, mas o href virou
-   `/minha-banda.php?aba=plano` quando Plano virou aba do "Minha Banda". Como a
-   banda vivia em plano pago por resíduo, o teste só exercitava o ramo
-   `toHaveCount(0)` — que passa justamente quando o seletor está errado.
-2. **A fonte da deriva de plano.** `28-interacoes-palco.spec.js` fazia
-   `UPDATE bandas SET plano='anual'` sem restaurar. Daí o `anual` permanente. E
-   o teste do Modo Ao Vivo, que roda antes, dependia desse plano deixado pela
-   execução anterior: passava na segunda vez que a suíte rodava e falhava em
-   banco limpo.
-
-Correções: helper compartilhado `tests/helpers/plano.js`
-(`comPlanoDaBandaAtual`), que escopa o plano e devolve o anterior no `finally`
-— inclusive reexecutando `selecionar.php`, porque `$_SESSION['banda_atual']
-['plano']` é uma foto tirada na seleção da banda; mais `beforeEach`/`afterEach`
-em `28-interacoes-palco` que fotografa e restaura o plano.
-
-**Lição:** um banco de teste que acumula estado não é só desarrumado — ele faz
-teste quebrado passar. As duas falhas acima existiam havia semanas, escondidas
-pelo lixo.
-
-## DEBT-008 — Recálculo de colunas no palco
-
-`renderColumnsFromRaw()` mede o conteúdo linha a linha e testa de 2 a 6 colunas, forçando reflow a cada medição. Em 13/08 recebeu debounce e passou a ignorar `resize` que não muda dimensão — o que resolveu o pior caso, que era recalcular durante a rolagem no celular.
-
-Faltam duas melhorias: guarda de reentrância, para `validateLayout()` não realimentar o ciclo, e cache da medição por largura e tamanho de fonte. A segunda merece medição antes, por mexer em código delicado.
-
-## DEBT-009 — Testes JS desatualizados
-
-`tests/marketing/timeline.test.js` espera 870 quadros; a timeline passou para 1800 na versão de 60 segundos. São 3 falhas permanentes em `npm run test:unit:js`, o que normaliza suíte vermelha.
-
-## DEBT-010 — Política de senha
-
-O mínimo é 6 caracteres; a recomendação atual é 8. Atenuado pela verificação contra vazamentos conhecidos, que já existe e é um ponto forte do projeto.
-
-## DEBT-012 — Ambiente local envia pelo SMTP de produção
-
-`.env.local` aponta `MAIL_*` para a mesma conta `noreply@cifro.online` do ambiente real. A trava adicionada em 13/08 cobre `APP_ENV=test`, mas o desenvolvimento local roda como `development`: testar cadastro ou convite manualmente no navegador ainda autentica e envia pela conta de produção.
-
-Alvo: um destino de desenvolvimento — Mailpit, Mailhog ou equivalente — ou estender a trava para `development` com a mesma liberação explícita por variável.
-
-## DEBT-013 — Migration sem teste de idempotência
-
-A exigência de migrations idempotentes (ver DEBT-001, resolvido em 2026-08-14) já foi violada na prática, dois dias depois: `migrations/20260816_musica_transposicao_instrumento.sql`, de outra feature, adicionava uma coluna sem `IF NOT EXISTS` — coluna que também está no baseline. Contra banco novo, isso quebrava o provisionamento. Foi corrigido, mas nada além de revisão manual teria pegado o erro antes.
-
-Alvo: teste que aplique cada migration duas vezes seguidas (ou rode migrations sobre o baseline que já as contém) e falhe se a segunda aplicação não for no-op.
-
-## DEBT-014 — Troca de banda offline não atualiza o topnav
-
-Descoberto em 2026-08-19 por `26-offline-sync:440` ("alterna entre duas bandas
-preparadas após reinício offline"), que falha em
-`26-offline-sync.spec.js:484`: o chip de banda mostra **"Banda Offline E2E"**
-quando já deveria mostrar **"Banda E2E"**.
-
-O detalhe que localiza o defeito: a asserção imediatamente anterior — a de que
-`cifroOfflineBandId` já vale a banda nova — **passa**. Ou seja, a troca
-aconteceu no armazenamento e a tela ficou para trás. Offline, o HTML vem do
-`PAGE_CACHE`, que guarda um `/index.php` capturado com alguma banda corrente;
-o chip precisa ser atualizado no cliente e não está sendo.
-
-Não é flaky: falha nas duas tentativas, e confirmado pré-existente por A/B
-contra o STAGE-001 (falha idêntica com o portão de integridade neutralizado).
-Provável origem no trabalho não commitado do "Minha Banda" / topnav.
-
-P1 pelo cenário, não pelo esforço: no palco, o músico que troca de banda e vê o
-nome errado não tem como saber se está lendo o repertório certo.
-
-## Decisões conscientes, não pendências
-
-Registradas para não serem "corrigidas" por engano:
-
-- **Master acessa bandas inativas.** Deliberado: ele precisa administrar justamente as bandas desativadas.
-- **HSTS sem `preload`.** Entrar na lista dos navegadores é difícil de desfazer e exige decisão explícita.
-- **Paralelismo da suíte.** Bloqueado pelo `php -S`, que é single-thread no Windows — medido: duas requisições de 2s levam 4,1s. Exigiria trocar o servidor de teste e isolar sessão e banda por worker. Com a suíte em ~15 minutos, o retorno não justifica.
-
-## A conferir em produção
-
-- ~~`plano_expira_em` vazio~~ — investigado e corrigido em 13/08. Era bug, não comportamento esperado (ver "Resolvido" abaixo).
-- **Banda "FDM" com `stripe_subscription_id = 12313`.** Valor de teste manual; um cancelamento vindo do Stripe não vai casar com esse identificador.
-
-## Resolvido em 2026-08-13
-
-Registrado para dar contexto às datas acima:
-
-- desvio de schema em produção (migration aplicada);
-- `APP_BASE` em três lugares: wrappers `cifroFetch`, URL de retorno do Stripe e metadados da landing;
-- webhook do Stripe configurado — pagamento passou a liberar o plano;
-- HSTS e redirecionamento para HTTPS;
-- logout com porta única, exigindo POST e CSRF;
-- revalidação de acesso a cada requisição: conta desativada desconecta na hora, banda revogada tira só a banda, e plano, perfil e lista de bandas deixaram de ser foto do login;
-- login persistente com token revogável, incluindo detecção de reuso e janela de concorrência;
-- **`plano_expira_em` nulo após pagamento** — o Stripe entrega `invoice.paid` 1 a 2 segundos ANTES de `checkout.session.completed` (medido nos dois pagamentos reais). O `invoice.paid` é quem gravava a expiração, mas naquele instante a banda ainda não tinha `stripe_subscription_id`, então `findBandaBySubscription()` não a encontrava e a data se perdia. O `checkout` gravava plano e assinatura, mas não a expiração — apesar de já calcular a data para o e-mail de confirmação. Resultado: o cliente recebia "válido até X" e o banco ficava nulo até a primeira renovação, um ano inteiro no plano anual. Corrigido persistindo a expiração no checkout, com teste que reproduz a ordem real dos eventos.
-- **"Minha Banda"** — Categorias, Usuários e Plano viraram abas de uma única tela de administração da banda (`minha-banda.php`), e os três endereços antigos passaram a redirecionar. O menu ficou com Início, Músicas, Repertórios, Minha Banda, Bandas, Ajuda e Configuração.
-- **administrador de banda bloqueada não alcançava o próprio pagamento** — descoberto pelo teste escrito a partir da intenção de negócio ("chegar à tela de cobrança"), não do comportamento observado. Havia três travas em série: a revalidação por requisição tratava plano vencido como perda de acesso e desselecionava a banda, o que cegava `cifro_check_plano()`; o seletor pintava a banda como card morto, sem link; e, com a banda de volta, `cifro_check_plano()` expulsava o próprio `select-banda.php` e o `logout.php`. Plano vencido agora é cobrança, não revogação: a banda abre, o palco continua barrado e as duas saídas (trocar de banda, sair) seguem de pé. A distinção mora em `BandaAcessoPolicy::impedeAbrir()`, para as telas não divergirem.
-
-  Vale registrar o que isso ensina: um teste anterior afirmava "plano bloqueado não abre" e passava verde havia semanas — descrevendo o bug como se fosse a regra. "Não abre" significava, na prática, "o cliente não consegue pagar".
-- **envio de e-mail em testes** — a suíte padrão abria 8 conexões SMTP reais por execução contra a conta de produção, porque o `phpunit.xml` não excluía o grupo `integration` apesar de a documentação dos testes afirmar que sim. Repetido dezenas de vezes num dia, levou o provedor a suspender a conta. Corrigido em duas camadas: exclusão do grupo na suíte padrão e trava no `MailService::sendLogged()`, que é o funil único de todo disparo. A trava vale só quando o próprio serviço cria o mailer — mock injetado por teste continua funcionando — e é liberada sob demanda com `MAIL_ALLOW_REAL_SEND=true`.
-
-## Resolvido em 2026-08-14
-
-- **schema em fonte única (DEBT-001, e com ele DEBT-011)** — `create_tables.sql`
-  passou a ser a única declaração de tabelas do projeto; `setup_db.php`, que
-  mantinha uma segunda cópia com 12 das 17 tabelas, passou a lê-lo. A base de
-  teste e o provisionamento de banco novo seguem a mesma sequência: baseline e
-  depois migrations. Produção continua atendida só por
-  `migrate.php --allow-production`, porque o baseline tem instruções que
-  quebram — ou corrompem — banco povoado.
-
-  Oito scripts avulsos de `scripts/setup/` foram absorvidos por uma migration
-  única e apagados: `migrate_categorias`, `migrate_privacy`,
-  `migrate_stripe_events`, `migrate_performance_indexes`, `migrate_planos`,
-  `migrate_banda_logo`, `migrate_banda_criador` e `migrate_usuario_banda_externo`.
-  `privacy_cleanup.php` foi preservado — é rotina de retenção que continua
-  rodando, não migração de schema.
-
-  A auditoria inicial olhou só estrutura e teria deixado passar dado. Refeita
-  olhando dados, achou mais do que os cinco índices de
-  `migrate_performance_indexes` que existiam só no baseline e nunca tinham
-  chegado a banco já provisionado (sem erro, só lentidão): faltavam também dois
-  backfills que nenhuma migration cobria — `bandas.criador_id` a partir do
-  administrador vinculado, e `categorias` a partir da coluna de texto livre
-  `musicas.classificacao`. Os dois entraram na migration de absorção.
-
-  Uma exclusão foi deliberada: `migrate_categorias.php` também semeava cinco
-  categorias fixas ("Louvor Animado", "Marianas", "Oracionais", "Adoração",
-  "Missa") em toda banda. Isso não foi para a migration — não é schema nem
-  preservação de dado, e os nomes não existem em nenhum outro lugar do app.
-  A pergunta que essa exclusão deixa em aberto está registrada em "Perguntas em
-  aberto", não aqui: não é dívida, é decisão de produto pendente.
-
-  A auditoria também achou o baseline quebrado, sem que ninguém soubesse:
-  `create_tables.sql` declarava `bandas.cancelamento_agendado_em` duas vezes —
-  dentro do `CREATE TABLE` e de novo num `ALTER TABLE` sem `IF NOT EXISTS` —,
-  o que dava erro 1060 contra banco vazio. Passava despercebido porque
-  `setup_e2e_db.php` engolia justamente os erros 1060 e 1061. A tolerância a
-  erro não era cautela: era o que sustentava o defeito. É a lição mais
-  transferível deste trabalho — engolir um código de erro específico exige
-  saber, e revisitar, por que ele pode aparecer legitimamente.
-
-  A exigência de idempotência das migrations já foi violada na prática, dois
-  dias depois: a migration `20260816_musica_transposicao_instrumento.sql`, de
-  outra feature, adicionava uma coluna sem `IF NOT EXISTS` — coluna que também
-  está no baseline, o que quebrava o provisionamento de banco novo. Foi
-  corrigida, e o caso virou DEBT-013: falta trava automática, não só a regra
-  escrita.
-
-  Duas travas em `tests/php/SchemaFonteUnicaTest.php` impedem a reincidência
-  do problema original: `CREATE TABLE` fora de `create_tables.sql` e
-  `migrations/` quebra a suíte, e instrução de dados no baseline também.
+O antigo DEBT-002 (migrations no fluxo de deploy) foi encerrado em 2026-08-20, depois que o risco que ele descrevia se concretizou: o banco de produção estava sem `schema_migrations` e com 8 migrations pendentes, e todo request autenticado de sync respondia 500 enquanto a suíte local passava inteira. As migrations foram aplicadas e o silêncio foi fechado por `health.php?check=schema`, que responde 503 com banco atrasado, e por `migrate.php --status`, que deixou de exigir a liberação de escrita para apenas consultar.

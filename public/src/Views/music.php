@@ -525,9 +525,12 @@
                 }
             }
             if (!song) return loaded;
-            document.getElementById('song-title').textContent = song.nome || '';
-            document.getElementById('artist-name').textContent = song.artista || '';
+            const songTitle = document.getElementById('song-title');
+            const artistName = document.getElementById('artist-name');
             const cifra = document.getElementById('song-cifra');
+            if (!songTitle || !artistName || !cifra) return loaded;
+            songTitle.textContent = song.nome || '';
+            artistName.textContent = song.artista || '';
             cifra.innerHTML = window.cifroSanitizeCifra(song.cifra || '');
             cifra.setAttribute('aria-busy', 'false');
             window.__cifroFirstRenderAt = performance.now();
@@ -721,6 +724,7 @@
         // ==========================
         let ultimoNumero = null;
 
+        window.__cifroMusicReady = false;
         $(document).ready(async function () {
             await window.__cifroInitialDataPromise;
 
@@ -763,6 +767,10 @@
                 || cifroSync.getRecentSong(window.CIFRO_BAND_ID, songId);
 
             let baseFontSize = null;
+            let columnRenderInProgress = false;
+            let columnRenderPending = false;
+            let columnMeasurementCache = null;
+            let fontMetricsRevision = 0;
 
             ultimoNumero = songId;
 
@@ -1126,6 +1134,12 @@
             }
 
             function renderColumnsFromRaw() {
+                if (columnRenderInProgress) {
+                    columnRenderPending = true;
+                    return;
+                }
+                columnRenderInProgress = true;
+                try {
                 const rawHtml = getRawCifraHtml();
                 const blocks = buildBlocksFromHtml(rawHtml);
                 const availableWidth = getAvailableWidth();
@@ -1178,18 +1192,25 @@
                     containerClientWidth - scrollbarAllowance - 2 - overflowSlack
                 );
 
-                const measure = document.createElement('div');
-                measure.style.position = 'absolute';
-                measure.style.visibility = 'hidden';
-                measure.style.whiteSpace = 'pre';
-                measure.style.padding = '0';
-                measure.style.margin = '0';
-                measure.style.width = 'max-content';
-                measure.style.fontSize = window.getComputedStyle(cifraDiv).fontSize;
-                measure.style.fontFamily = window.getComputedStyle(cifraDiv).fontFamily;
-                document.body.appendChild(measure);
+                const computedStyle = window.getComputedStyle(cifraDiv);
+                const measurementKey = [rawHtml, contentWidth, computedStyle.fontSize, computedStyle.fontFamily, fontMetricsRevision].join('\u0000');
+                let measuredBlocks = columnMeasurementCache?.key === measurementKey
+                    ? columnMeasurementCache.blocks
+                    : null;
 
-                const measuredBlocks = blocks.map(block => {
+                if (!measuredBlocks) {
+                    const measure = document.createElement('div');
+                    measure.style.position = 'absolute';
+                    measure.style.visibility = 'hidden';
+                    measure.style.whiteSpace = 'pre';
+                    measure.style.padding = '0';
+                    measure.style.margin = '0';
+                    measure.style.width = 'max-content';
+                    measure.style.fontSize = computedStyle.fontSize;
+                    measure.style.fontFamily = computedStyle.fontFamily;
+                    document.body.appendChild(measure);
+
+                    measuredBlocks = blocks.map(block => {
                     const belongsToSemantic = block.belongsToSemanticBlock || false;
                     const lineMetrics = block.lines.map(html => {
                         const plainText = getTextFromHtml(html).replace(/\u00a0/g, ' ').trim();
@@ -1269,7 +1290,10 @@
                         splittable: block.splittable,
                         isSpecialBlock: isSpecialBlock
                     };
-                }).filter(block => block.lines.some(line => !line.isEmpty));
+                    }).filter(block => block.lines.some(line => !line.isEmpty));
+                    document.body.removeChild(measure);
+                    columnMeasurementCache = { key: measurementKey, blocks: measuredBlocks };
+                }
 
                 const totalHeight = measuredBlocks.reduce((acc, block) => acc + block.height, 0);
                 const maxLineWidth = measuredBlocks.reduce((acc, block) => Math.max(acc, block.maxWidth), 0);
@@ -1298,9 +1322,6 @@
 
                 // ✅ não desabilite quebra só por estar em portrait
                 const disableColumnBreaks = false;
-
-
-                document.body.removeChild(measure);
 
                 const startsWithLyric = (lines) => {
                     for (let i = 0; i < lines.length; i += 1) {
@@ -1767,6 +1788,13 @@
                 cifraDiv.dataset.maxColumnHeight = String(maxColumnHeight);
                 cifraDiv.dataset.actualOverflowY = String(actualOverflowY);
                 groupSectionBlocks(cifraDiv);
+                } finally {
+                    columnRenderInProgress = false;
+                    if (columnRenderPending) {
+                        columnRenderPending = false;
+                        requestAnimationFrame(renderColumnsFromRaw);
+                    }
+                }
             }
 
             window.renderColumnsFromRaw = renderColumnsFromRaw;
@@ -2109,6 +2137,8 @@
             setTimeout(validateLayout, 100);
             if (document.fonts?.ready) {
                 document.fonts.ready.then(() => {
+                    fontMetricsRevision += 1;
+                    columnMeasurementCache = null;
                     adjustColumns();
                     validateLayout();
                 });
@@ -2282,6 +2312,8 @@
             if (window.LiveMode) {
                 window.LiveMode.atualizarPaginaHost(false);
             }
+            window.__cifroMusicReady = true;
+            window.dispatchEvent(new Event('cifro:music-ready'));
         });
 
         let __lastPlayVisible = null;

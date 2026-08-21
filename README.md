@@ -123,6 +123,8 @@ DB_NAME=u925167420_cifro
 APP_ENV=production
 APP_DEBUG=false
 APP_URL=https://seudominio.com.br
+SESSION_SAVE_PATH=/home/<usuario>/cifro-sessions
+ERROR_LOG_RETENTION_DAYS=30
 
 ENCRYPTION_KEY=<chave aleatória de 32 chars>
 CSRF_TOKEN_LIFETIME=300

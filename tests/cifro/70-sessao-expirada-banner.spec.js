@@ -32,11 +32,10 @@ test('status.php responde não autenticado para visitante, sem redirecionar', as
 });
 
 test('sessão expirada mostra aviso sem tirar as cifras da tela', async ({ page }) => {
-  await page.goto('/index.php');
-  await expect(page.locator('#music-list')).toBeVisible();
-
   await page.route('**/api/auth/status.php', route =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, autenticado: false }) }));
+  await page.goto('/index.php');
+  await expect(page.locator('#music-list')).toBeVisible();
 
   await page.evaluate(() => window.cifroSync.checkSessaoExpiradaBanner());
 

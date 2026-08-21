@@ -49,6 +49,27 @@ final class MailServiceTest extends TestCase
         $method->invoke(null, __DIR__ . '/autoload-inexistente.php');
     }
 
+    public function testDesenvolvimentoBloqueiaSmtpRealSemLiberacaoExplicita(): void
+    {
+        $method = new ReflectionMethod(MailService::class, 'envioBloqueadoEmTeste');
+        $method->setAccessible(true);
+        $originalEnv = getenv('APP_ENV');
+        $originalAllow = getenv('MAIL_ALLOW_REAL_SEND');
+
+        try {
+            putenv('APP_ENV=development');
+            putenv('MAIL_ALLOW_REAL_SEND=false');
+            self::assertTrue($method->invoke(null, true));
+            self::assertFalse($method->invoke(null, false));
+
+            putenv('MAIL_ALLOW_REAL_SEND=true');
+            self::assertFalse($method->invoke(null, true));
+        } finally {
+            $originalEnv === false ? putenv('APP_ENV') : putenv('APP_ENV=' . $originalEnv);
+            $originalAllow === false ? putenv('MAIL_ALLOW_REAL_SEND') : putenv('MAIL_ALLOW_REAL_SEND=' . $originalAllow);
+        }
+    }
+
     public function testMontaEmailDeRedefinicaoESolicitaEnvio(): void
     {
         $mailer = $this->getMockBuilder(PHPMailer::class)

@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures/diagnostics.js';
 import { fazerLogin } from './helpers/auth';
 
 test.describe('Modo Ensaio - Testes de Áudio Upload', () => {
@@ -11,8 +11,9 @@ test.describe('Modo Ensaio - Testes de Áudio Upload', () => {
 
     // Abrir painel ensaio
     const btnEnsaio = page.locator('#btnAtivarEnsaio');
-    await btnEnsaio.click();
-    await page.waitForTimeout(300);
+    await btnEnsaio.evaluate(button => button.click());
+    await expect(page.locator('#modo-ensaio')).toHaveClass(/is-active/);
+    await expect.poll(() => page.evaluate(() => Boolean(window.Rehearsal?.ui && window.bootstrapEntered))).toBe(true);
 
     // Injetar mock player para testes que precisam clicar em botões
     // sem ter carregado um arquivo audio real
@@ -95,17 +96,9 @@ test.describe('Modo Ensaio - Testes de Áudio Upload', () => {
   });
 
   test('localStorage deve ser limpo ao mudar de música', async ({ page }) => {
-    // Habilitar botões para teste (normalmente desabilitados até audio carregar)
     await page.evaluate(() => {
-      document.querySelectorAll('.rehearsal-button').forEach(btn => {
-        btn.disabled = false;
-      });
+      window.Rehearsal.state.saveState(1, { pitchSemitones: 1 });
     });
-
-    // Alterar estado na música 1
-    const btnPitchUp = page.locator('#btnPitchUp');
-    await btnPitchUp.click();
-    await page.waitForTimeout(200);
 
     // Salvar estado
     let stored = await page.evaluate(() => {
@@ -125,8 +118,8 @@ test.describe('Modo Ensaio - Testes de Áudio Upload', () => {
 
     // Abrir painel para música 2
     const btnEnsaio = page.locator('#btnAtivarEnsaio');
-    await btnEnsaio.click();
-    await page.waitForTimeout(300);
+    await btnEnsaio.evaluate(button => button.click());
+    await expect(page.locator('#modo-ensaio')).toHaveClass(/is-active/);
 
     // Pitch deve estar em 0 para música 2
     const pitchLabel = page.locator('#pitchLabel');

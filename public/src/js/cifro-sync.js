@@ -1,4 +1,6 @@
 const cifroSync = (() => {
+    let pageUnloading = false;
+    window.addEventListener('pagehide', () => { pageUnloading = true; });
     const DB_NAME = 'cifro';
     // Versão 7 acrescenta cifro_preferencias (capotraste pessoal por música).
     // Subir a versão é obrigatório: onupgradeneeded só cria os stores que
@@ -599,7 +601,9 @@ const cifroSync = (() => {
             if (reparoEmCurso) limparReparoTentado(bandaId);
             return true;
         } catch (error) {
-            console.warn('[cifroSync] sync failed:', error);
+            if (!pageUnloading && document.visibilityState !== 'hidden') {
+                console.warn('[cifroSync] sync failed:', error);
+            }
             if (reparoEmCurso) notificarIntegridadeFalhou(bandaId, reparoEmCurso);
             return false;
         } finally {

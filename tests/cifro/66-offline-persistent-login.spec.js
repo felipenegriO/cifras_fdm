@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../fixtures/diagnostics.js';
 
 test.use({ storageState: 'tests/.auth/user.json' });
 

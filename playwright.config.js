@@ -28,9 +28,13 @@ process.env.APP_ENV = 'test';
 const ci = Boolean(process.env.CI);
 const collectJsCoverage = process.env.JS_COVERAGE === '1';
 const collectPhpCoverage = process.env.PHP_COVERAGE === '1';
+const captureServerLogs = process.env.E2E_CAPTURE_SERVER_LOGS === '1';
 const port = Number(process.env.CIFRO_E2E_PORT || (collectPhpCoverage ? 8091 : 8090));
 const baseURL = `http://127.0.0.1:${port}`;
 const rootPath = process.cwd().replace(/\\/g, '/');
+const serverCommand = collectPhpCoverage
+  ? `node ${rootPath}/scripts/coverage/php-test-server.mjs ${port} ${rootPath}`
+  : `C:/xampp/php/php.exe -S 127.0.0.1:${port} -t public ${rootPath}/router.php`;
 const webServerEnv = { ...process.env };
 for (const key of [
   'PAYMENT_PIX_PHONE', 'PAYMENT_PIX_RECIPIENT', 'PAYMENT_WHATSAPP_PHONE',
@@ -199,7 +203,7 @@ export default defineConfig({
   ],
 
   webServer: {
-    command: `C:/xampp/php/php.exe -S 127.0.0.1:${port} -t public ${rootPath}/router.php`,
+    command: serverCommand,
     env: {
       ...webServerEnv,
       APP_ENV: 'test',
@@ -217,7 +221,7 @@ export default defineConfig({
     url: `${baseURL}/landing.php`,
     reuseExistingServer: false,
     timeout: 60000,
-    stdout: 'ignore',
-    stderr: 'ignore',
+    stdout: captureServerLogs ? 'pipe' : 'ignore',
+    stderr: captureServerLogs ? 'pipe' : 'ignore',
   },
 });

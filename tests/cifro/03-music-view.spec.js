@@ -84,7 +84,7 @@ test.describe('Controles de Cifra', () => {
     // Habilita a quick bar antes de navegar (simula usuário com barra de controles ativa)
     await page.addInitScript(() => localStorage.setItem('musicShowQuickBar', '1'));
     await page.goto(`/music.php?id=${encodeURIComponent(id)}`, { waitUntil: 'domcontentloaded' });
-    await page.waitForFunction(() => window.cifroPresentation, { timeout: 10000 });
+    await page.waitForFunction(() => window.cifroPresentation && window.__cifroMusicReady, { timeout: 10000 });
   });
 
   test('página carrega sem erros de servidor', async ({ page }) => {

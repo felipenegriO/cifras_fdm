@@ -85,7 +85,7 @@ test('admin convida novo membro e membro ativa conta pelo link', async ({ browse
   await member.fill('#senha', '123');
   await member.fill('#senha2', '123');
   await member.click('button[type="submit"]');
-  await expect(member.locator('.error')).toContainText(/pelo menos 6 caracteres/i);
+  await expect(member.locator('.error')).toContainText(/pelo menos 8 caracteres/i);
   await expect(member.locator('#senha')).toBeVisible();
 
   // ── 5. Novo membro corrige e define a senha válida ──────────────────────────

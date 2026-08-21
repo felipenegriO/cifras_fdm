@@ -204,4 +204,20 @@ final class ErrorLoggerTest extends TestCase
         self::assertNotFalse($row);
         self::assertLessThanOrEqual(255, mb_strlen($row['referencia']));
     }
+
+    public function testLimpezaRemoveSomenteLogsForaDaRetencao(): void
+    {
+        self::$pdo->exec(
+            "INSERT INTO app_error_logs (nivel, referencia, descricao, criado_em) VALUES
+             ('error', 'test:retencao:antigo', 'antigo', DATE_SUB(UTC_TIMESTAMP(), INTERVAL 31 DAY)),
+             ('error', 'test:retencao:recente', 'recente', UTC_TIMESTAMP())"
+        );
+
+        self::assertGreaterThanOrEqual(1, ErrorLogger::limparAntigos(30));
+        $referencias = self::$pdo->query(
+            "SELECT referencia FROM app_error_logs WHERE referencia LIKE 'test:retencao:%' ORDER BY referencia"
+        )->fetchAll(PDO::FETCH_COLUMN);
+
+        self::assertSame(['test:retencao:recente'], $referencias);
+    }
 }

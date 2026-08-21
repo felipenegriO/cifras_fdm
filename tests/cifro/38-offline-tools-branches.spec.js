@@ -24,6 +24,9 @@ async function openPreview(page) {
 test('offline-tools.js — datas, progresso, prepareShell e mensagens de erro', async ({ page }) => {
   await openPreview(page);
   const result = await page.evaluate(async () => {
+    const mount = document.createElement('div');
+    mount.id = 'offlineToolsMount';
+    document.body.appendChild(mount);
     const OT = window.OfflineTools;
 
     // formatDate: com timestamp válido (branch "continua") e sem (branch "nunca").
@@ -58,6 +61,7 @@ test('offline-tools.js — datas, progresso, prepareShell e mensagens de erro', 
     Object.assign(window.cifroSync, {
       sync: async () => true,
       getRevision: async () => 1,
+      verifyOfflinePackage: async () => ({ ok: true, version: 'coverage' }),
       markShellPrepared: async () => true,
       getSyncStatus: async () => ({ snapshotValid: true, shellReady: true, contentRevision: 1, lastSync: Date.now(), appVersion: 'x' }),
     });

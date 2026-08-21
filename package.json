@@ -18,7 +18,7 @@
     "test:e2e:visual": "playwright test --project=visual",
     "test:e2e:quality": "playwright test --project=cifro tests/cifro/42-mobile-layout-accessibility.spec.js tests/cifro/51-performance-accessibility.spec.js",
     "test:e2e:coverage": "playwright test --project=coverage",
-    "test:e2e:full": "playwright test --project=cifro --project=visual --project=pwa",
+    "test:e2e:full": "node scripts/test/run-e2e-full.mjs",
     "test:e2e:legacy": "playwright test --project=legacy",
     "test:integration": "powershell -NoProfile -Command \"$env:OPENSSL_CONF='C:/xampp/apache/conf/openssl.cnf'; C:/xampp/php/php.exe public/vendor/bin/phpunit --group integration\"",
     "test:integration:required": "powershell -NoProfile -Command \"$env:OPENSSL_CONF='C:/xampp/apache/conf/openssl.cnf'; C:/xampp/php/php.exe public/vendor/bin/phpunit --group integration --fail-on-skipped\"",

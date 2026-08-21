@@ -93,6 +93,25 @@ test('nome duplicado retorna 409 e conflito de revisão retorna 409', async ({ p
   }
 });
 
+// O gatilho de ajuda do campo Categoria virou um "i" dentro do próprio rótulo.
+// O rótulo é um `.compact-field > span` com pointer-events:none, então o risco
+// concreto é o ícone ficar clicável só na aparência e o clique cair no <select>
+// por baixo — por isso o caso clica de verdade e exige a gaveta aberta.
+test('o "i" ao lado do rótulo Categoria abre a ajuda no editor', async ({ page }) => {
+  await page.goto('/src/backend/editor/editor.php');
+
+  const rotulo = page.locator('label[for="classificacao"]');
+  await expect(rotulo).toContainText('Categoria');
+
+  const ajuda = rotulo.locator('button.field-help[data-help-article="categorias"]');
+  await expect(ajuda).toBeVisible();
+  await expect(ajuda).toHaveAttribute('aria-label', 'Como funcionam as categorias?');
+
+  await ajuda.click();
+  await expect(page.locator('#helpDrawer')).toBeVisible();
+  await expect(page.locator('#helpDrawerTitle')).toHaveText('Como funcionam as categorias');
+});
+
 test('nome equivalente com acento ou caixa diferente devolve a categoria existente', async ({ page }) => {
   const csrfResponse = await page.request.get('/api/csrf.php');
   const { csrf_token: csrf } = await csrfResponse.json();

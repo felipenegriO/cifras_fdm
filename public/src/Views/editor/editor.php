@@ -78,7 +78,7 @@
             <small id="transposicaoHint" aria-live="polite"></small>
           </div>
           <label class="compact-field compact-field--classification" for="classificacao">
-            <span>Categoria</span>
+            <span>Categoria<?php if (help_center_visible_for_user()): ?><button type="button" class="field-help" data-help-article="categorias" data-help-source="editor-categoria" aria-label="Como funcionam as categorias?" title="Como funcionam as categorias?"><?= cifro_icon('info', 11) ?></button><?php endif; ?></span>
             <select id="classificacao">
               <option value="">Sem categoria</option>
             </select>
@@ -89,7 +89,6 @@
               <button type="button" class="btn btn--secondary" id="novaCategoriaCancelar">Cancelar</button>
             </span>
           </label>
-          <?php if (help_center_visible_for_user()): ?><button type="button" class="help-context-link" data-help-article="categorias" data-help-source="editor-categoria">Como funcionam as categorias?</button><?php endif; ?>
         </div>
 
         <span class="dirty-indicator" id="dirtyIndicator" title="Alterações não salvas" aria-label="Alterações não salvas" hidden></span>

@@ -194,11 +194,8 @@ test('seguidor acompanha navegação e rolagem publicadas pelo líder', async ({
   const followerPage = await followerContext.newPage();
 
   try {
-    await hostPage.goto('/index.php');
-    await hostPage.evaluate(() => cifroSync.sync(window.CIFRO_BAND_ID, { force: true }));
-    const hostSong = hostPage.locator(`#music-list a[href*="id=${songId}"]`);
-    await expect(hostSong).toBeVisible({ timeout: 5000 });
-    await hostSong.click();
+    await hostPage.goto(`/music.php?id=${songId}`);
+    await expect(hostPage.locator('#song-cifra')).toBeVisible();
     await expect(hostPage).toHaveURL(new RegExp(`music\\.php\\?id=${songId}`));
     await hostPage.getByRole('button', { name: 'Abrir ajustes' }).click();
     await openLiveSettings(hostPage);
@@ -274,16 +271,16 @@ test('abre roteiro real, sanitiza conteúdo e retorna da música', async ({ page
   });
   const roteiroData = await created.json();
   expect(created.status(), JSON.stringify(roteiroData)).toBe(200);
+  expect(roteiroData.id).toBeTruthy();
 
   try {
-    await page.goto('/index.php');
-    await page.evaluate(async () => {
-      await cifroSync.sync(window.CIFRO_BAND_ID, { force: true });
-      renderPlaylistsMenu();
+    await page.evaluate(async ({ payload, response }) => {
+      await cifroSync.applyMutation('/src/backend/editor/salvar_roteiros.php', payload, response);
+    }, {
+      payload: { action: 'save', titulo, conteudo: content, visivel_ate: '2099-12-31' },
+      response: roteiroData,
     });
-    await page.getByRole('button', { name: 'Abrir repertórios' }).click();
-    const roteiroLink = page.locator('.liRoteiro a', { hasText: titulo });
-    await roteiroLink.click();
+    await page.goto(`/roteiro.php?id=${encodeURIComponent(roteiroData.id)}`);
     await expect(page).toHaveURL(/roteiro\.php\?id=/);
     await expect(page.locator('#roteiro-title')).toHaveText(titulo);
     await expect(page.locator('#roteiro-body')).toBeVisible();

@@ -79,7 +79,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         <div class="form-group">
           <label for="senha">Nova senha</label>
-          <input type="password" id="senha" name="senha" placeholder="Mínimo 6 caracteres" minlength="6" autocomplete="new-password" required>
+          <input type="password" id="senha" name="senha" placeholder="Mínimo 8 caracteres" minlength="8" autocomplete="new-password" required>
         </div>
         <div class="form-group">
           <label for="senha2">Confirmar senha</label>
@@ -95,8 +95,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           var senha2 = document.getElementById('senha2').value;
           var erroEl = document.getElementById('client-erro');
           var msg = '';
-          if (senha.length < 6) {
-            msg = 'A senha deve ter pelo menos 6 caracteres.';
+          if (senha.length < 8) {
+            msg = 'A senha deve ter pelo menos 8 caracteres.';
           } else if (senha !== senha2) {
             msg = 'As senhas não coincidem.';
           }

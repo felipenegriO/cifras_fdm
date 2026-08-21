@@ -369,6 +369,3 @@ async function cifroFetch(url, payload) {
 
 carregarBandas();
 </script>
-<script>window.CIFRO_USER_ID = '<?= e($_SESSION['usuario']['id'] ?? '') ?>'; window.CIFRO_BAND_ID = '<?= e(current_band_id()) ?>';</script>
-<script src="<?= asset_url('/src/js/cifro-connectivity.js') ?>"></script>
-<script src="<?= asset_url('/src/js/cifro-sync.js') ?>"></script>

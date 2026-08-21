@@ -3,9 +3,13 @@
 ignore_user_abort(true);
 
 require_once __DIR__ . '/../../config/env.php';
+require_once __DIR__ . '/../Services/SessionStorage.php';
+require_once __DIR__ . '/../Services/ErrorLogger.php';
 require_once __DIR__ . '/backup_helpers.php';
 require_once __DIR__ . '/../Views/partials/icons.php';
 $GLOBALS['__cifro_request_started_at'] = microtime(true);
+
+SessionStorage::configure();
 
 // Rewrite absolute HTML paths when APP_BASE is set (subfolder deploys)
 if (($GLOBALS['__cifro_app_base'] = rtrim((string)getenv('APP_BASE'), '/')) !== '') {
@@ -85,19 +89,7 @@ register_shutdown_function(function (): void {
 });
 
 function _cifro_log_error(string $descricao, string $referencia, array $detalhes = []): void {
-    try {
-        $pdo = Database::getConnection();
-        $pdo->prepare(
-            'INSERT INTO app_error_logs (nivel, referencia, descricao, detalhes) VALUES (?, ?, ?, ?)'
-        )->execute([
-            'error',
-            mb_substr($referencia, 0, 255),
-            mb_substr($descricao,  0, 500),
-            json_encode($detalhes, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-        ]);
-    } catch (Throwable) {
-        error_log('[cifro] error-log failed: ' . $descricao);
-    }
+    ErrorLogger::log($descricao, $referencia, 'error', $detalhes);
 }
 
 spl_autoload_register(function ($class) {

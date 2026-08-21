@@ -44,22 +44,12 @@
             fullscreenBtn.style.display = document.fullscreenElement ? '' : 'none';
         }
 
-        function requestFullscreen() {
-            if (document.fullscreenElement) return;
-            const target = document.documentElement;
-            if (target.requestFullscreen) {
-                target.requestFullscreen().catch(function () {});
-            }
-        }
-
         document.addEventListener('fullscreenchange', updateFullscreenBtn);
         if (fullscreenBtn) {
             fullscreenBtn.addEventListener('click', function () {
                 if (document.exitFullscreen) document.exitFullscreen().catch(function () {});
             });
         }
-        if (window.top === window.self) requestFullscreen();
-
         // ── Wake Lock ───────────────────────────────────────────────
         let wakeLock = null;
 
@@ -110,11 +100,13 @@
             let swipeStartX = 0, swipeStartY = 0, swipeT0 = 0;
             const swipeTarget = cifra || document.body;
             swipeTarget.addEventListener('touchstart', function (e) {
-                const t = e.touches[0];
+                const t = e.touches && e.touches[0];
+                if (!t) return;
                 swipeStartX = t.clientX; swipeStartY = t.clientY; swipeT0 = Date.now();
             }, { passive: true });
             swipeTarget.addEventListener('touchend', function (e) {
-                const t = e.changedTouches[0];
+                const t = e.changedTouches && e.changedTouches[0];
+                if (!t || !swipeT0) return;
                 const dx = t.clientX - swipeStartX;
                 const dy = t.clientY - swipeStartY;
                 if (Date.now() - swipeT0 > 600 || Math.abs(dx) < 80) return;

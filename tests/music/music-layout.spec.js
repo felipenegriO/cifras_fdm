@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../fixtures/diagnostics.js';
 import { fazerLogin } from '../helpers/auth';
 
 test.describe.configure({ mode: 'serial' });

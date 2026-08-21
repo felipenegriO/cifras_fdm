@@ -33,6 +33,30 @@ final class MigrationRunner
         return $status;
     }
 
+    /**
+     * Ids das migrations que ainda não foram aplicadas — leitura pura.
+     *
+     * Diferente de status(), não chama ensureLedger(): esta consulta existe
+     * para a checagem de saúde, que roda contra produção e não pode criar
+     * tabela. Banco sem schema_migrations é lido como "nada aplicado", que é
+     * exatamente o que ele é.
+     */
+    public function pendingIds(): array
+    {
+        $aplicadas = $this->pdo->query("SHOW TABLES LIKE 'schema_migrations'")->rowCount() > 0
+            ? $this->appliedMigrations()
+            : [];
+
+        $pendentes = [];
+        foreach (self::discover($this->directory) as $migration) {
+            if (!array_key_exists($migration['id'], $aplicadas)) {
+                $pendentes[] = $migration['id'];
+            }
+        }
+
+        return $pendentes;
+    }
+
     public function applyAll(): array
     {
         $applied = [];

@@ -6,6 +6,9 @@ final class MigrationRunnerTest extends TestCase
 {
     private string $directory;
 
+    /** @var list<string> bancos criados por bancoDeRascunho(), derrubados no tearDown. */
+    private array $bancosDeRascunho = [];
+
     protected function setUp(): void
     {
         $this->directory = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'cifro-migrations-' . bin2hex(random_bytes(6));
@@ -18,6 +21,16 @@ final class MigrationRunnerTest extends TestCase
             unlink($file);
         }
         rmdir($this->directory);
+
+        foreach ($this->bancosDeRascunho as $nome) {
+            (new PDO(
+                'mysql:host=' . env('DB_HOST') . ';charset=utf8mb4',
+                (string) env('DB_USER'),
+                (string) env('DB_PASS'),
+                [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
+            ))->exec("DROP DATABASE IF EXISTS `{$nome}`");
+        }
+        $this->bancosDeRascunho = [];
     }
 
     public function testDescobreMigrationsOrdenadasComChecksum(): void
@@ -121,5 +134,76 @@ final class MigrationRunnerTest extends TestCase
                 );
             }
         }
+    }
+
+    /**
+     * Consultar o que falta aplicar precisa ser leitura pura. Um banco de
+     * produção que nunca migrou não tem schema_migrations, e a checagem de
+     * saúde não pode criá-la só para descobrir isso — health check que
+     * escreve no banco deixa de ser health check.
+     */
+    public function testPendentesListaTudoQuandoBancoNuncaFoiMigrado(): void
+    {
+        file_put_contents($this->directory . '/20260810_primeira.sql', 'SELECT 1;');
+        file_put_contents($this->directory . '/20260811_segunda.sql', 'SELECT 2;');
+        $pdo = $this->bancoDeRascunho();
+
+        $pendentes = (new MigrationRunner($pdo, $this->directory))->pendingIds();
+
+        self::assertSame(['20260810_primeira', '20260811_segunda'], $pendentes);
+        self::assertSame(
+            0,
+            $pdo->query("SHOW TABLES LIKE 'schema_migrations'")->rowCount(),
+            'a consulta de pendências não pode criar a tabela de controle'
+        );
+    }
+
+    public function testPendentesIgnoramAsJaRegistradas(): void
+    {
+        file_put_contents($this->directory . '/20260810_primeira.sql', 'SELECT 1;');
+        file_put_contents($this->directory . '/20260811_segunda.sql', 'SELECT 2;');
+        $pdo = $this->bancoDeRascunho();
+        $pdo->exec('CREATE TABLE schema_migrations (migration_id VARCHAR(190) NOT NULL PRIMARY KEY, checksum CHAR(64) NOT NULL, applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP)');
+        $pdo->prepare('INSERT INTO schema_migrations (migration_id, checksum) VALUES (?, ?)')
+            ->execute(['20260810_primeira', hash('sha256', 'SELECT 1;')]);
+
+        $pendentes = (new MigrationRunner($pdo, $this->directory))->pendingIds();
+
+        self::assertSame(['20260811_segunda'], $pendentes);
+    }
+
+    public function testPendentesVazioQuandoTudoAplicado(): void
+    {
+        file_put_contents($this->directory . '/20260810_primeira.sql', 'SELECT 1;');
+        $pdo = $this->bancoDeRascunho();
+        $pdo->exec('CREATE TABLE schema_migrations (migration_id VARCHAR(190) NOT NULL PRIMARY KEY, checksum CHAR(64) NOT NULL, applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP)');
+        $pdo->prepare('INSERT INTO schema_migrations (migration_id, checksum) VALUES (?, ?)')
+            ->execute(['20260810_primeira', hash('sha256', 'SELECT 1;')]);
+
+        self::assertSame([], (new MigrationRunner($pdo, $this->directory))->pendingIds());
+    }
+
+    /**
+     * Banco descartável e isolado: criar/derrubar schema_migrations é DDL, que
+     * faz commit implícito no MySQL e escaparia de um rollback de transação.
+     */
+    private function bancoDeRascunho(): PDO
+    {
+        $nome = 'cifro_migguard_' . bin2hex(random_bytes(6));
+        $servidor = new PDO(
+            'mysql:host=' . env('DB_HOST') . ';charset=utf8mb4',
+            (string) env('DB_USER'),
+            (string) env('DB_PASS'),
+            [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
+        );
+        $servidor->exec("CREATE DATABASE `{$nome}` CHARACTER SET utf8mb4");
+        $this->bancosDeRascunho[] = $nome;
+
+        return new PDO(
+            'mysql:host=' . env('DB_HOST') . ";dbname={$nome};charset=utf8mb4",
+            (string) env('DB_USER'),
+            (string) env('DB_PASS'),
+            [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC]
+        );
     }
 }

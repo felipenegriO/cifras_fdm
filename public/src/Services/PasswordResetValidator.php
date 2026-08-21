@@ -8,8 +8,8 @@ class PasswordResetValidator
     /** Returns an error message, or null when the new password is acceptable. */
     public static function validateNewPassword(string $senha, string $senha2): ?string
     {
-        if (strlen($senha) < 6) {
-            return 'A senha deve ter pelo menos 6 caracteres.';
+        if (strlen($senha) < 8) {
+            return 'A senha deve ter pelo menos 8 caracteres.';
         }
         if ($senha !== $senha2) {
             return 'As senhas não coincidem.';

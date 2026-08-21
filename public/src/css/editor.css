@@ -113,6 +113,35 @@ body {
   pointer-events: none;
 }
 
+/*
+ * O "i" de ajuda mora dentro do rótulo flutuante, que tem pointer-events:none
+ * logo acima — sem devolver o pointer-events aqui, o botão ficaria clicável
+ * apenas na aparência e o clique cairia no <select> por baixo. O tamanho é
+ * limitado à faixa do rótulo (top:4px até o padding-top:14px do campo) para o
+ * ícone não invadir a área onde o valor selecionado é desenhado.
+ */
+.compact-field > span > .field-help {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: -1px;
+  width: 11px;
+  height: 11px;
+  margin-left: 4px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.compact-field > span > .field-help:hover,
+.compact-field > span > .field-help:focus-visible {
+  color: var(--brand);
+}
+
 .compact-field input,
 .compact-field select {
   width: 100%;

@@ -25,11 +25,11 @@ npm run test:coverage:js
 npm run test:coverage
 ```
 
-E2E usa MySQL e servidor PHP configurado em `playwright.config.js`. O projeto `setup` persiste autenticação em `tests/.auth/`. A suíte usa um worker porque parte dos testes altera o mesmo banco. Repetição automática ocorre apenas em CI. Cobertura PHP requer Xdebug 3.5.3 em modo `coverage`; cobertura JavaScript usa Chromium real e Monocart Reporter.
+E2E usa MySQL e servidor PHP configurado em `playwright.config.js`. O projeto `setup` persiste autenticação em `tests/.auth/`. A suíte usa um worker porque parte dos testes altera o mesmo banco. Há uma repetição automática local e no CI; resultados flaky continuam sendo dívida, não sucesso silencioso. Cobertura PHP requer Xdebug 3.5.3 em modo `coverage`; cobertura JavaScript usa Chromium real e Monocart Reporter.
 
-Cada teste possui limite global de 60 segundos, sem exceções locais. Qualquer timeout deve ser tratado como problema de desempenho, dependência externa, estado compartilhado ou desenho do cenário antes de aumentar esse limite.
+Cada teste possui limite global de 90 segundos. Qualquer timeout deve ser tratado como problema de desempenho, dependência externa, estado compartilhado ou desenho do cenário antes de aumentar esse limite.
 
-`npm run test:e2e` executa somente a regressão principal. `npm run test:e2e:full` reúne a suíte principal e os testes visuais mantidos. O projeto `legacy` não participa da regressão normal.
+`npm run test:e2e` executa somente a regressão principal. `npm run test:e2e:full` executa, em processos isolados e sem retries, `cifro`, `serial`, `coverage`, `pwa`, `visual` e `legacy`. O isolamento renova a autenticação e o banco entre projetos, evitando que uma suíte contamine a seguinte.
 
 ## Organização
 
@@ -61,16 +61,17 @@ Cada teste possui limite global de 60 segundos, sem exceções locais. Qualquer 
 - O projeto `pwa` executa service worker e IndexedDB reais, inclusive modo avião, rede lenta, duas bandas, atualização interrompida e sessão expirada.
 - Stripe possui cobertura E2E de sandbox; compra/cancelamento real controlado e reconciliação em produção continuam sendo gates operacionais.
 - Download do YouTube depende de provedores externos e não é determinístico.
-- A suíte unitária atual possui 451 testes PHP e 974 asserções; seis skips condicionais precisam permanecer explicados em cada evidência.
+- A suíte unitária atual possui 579 testes PHP e 1482 asserções, além de 42 testes JavaScript.
 - O baseline de branches está em `docs/cobertura.md`; os comandos de cobertura falham abaixo de 80%.
 - Não há teste contratual automatizado que compare esta documentação com rotas e IDs de funcionalidades.
 
-## Evidência local de 2026-08-10
+## Evidência local de 2026-08-20
 
-- PHPUnit: 451 testes, 974 asserções, 6 skips condicionais, 0 falhas.
-- JavaScript unitário: 16 testes, 0 falhas.
-- Smoke E2E: 6 testes, 0 falhas.
-- A regressão completa do lote atual ainda precisa ser reexecutada antes da liberação.
+- PHPUnit: 579 testes, 1482 asserções, 0 falhas.
+- JavaScript unitário: 42 testes, 0 falhas.
+- Playwright `cifro`: 841 testes, 0 falhas, 0 skips e 0 flakies.
+- Playwright `pwa`: 58 testes, 0 falhas, sem retry.
+- Playwright `serial`: 43 testes locais aprovados e 3 cenários de checkout real condicionados à configuração do Stripe.
 
 Os resultados medidos da execução mais recente estão em [cobertura.md](cobertura.md).
 

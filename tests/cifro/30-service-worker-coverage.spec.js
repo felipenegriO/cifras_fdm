@@ -58,6 +58,28 @@ async function waitForDebugger(port, getSpawnError) {
   throw new Error('Chromium de cobertura não iniciou.');
 }
 
+async function evaluateAfterServiceWorkerSettles(page, callback, argument) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      await page.waitForLoadState('load');
+      return await page.evaluate(callback, argument);
+    } catch (error) {
+      if (!/Execution context was destroyed/i.test(error.message) || attempt === 2) throw error;
+    }
+  }
+}
+
+async function gotoAfterServiceWorkerSettles(page, url) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      return await page.goto(url, { waitUntil: 'domcontentloaded' });
+    } catch (error) {
+      if (!/ERR_ABORTED/i.test(error.message) || attempt === 2) throw error;
+      await page.waitForLoadState('load').catch(() => {});
+    }
+  }
+}
+
 test('service worker executa instalação, cache, mensagens e recuperação offline reais', async ({ request }, testInfo) => {
   test.setTimeout(120000);
   test.skip(process.env.PHP_COVERAGE === '1', 'Cobertura JS do service worker; no PHP instrumentado passa de 1 minuto sem aumentar cobertura PHP relevante.');
@@ -121,7 +143,7 @@ test('service worker executa instalação, cache, mensagens e recuperação offl
     const page = await context.newPage();
     await page.goto(`${appOrigin}/index.php`);
     expect(await page.content()).toContain('CIFRO_USER_ID');
-    await page.evaluate(async appOrigin => {
+    await evaluateAfterServiceWorkerSettles(page, async appOrigin => {
       const registrations = await navigator.serviceWorker.getRegistrations();
       await Promise.all(registrations.map(registration => registration.unregister()));
       await caches.keys().then(keys => Promise.all(keys.map(key => caches.delete(key))));
@@ -302,15 +324,12 @@ test('service worker executa instalação, cache, mensagens e recuperação offl
       await fetch('/index.php', { method: 'POST', body: 'x' });
       await fetch(appOrigin.replace('127.0.0.1', 'localhost') + '/index.php', { mode: 'no-cors' }).catch(() => null);
     }, appOrigin);
-    await cdp.send('Network.enable', {}, sessionId);
-    await cdp.send('Network.emulateNetworkConditions', { offline: true, latency: 0, downloadThroughput: 0, uploadThroughput: 0 }, sessionId);
     await context.setOffline(true);
-    const offlineResponse = await page.goto(`${appOrigin}/index.php`, { waitUntil: 'domcontentloaded' });
+    const offlineResponse = await gotoAfterServiceWorkerSettles(page, `${appOrigin}/index.php`);
     expect(offlineResponse).toBeTruthy();
     const fallbackStatus = await page.evaluate(async () => (await fetch('/outro-arquivo-inexistente.txt')).status);
     expect([404, 504]).toContain(fallbackStatus);
     await context.setOffline(false);
-    await cdp.send('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 }, sessionId);
     await page.evaluate(async () => {
       const registration = await navigator.serviceWorker.ready;
       const worker = navigator.serviceWorker.controller || registration.active;

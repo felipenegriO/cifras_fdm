@@ -201,7 +201,8 @@
         injectOverlay();
         injectStageReady();
         requestWakeLock();
-        if (document.documentElement.requestFullscreen) {
+        const userActivation = navigator.userActivation;
+        if (document.documentElement.requestFullscreen && (!userActivation || userActivation.isActive)) {
             document.documentElement.requestFullscreen().catch(function () {});
         }
     }

@@ -31,6 +31,11 @@ async function getCsrf(page) {
   return body.csrf_token || '';
 }
 
+async function waitForEditor(page) {
+  await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+  await page.evaluate(() => window.__cifroEditorReady);
+}
+
 test.describe('Editor de Músicas — Tela', () => {
   test('edição salva reaparece ao abrir a cifra', async ({ page }) => {
     const csrf = await getCsrf(page);
@@ -44,8 +49,7 @@ test.describe('Editor de Músicas — Tela', () => {
 
     try {
       await page.goto('/src/backend/editor/editor.php');
-      await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
-      await page.evaluate(() => window.__cifroEditorReady);
+    await waitForEditor(page);
       await page.locator(`[data-song-id="${createdBody.id}"]`).click();
       await page.evaluate(value => {
         const editor = window.tinymce.get('cifraInput');
@@ -74,8 +78,7 @@ test.describe('Editor de Músicas — Tela', () => {
 
   test('mantém o espaçamento dos acordes ao marcar verso e reabrir o conteúdo', async ({ page }) => {
     await page.goto('/src/backend/editor/editor.php');
-    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
-    await page.evaluate(() => window.__cifroEditorReady);
+    await waitForEditor(page);
     await page.evaluate(() => {
       const editor = window.tinymce.get('cifraInput');
       editor.focus();
@@ -102,7 +105,7 @@ test.describe('Editor de Músicas — Tela', () => {
 
   test('mantém o cursor ao inserir espaços entre acordes', async ({ page }) => {
     await page.goto('/src/backend/editor/editor.php');
-    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await waitForEditor(page);
 
     const result = await page.evaluate(() => {
       const editor = window.tinymce.get('cifraInput');
@@ -127,7 +130,7 @@ test.describe('Editor de Músicas — Tela', () => {
 
   test('mantém os acordes laranja dentro do refrão', async ({ page }) => {
     await page.goto('/src/backend/editor/editor.php');
-    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await waitForEditor(page);
 
     const colors = await page.evaluate(() => {
       const editor = window.tinymce.get('cifraInput');
@@ -146,7 +149,7 @@ test.describe('Editor de Músicas — Tela', () => {
 
   test('não cria linha vazia ao reabrir cifra com quebra dentro do acorde', async ({ page }) => {
     await page.goto('/src/backend/editor/editor.php');
-    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await waitForEditor(page);
     const result = await page.evaluate(() => {
       const editor = window.tinymce.get('cifraInput');
       editor.setContent('<p><b>C&nbsp;&nbsp;G&nbsp;&nbsp;Am&nbsp;&nbsp;&nbsp;F<br></b>Canção de teste.<br>asdj</p>');
@@ -158,7 +161,7 @@ test.describe('Editor de Músicas — Tela', () => {
 
   test('limpa e prepara automaticamente o conteúdo colado', async ({ page }) => {
     await page.goto('/src/backend/editor/editor.php');
-    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await waitForEditor(page);
 
     const content = await page.evaluate(() => {
       const editor = window.tinymce.get('cifraInput');
@@ -176,8 +179,7 @@ test.describe('Editor de Músicas — Tela', () => {
 
   test('marca cifras pelo botão Acorde usando a tag compatível', async ({ page }) => {
     await page.goto('/src/backend/editor/editor.php');
-    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
-    await page.evaluate(() => window.__cifroEditorReady);
+    await waitForEditor(page);
     await page.evaluate(() => {
       const editor = window.tinymce.get('cifraInput');
       editor.getBody().innerHTML = '<span id="acordes">C&nbsp;&nbsp;G&nbsp;&nbsp;Am&nbsp;&nbsp;F</span><br>Mistica sublime';
@@ -199,7 +201,7 @@ test.describe('Editor de Músicas — Tela', () => {
 
   test('mantém acordes inline ao colar conteúdo com spans', async ({ page }) => {
     await page.goto('/src/backend/editor/editor.php');
-    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await waitForEditor(page);
 
     const content = await page.evaluate(() => {
       const editor = window.tinymce.get('cifraInput');
@@ -215,7 +217,7 @@ test.describe('Editor de Músicas — Tela', () => {
 
   test('detecta o tom e transpõe a cifra ao escolher o tom padrão', async ({ page }) => {
     await page.goto('/src/backend/editor/editor.php');
-    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await waitForEditor(page);
     await page.evaluate(() => {
       const editor = window.tinymce.get('cifraInput');
       editor.setContent('<b>D A Bm G</b><br><b>Em A D</b>');
@@ -233,7 +235,7 @@ test.describe('Editor de Músicas — Tela', () => {
 
   test('salvar sem t\u00edtulo mostra erro e n\u00e3o envia requisi\u00e7\u00e3o', async ({ page }) => {
     await page.goto('/src/backend/editor/editor.php');
-    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await waitForEditor(page);
     await page.locator('#titulo').fill('');
     await page.locator('#saveButton').click();
     await expect(page.locator('#status')).toHaveText('Digite o nome da m\u00fasica.');
@@ -242,7 +244,7 @@ test.describe('Editor de Músicas — Tela', () => {
 
   test('salvar com cifra vazia mostra erro', async ({ page }) => {
     await page.goto('/src/backend/editor/editor.php');
-    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await waitForEditor(page);
     await page.locator('#titulo').fill('__TESTE_CIFRA_VAZIA__');
     await page.evaluate(() => window.tinymce.get('cifraInput').setContent(''));
     await page.locator('#saveButton').click();
@@ -251,7 +253,7 @@ test.describe('Editor de Músicas — Tela', () => {
 
   test('salvar cifra colada de outra p\u00e1gina bloqueia com aviso de limpeza', async ({ page }) => {
     await page.goto('/src/backend/editor/editor.php');
-    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await waitForEditor(page);
     await page.locator('#titulo').fill('__TESTE_COLAGEM_SUJA__');
     await page.evaluate(() => window.tinymce.get('cifraInput').setContent('<div class="cifra-column">lixo colado</div>'));
     await page.locator('#saveButton').click();
@@ -260,7 +262,7 @@ test.describe('Editor de Músicas — Tela', () => {
 
   test('excluir sem m\u00fasica selecionada mostra erro', async ({ page }) => {
     await page.goto('/src/backend/editor/editor.php');
-    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await waitForEditor(page);
     await page.locator('#moreActions').evaluate(el => { el.open = true; });
     await page.locator('#deleteSongButton').click();
     await expect(page.locator('#status')).toHaveText('Selecione uma m\u00fasica para excluir.');
@@ -268,7 +270,7 @@ test.describe('Editor de Músicas — Tela', () => {
 
   test('busca sem resultados mostra estado vazio espec\u00edfico', async ({ page }) => {
     await page.goto('/src/backend/editor/editor.php');
-    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await waitForEditor(page);
     await page.locator('#buscaMusica').fill('__CONSULTA_QUE_NAO_EXISTE_XYZ__');
     await expect(page.locator('#libraryState')).toHaveText('Nenhuma m\u00fasica encontrada.');
     await expect(page.locator('#libraryState')).toBeVisible();
@@ -276,7 +278,7 @@ test.describe('Editor de Músicas — Tela', () => {
 
   test('preview abre e fecha restaurando o estado do setlist', async ({ page }) => {
     await page.goto('/src/backend/editor/editor.php');
-    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await waitForEditor(page);
     await page.locator('#titulo').fill('__TESTE_PREVIEW__');
     await page.evaluate(() => sessionStorage.setItem('cifroSetlist', 'valor-original'));
 
@@ -298,7 +300,7 @@ test.describe('Editor de Músicas — Tela', () => {
 
   test('Escape fecha o preview e Ctrl+S aciona salvar', async ({ page }) => {
     await page.goto('/src/backend/editor/editor.php');
-    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await waitForEditor(page);
     await page.locator('#previewButton').click();
     await expect(page.locator('#previewModal')).toHaveClass(/is-open/);
 
@@ -312,7 +314,7 @@ test.describe('Editor de Músicas — Tela', () => {
 
   test('trocar tom para um modo incompat\u00edvel n\u00e3o transp\u00f5e', async ({ page }) => {
     await page.goto('/src/backend/editor/editor.php');
-    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await waitForEditor(page);
     await page.evaluate(() => {
       const editor = window.tinymce.get('cifraInput');
       editor.setContent('<b>D A Bm G</b><br><b>Em A D</b>');
@@ -332,7 +334,7 @@ test.describe('Editor de Músicas — Tela', () => {
 
   test('falha de rede ao salvar cai no catch e exibe a mensagem de erro', async ({ page }) => {
     await page.goto('/src/backend/editor/editor.php');
-    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await waitForEditor(page);
     await page.locator('#titulo').fill('__TESTE_FALHA_REDE__');
     await page.evaluate(() => window.tinymce.get('cifraInput').setContent('<b>C G Am F</b>'));
     await page.route('**/src/backend/editor/api.php', route => route.abort('failed'));
@@ -346,7 +348,7 @@ test.describe('Editor de Músicas — Tela', () => {
 
   test('resposta de API com corpo não-JSON usa mensagem padrão de HTTP', async ({ page }) => {
     await page.goto('/src/backend/editor/editor.php');
-    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await waitForEditor(page);
     await page.locator('#titulo').fill('__TESTE_JSON_INVALIDO__');
     await page.evaluate(() => window.tinymce.get('cifraInput').setContent('<b>C G Am F</b>'));
     await page.route('**/src/backend/editor/api.php', route => route.fulfill({ status: 500, contentType: 'text/plain', body: 'boom' }));
@@ -357,7 +359,7 @@ test.describe('Editor de Músicas — Tela', () => {
 
   test('cifra sem acordes reconhecidos mostra tom "Não identificado" e desabilita o seletor', async ({ page }) => {
     await page.goto('/src/backend/editor/editor.php');
-    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await waitForEditor(page);
     await page.evaluate(() => {
       const editor = window.tinymce.get('cifraInput');
       editor.setContent('apenas texto sem nenhum acorde');
@@ -370,7 +372,7 @@ test.describe('Editor de Músicas — Tela', () => {
 
   test('excluir música com sucesso sincroniza e volta para o estado de nova música', async ({ page }) => {
     await page.goto('/src/backend/editor/editor.php');
-    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await waitForEditor(page);
     await page.locator('#titulo').fill('__TESTE_EXCLUIR_OK__');
     await page.evaluate(() => window.tinymce.get('cifraInput').setContent('<b>C G Am F</b>'));
 
@@ -399,7 +401,7 @@ test.describe('Editor de Músicas — Tela', () => {
 
   test('excluir música quando o usuário cancela a confirmação não chama a API', async ({ page }) => {
     await page.goto('/src/backend/editor/editor.php');
-    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await waitForEditor(page);
     await page.locator('#titulo').fill('__TESTE_EXCLUIR_CANCELA__');
     await page.evaluate(() => window.tinymce.get('cifraInput').setContent('<b>C G Am F</b>'));
 
@@ -422,7 +424,7 @@ test.describe('Editor de Músicas — Tela', () => {
 
   test('beforeunload só é bloqueado quando há alterações não salvas', async ({ page }) => {
     await page.goto('/src/backend/editor/editor.php');
-    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await waitForEditor(page);
 
     const cleanResult = await page.evaluate(() => {
       const event = new Event('beforeunload', { cancelable: true });
@@ -444,7 +446,7 @@ test.describe('Editor de Músicas — Tela', () => {
 
   test('opção de tom injetada e inválida cai no branch de tom-alvo inexistente', async ({ page }) => {
     await page.goto('/src/backend/editor/editor.php');
-    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await waitForEditor(page);
     await page.evaluate(() => {
       const editor = window.tinymce.get('cifraInput');
       editor.setContent('<b>D A Bm G</b><br><b>Em A D</b>');
@@ -466,7 +468,7 @@ test.describe('Editor de Músicas — Tela', () => {
 
   test('opção de tom de modo diferente injetada não transpõe (mismatch real de modo)', async ({ page }) => {
     await page.goto('/src/backend/editor/editor.php');
-    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await waitForEditor(page);
     await page.evaluate(() => {
       const editor = window.tinymce.get('cifraInput');
       editor.setContent('<b>D A Bm G</b><br><b>Em A D</b>');
@@ -488,7 +490,7 @@ test.describe('Editor de Músicas — Tela', () => {
 
   test('selecionar o mesmo tom já detectado não transpõe (intervalo zero)', async ({ page }) => {
     await page.goto('/src/backend/editor/editor.php');
-    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await waitForEditor(page);
     await page.evaluate(() => {
       const editor = window.tinymce.get('cifraInput');
       editor.setContent('<b>D A Bm G</b><br><b>Em A D</b>');
@@ -506,7 +508,7 @@ test.describe('Editor de Músicas — Tela', () => {
 
   test('clicar duas vezes na mesma música da lista é um no-op (early return)', async ({ page }) => {
     await page.goto('/src/backend/editor/editor.php');
-    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await waitForEditor(page);
     const firstButton = page.locator('#musicas li button').first();
     await firstButton.waitFor();
     await firstButton.click();
@@ -527,7 +529,7 @@ test.describe('Editor de Músicas — Tela', () => {
 
     try {
       await page.goto('/src/backend/editor/editor.php');
-      await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await waitForEditor(page);
       await page.locator('#buscaMusica').fill('__TESTE_CAMPOS_VAZIOS__');
       await page.locator('#musicas li button').first().click();
       await expect(page.locator('#titulo')).toHaveValue('__TESTE_CAMPOS_VAZIOS__');
@@ -544,7 +546,7 @@ test.describe('Editor de Músicas — Tela', () => {
 
   test('salvar remove negrito vazio e mantém negrito de texto não-acorde', async ({ page }) => {
     await page.goto('/src/backend/editor/editor.php');
-    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await waitForEditor(page);
     await page.locator('#titulo').fill('__TESTE_NEGRITO_MISTO__');
     await page.evaluate(() => {
       const editor = window.tinymce.get('cifraInput');
@@ -579,7 +581,7 @@ test.describe('Editor de Músicas — Tela', () => {
 
     try {
       await page.goto('/src/backend/editor/editor.php');
-      await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await waitForEditor(page);
       await page.locator('#buscaMusica').fill('__TESTE_NOME_ESPECIAL__');
       await page.locator('#musicas li button').first().click();
       await expect(page.locator('#titulo')).toHaveValue('__TESTE_NOME_ESPECIAL__');
@@ -598,7 +600,7 @@ test.describe('Editor de Músicas — Tela', () => {
 
   test('colar HTML de outra página com <pre> preserva espaçamento e limpa marcações', async ({ page }) => {
     await page.goto('/src/backend/editor/editor.php');
-    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await waitForEditor(page);
 
     const content = await page.evaluate(() => {
       const editor = window.tinymce.get('cifraInput');
@@ -614,7 +616,7 @@ test.describe('Editor de Músicas — Tela', () => {
 
   test('colar texto puro com tabs e CRLF vira HTML formatado com nbsp', async ({ page }) => {
     await page.goto('/src/backend/editor/editor.php');
-    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await waitForEditor(page);
 
     const content = await page.evaluate(() => {
       const editor = window.tinymce.get('cifraInput');
@@ -629,7 +631,7 @@ test.describe('Editor de Músicas — Tela', () => {
 
   test('marcar seção sem seleção insere placeholder com rótulo', async ({ page }) => {
     await page.goto('/src/backend/editor/editor.php');
-    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await waitForEditor(page);
     await page.evaluate(() => {
       const editor = window.tinymce.get('cifraInput');
       editor.setContent('');
@@ -692,7 +694,7 @@ test.describe('Editor de Músicas — Tela', () => {
 
     try {
       await page.goto('/src/backend/editor/editor.php');
-      await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await waitForEditor(page);
       let count = await page.locator('#musicas li button').count();
 
       while (count < 2) {
@@ -709,7 +711,7 @@ test.describe('Editor de Músicas — Tela', () => {
 
       if (createdIds.length) {
         await page.reload();
-        await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await waitForEditor(page);
       }
 
       const buttons = page.locator('#musicas li button');
@@ -735,7 +737,7 @@ test.describe('Editor de Músicas — Tela', () => {
 
   test('nova música com alterações pendentes pede confirmação de descarte', async ({ page }) => {
     await page.goto('/src/backend/editor/editor.php');
-    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await waitForEditor(page);
     await page.locator('#titulo').fill('__TESTE_NOVA_DIRTY__');
     await expect(page.locator('#dirtyIndicator')).toBeVisible();
 
@@ -755,7 +757,7 @@ test.describe('Editor de Músicas — Tela', () => {
     expect(created.ok ?? created.sucesso).toBeTruthy();
 
     await page.goto('/src/backend/editor/editor.php');
-    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await waitForEditor(page);
     await page.locator('#buscaMusica').fill('__TESTE_DELETE_LOCAL_AUSENTE__');
     await page.locator('#musicas li button').first().click();
     // Remove a música do array local em memória antes de excluir, para
@@ -772,7 +774,7 @@ test.describe('Editor de Músicas — Tela', () => {
 
   test('erro de rede ao excluir sem mensagem usa texto padrão', async ({ page }) => {
     await page.goto('/src/backend/editor/editor.php');
-    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await waitForEditor(page);
     await page.locator('#titulo').fill('__TESTE_EXCLUIR_FALHA_REDE__');
     await page.evaluate(() => window.tinymce.get('cifraInput').setContent('<b>C G</b>'));
 
@@ -798,7 +800,7 @@ test.describe('Editor de Músicas — Tela', () => {
 
   test('cleanForSave remove spans sem estilo relevante e preserva os laranjas', async ({ page }) => {
     await page.goto('/src/backend/editor/editor.php');
-    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await waitForEditor(page);
     await page.locator('#titulo').fill('__TESTE_SPAN_LIMPEZA__');
     await page.evaluate(() => {
       const editor = window.tinymce.get('cifraInput');
@@ -826,7 +828,7 @@ test.describe('Editor de Músicas — Tela', () => {
 
   test('salvar sem música selecionada envia id indefinido e adiciona a lista local ao sincronizar', async ({ page }) => {
     await page.goto('/src/backend/editor/editor.php');
-    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await waitForEditor(page);
     await page.locator('#titulo').fill('__TESTE_NOVO_SEM_SELECAO__');
     await page.evaluate(() => window.tinymce.get('cifraInput').setContent('<b>C G Am F</b>'));
 
@@ -862,7 +864,7 @@ test.describe('Editor de Músicas — Tela', () => {
 
     try {
       await page.goto('/src/backend/editor/editor.php');
-      await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await waitForEditor(page);
       await page.locator('#buscaMusica').fill('__TESTE_SEM_TOM_LISTA__');
       const meta = page.locator('#musicas li .song-list__meta').first();
       await expect(meta).toBeVisible();
@@ -1176,7 +1178,7 @@ test.describe('Editor de Músicas — ramos residuais', () => {
     // que seria substituído por cifro-theme.js logo em seguida).
     await page.addInitScript(() => localStorage.setItem('cifro-theme', 'light'));
     await page.goto('/src/backend/editor/editor.php');
-    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await waitForEditor(page);
     const skin = await page.evaluate(() => {
       const link = document.querySelector('link[href*="skin.min.css"]');
       return link ? link.getAttribute('href') : null;
@@ -1192,8 +1194,7 @@ test.describe('Editor de Músicas — ramos residuais', () => {
     // || 'Sem detalhes'` quando nome/artista/classificação/tom estão
     // todos ausentes.
     await page.goto('/src/backend/editor/editor.php');
-    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
-    await page.evaluate(() => window.__cifroEditorReady);
+    await waitForEditor(page);
     await page.evaluate(() => {
       window.songs.push({ id: '__song_sem_nome__', nome: '', artista: '', classificacao: '', cifra: '' });
     });
@@ -1210,7 +1211,7 @@ test.describe('Editor de Músicas — ramos residuais', () => {
     // ramo em que um nó de texto existe mas nodeValue é vazio/falsy,
     // colando conteúdo com uma tag vazia entre acordes.
     await page.goto('/src/backend/editor/editor.php');
-    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await waitForEditor(page);
     const content = await page.evaluate(() => {
       const editor = window.tinymce.get('cifraInput');
       const event = editor.dispatch('BeforeSetContent', { content: '<strong></strong><em></em>C G' });
@@ -1222,7 +1223,7 @@ test.describe('Editor de Músicas — ramos residuais', () => {
   test('plainTextToHtml com texto vazio retorna string vazia', async ({ page }) => {
     // Linha 444: `String(text || '')` — cobre o ramo em que text é vazio/undefined.
     await page.goto('/src/backend/editor/editor.php');
-    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await waitForEditor(page);
     const content = await page.evaluate(() => {
       const editor = window.tinymce.get('cifraInput');
       const event = editor.dispatch('PastePreProcess', { content: '' });
@@ -1246,7 +1247,7 @@ test.describe('Editor de Músicas — ramos residuais', () => {
     expect(created.ok ?? created.sucesso).toBeTruthy();
 
     await page.goto('/src/backend/editor/editor.php');
-    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await waitForEditor(page);
     await page.locator('#buscaMusica').fill('__TESTE_SAVE_SEM_ID_RESPOSTA__');
     await page.locator('#musicas li button').first().click();
     await page.evaluate(() => {
@@ -1273,7 +1274,7 @@ test.describe('Editor de Músicas — ramos residuais', () => {
     // falso (sem toast global) tanto para salvar (sucesso e erro de rede)
     // quanto para excluir (sucesso e erro de rede).
     await page.goto('/src/backend/editor/editor.php');
-    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await waitForEditor(page);
     await page.evaluate(() => { delete window.cifroToast; });
     await page.locator('#titulo').fill('__TESTE_SEM_TOAST__');
     await page.evaluate(() => window.tinymce.get('cifraInput').setContent('<b>C G Am F</b>'));
@@ -1327,7 +1328,7 @@ test.describe('Editor de Músicas — ramos residuais', () => {
     // root.innerHTML === '' após a remoção, exercitando o ramo falsy de
     // `html || ''`.
     await page.goto('/src/backend/editor/editor.php');
-    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await waitForEditor(page);
     const content = await page.evaluate(() => {
       const editor = window.tinymce.get('cifraInput');
       const event = editor.dispatch('PastePreProcess', { content: '<script>alert(1)</script>' });
@@ -1340,7 +1341,7 @@ test.describe('Editor de Músicas — ramos residuais', () => {
     // Linha 474: `(pre.innerHTML || '')` — cobre o ramo em que a tag <pre>
     // colada não tem conteúdo algum.
     await page.goto('/src/backend/editor/editor.php');
-    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await waitForEditor(page);
     const content = await page.evaluate(() => {
       const editor = window.tinymce.get('cifraInput');
       const event = editor.dispatch('PastePreProcess', { content: '<pre></pre>' });
@@ -1361,7 +1362,7 @@ test.describe('Editor de Músicas — ramos residuais', () => {
       });
     });
     await page.goto('/src/backend/editor/editor.php');
-    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await waitForEditor(page);
     const skin = await page.evaluate(() => {
       const link = document.querySelector('link[href*="skin.min.css"]');
       return link ? link.getAttribute('href') : null;
@@ -1376,8 +1377,7 @@ test.describe('Editor de Músicas — ramos residuais', () => {
     // `elements.classification.value = song.classificacao || '';` quando a
     // segunda música não tem classificação.
     await page.goto('/src/backend/editor/editor.php');
-    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
-    await page.evaluate(() => window.__cifroEditorReady);
+    await waitForEditor(page);
     await page.evaluate(() => {
       window.songs.push(
         { id: '__song_a_troca__', nome: '__MUSICA_A_TROCA__', artista: 'Artista A', classificacao: 'Louvor', cifra: 'A' },
@@ -1401,7 +1401,7 @@ test.describe('Editor de Músicas — ramos residuais', () => {
     // uma tag <b></b> vazia (sem texto após trim) deve ser removida em vez
     // de virar um acorde vazio.
     await page.goto('/src/backend/editor/editor.php');
-    await page.waitForFunction(() => window.tinymce?.get('cifraInput'));
+    await waitForEditor(page);
     await page.locator('#titulo').fill('__TESTE_BOLD_VAZIO__');
     await page.evaluate(() => {
       const editor = window.tinymce.get('cifraInput');

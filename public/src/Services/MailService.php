@@ -180,7 +180,7 @@ class MailService {
     }
 
     /**
-     * Em ambiente de teste o envio é bloqueado por padrão.
+     * Fora de produção o envio é bloqueado por padrão.
      *
      * Todo disparo passa por aqui, então esta é a única porta que precisa ser
      * guardada. Sem isso, rodar a bateria de testes abre conexões SMTP reais
@@ -193,7 +193,7 @@ class MailService {
      */
     private static function envioBloqueadoEmTeste(bool $mailerInterno): bool {
         if (!$mailerInterno) return false;   // mock de teste: não há rede envolvida
-        if (strtolower((string) env('APP_ENV', 'production')) !== 'test') return false;
+        if (strtolower((string) env('APP_ENV', 'production')) === 'production') return false;
         return !filter_var(env('MAIL_ALLOW_REAL_SEND', 'false'), FILTER_VALIDATE_BOOLEAN);
     }
 

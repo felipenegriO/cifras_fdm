@@ -73,6 +73,7 @@ const HEIGHT_TOL_PX = 6;
 // Keep a strong fill requirement without forcing a "perfect" layout.
 const HEIGHT_USAGE_MIN = 0.85;
 const HEIGHT_USAGE_MIN_LARGE = 0.7;
+const WIDTH_USAGE_MIN = 0.8;
 const MIN_WIDTH_FRACTION = 0.55;
 const MIN_WIDTH_PX = 320;
 const WARN_LAYOUT_MS = 2000;
@@ -209,6 +210,11 @@ const validateSongLayout = async (page, songId, viewportName) => {
     const wrapper = el.querySelector(':scope > div');
     const wrapperOverflowX = wrapper ? wrapper.scrollWidth - wrapper.clientWidth : 0;
     const columns = wrapper ? Array.from(wrapper.children) : [];
+    const contentRange = document.createRange();
+    contentRange.selectNodeContents(el);
+    const maxContentWidth = Array.from(contentRange.getClientRects())
+      .reduce((maximum, item) => Math.max(maximum, item.width), 0);
+    if (contentRange.detach) contentRange.detach();
 
     const playBar = document.getElementById('mostrarbtnplay');
     const playVisible = !!(playBar && playBar.offsetParent !== null);
@@ -332,6 +338,7 @@ const validateSongLayout = async (page, songId, viewportName) => {
       overflowYStyle,
       wrapperOverflowX,
       wrapperWidth: wrapper ? wrapper.getBoundingClientRect().width : 0,
+      maxContentWidth,
       playVisible,
       playRect: playRect ? { top: playRect.top, bottom: playRect.bottom } : null,
       columnsCount: columns.length,
@@ -370,6 +377,8 @@ const validateSongLayout = async (page, songId, viewportName) => {
   const minWidth = Math.min(MIN_WIDTH_PX, metrics.viewportWidth * MIN_WIDTH_FRACTION);
 
   const minHeightOk = metrics.clientHeight + HEIGHT_TOL_PX >= minHeight;
+  const widthUsage = metrics.clientWidth > 0 ? metrics.maxContentWidth / metrics.clientWidth : 0;
+  const viewportUsageOk = minHeightOk || widthUsage >= WIDTH_USAGE_MIN;
   const minWidthOk = metrics.clientWidth + WIDTH_TOL_PX >= minWidth;
   const heightUsage = metrics.clientHeight / availableHeight;
 
@@ -401,11 +410,13 @@ const validateSongLayout = async (page, songId, viewportName) => {
     ...metrics,
     overflowTol: OVERFLOW_TOL
   });
-  assertCondition(minHeightOk, `Insufficient height usage (${viewportName}, id=${songId}).`, {
+  assertCondition(viewportUsageOk, `Insufficient viewport usage (${viewportName}, id=${songId}).`, {
     ...metrics,
     availableHeight,
     minHeight,
-    heightUsageMin
+    heightUsageMin,
+    widthUsage,
+    widthUsageMin: WIDTH_USAGE_MIN
   });
   assertCondition(minWidthOk, `Insufficient width usage (${viewportName}, id=${songId}).`, {
     ...metrics,
